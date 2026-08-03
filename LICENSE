@@ -1,0 +1,29 @@
+MaintainIt Noncommercial License
+
+DRAFT — NOT YET REVIEWED BY COUNSEL. Do not treat this as final legal text or
+rely on it for a public release. This placeholder is modeled on the PolyForm
+Noncommercial License 1.0.0 structure and expresses the following intent:
+
+  1. Anyone may use, copy, modify, and self-host this software free of charge
+     for personal, non-commercial purposes.
+  2. Any use by, for, or on behalf of a business, company, nonprofit, or other
+     organization ("Business Use") requires a separate paid commercial license
+     obtained directly from the copyright holder.
+  3. "Business Use" includes, without limitation: running the software to
+     support the operations of a business or organization of any kind
+     (including internal self-hosting for a company's own use), and offering
+     the software or a modified version of it as a hosted or managed service
+     to third parties.
+
+Before public release:
+  - Replace this file with the actual PolyForm Noncommercial License 1.0.0
+    text (https://polyformproject.org/licenses/noncommercial/1.0.0/),
+    customized as needed, OR a custom-drafted equivalent.
+  - Have the final license text reviewed by a lawyer familiar with software
+    licensing, particularly around the definition of "Business Use" and how
+    it interacts with self-hosting.
+  - Decide and document the commercial licensing process (pricing, contact,
+    terms) referenced by this license and by README.md.
+
+Copyright (c) 2026 [author name/entity]. All rights reserved pending final
+license text.
