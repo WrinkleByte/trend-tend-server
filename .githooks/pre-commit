@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Fast checks only (lint/type-check, not the full test suites — those run in
+# pre-push instead) so commits stay quick. Scoped to whichever of
+# backend/web actually has staged changes, so a web-only commit doesn't
+# require a Python venv and vice versa. Installed via
+# scripts/setup-git-hooks.sh — see that file and README.md's "Local CI"
+# section for why this lives here instead of GitHub Actions.
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+changed_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+status=0
+
+if grep -q '^backend/' <<<"$changed_files"; then
+    echo "[pre-commit] backend changed — running ruff..."
+    if [[ -x backend/.venv/bin/ruff ]]; then
+        (cd backend && .venv/bin/ruff check app tests) || status=1
+    elif command -v ruff >/dev/null 2>&1; then
+        (cd backend && ruff check app tests) || status=1
+    else
+        echo "[pre-commit] WARNING: ruff not found (no backend/.venv, not on PATH) — skipping backend lint." >&2
+        echo "[pre-commit]          See backend/README.md to set up the venv." >&2
+    fi
+fi
+
+if grep -q '^web/' <<<"$changed_files"; then
+    echo "[pre-commit] web changed — running oxlint + tsc..."
+    if [[ -d web/node_modules ]]; then
+        (cd web && npm run lint) || status=1
+        (cd web && npx tsc -b) || status=1
+    else
+        echo "[pre-commit] WARNING: web/node_modules not found — skipping web lint. Run 'npm install' in web/." >&2
+    fi
+fi
+
+if [[ $status -ne 0 ]]; then
+    echo "[pre-commit] Lint failed — fix the issues above, or bypass with 'git commit --no-verify' (not recommended)." >&2
+    exit 1
+fi
+
+exit 0

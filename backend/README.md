@@ -25,7 +25,7 @@ curl http://localhost:8000/health
 # {"status":"ok"}
 ```
 
-If port 8000 is already in use on your machine, pass `--port` to `uvicorn` and adjust `docker-compose.yml`'s `backend.ports` mapping accordingly.
+If port 8000 is already in use on your machine: pass `--port` to `uvicorn` for local (non-Docker) runs, or for `docker compose up`, add `BACKEND_HOST_PORT=<port>` to a root `.env` file — Compose reads it automatically and only the host-side mapping changes (the container still listens on 8000 internally). Update `web/vite.config.ts`'s dev proxy target to match.
 
 ### Environment variables
 

@@ -23,7 +23,10 @@ services:
       STORAGE_BACKEND: local_disk
       STORAGE_LOCAL_ROOT: /data/attachments
     ports:
-      - "8000:8000"
+      # Override via a BACKEND_HOST_PORT=... entry in a root .env file if
+      # 8000 is already taken on your machine (Docker Compose reads that
+      # file automatically) — container still listens on 8000 internally.
+      - "${BACKEND_HOST_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
       - attachments_data:/data/attachments
@@ -33,6 +36,24 @@ services:
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  web:
+    build: ./web
+    environment:
+      # backend's Compose network name + its *internal* port — not the
+      # BACKEND_HOST_PORT mapping above, which only matters from outside
+      # the Compose network. See vite.config.ts.
+      VITE_API_PROXY_TARGET: http://backend:8000
+    ports:
+      - "${WEB_HOST_PORT:-5173}:5173"
+    volumes:
+      - ./web:/app
+      # Anonymous volume so the bind mount above doesn't shadow the
+      # container's own npm-installed node_modules with the host's (which
+      # may have different native binaries for esbuild/rollup/etc.).
+      - /app/node_modules
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:

@@ -14,7 +14,12 @@ from app.core.security import (
 from app.db.session import get_db
 from app.models.household import Household, HouseholdMembership, HouseholdRole
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
+from app.schemas.auth import (
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

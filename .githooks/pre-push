@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# The slow checks (full test suites + build) that pre-commit deliberately
+# skips — pushes are much less frequent than commits, so the extra time is
+# worth it here. Runs unconditionally (not scoped to changed files) since
+# it's cheap relative to how often it fires. Installed via
+# scripts/setup-git-hooks.sh — see that file and README.md's "Local CI"
+# section for why this lives here instead of GitHub Actions.
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+status=0
+
+echo "[pre-push] Running backend test suite..."
+if [[ -x backend/.venv/bin/pytest ]]; then
+    (cd backend && .venv/bin/pytest -q) || status=1
+elif command -v pytest >/dev/null 2>&1; then
+    (cd backend && pytest -q) || status=1
+else
+    echo "[pre-push] WARNING: no pytest found (no backend/.venv, not on PATH) — skipping backend tests." >&2
+    echo "[pre-push]          See backend/README.md to set up the venv." >&2
+fi
+
+echo "[pre-push] Running web lint + build..."
+if [[ -d web/node_modules ]]; then
+    (cd web && npm run lint) || status=1
+    (cd web && npm run build) || status=1
+else
+    echo "[pre-push] WARNING: web/node_modules not found — skipping web build. Run 'npm install' in web/." >&2
+fi
+
+if [[ $status -ne 0 ]]; then
+    echo "[pre-push] Checks failed — fix the issues above, or bypass with 'git push --no-verify' (not recommended)." >&2
+    exit 1
+fi
+
+exit 0

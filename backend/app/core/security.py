@@ -1,7 +1,7 @@
 import hashlib
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -28,7 +28,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(*, user_id: uuid.UUID, household_id: uuid.UUID, device_id: uuid.UUID | None = None) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "household_id": str(household_id),
@@ -41,7 +41,7 @@ def create_access_token(*, user_id: uuid.UUID, household_id: uuid.UUID, device_i
 
 
 def create_refresh_token(*, user_id: uuid.UUID, household_id: uuid.UUID, device_id: uuid.UUID | None = None) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "household_id": str(household_id),

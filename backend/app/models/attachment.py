@@ -1,12 +1,11 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, String
-from sqlalchemy import BigInteger
+from sqlalchemy import BigInteger, DateTime, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.models.mixins import SyncedEntityMixin
-from sqlalchemy.orm import Mapped, mapped_column
 
 
 class StorageBackendType(StrEnum):

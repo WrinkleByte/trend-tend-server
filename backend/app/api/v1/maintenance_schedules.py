@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +36,7 @@ async def _to_response(db: AsyncSession, schedule: MaintenanceSchedule) -> Maint
         anchor_usage_value=schedule.anchor_usage_value,
     )
     current_usage = await _current_usage(db, schedule)
-    due = compute_due_status(state, today=date.today(), current_usage=current_usage)
+    due = compute_due_status(state, today=datetime.now(UTC).date(), current_usage=current_usage)
     return MaintenanceScheduleResponse.model_validate(
         {
             **schedule.__dict__,

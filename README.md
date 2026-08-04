@@ -29,24 +29,40 @@ cp backend/.env.example backend/.env
 docker compose up --build
 ```
 
-This brings up PostgreSQL and the backend API (applying migrations automatically on start) at `http://localhost:8000`. Confirm it's up:
+This brings up PostgreSQL, the backend API (applying migrations automatically on start), and the web app's dev server:
+
+- Backend: `http://localhost:8000`
+- Web app: `http://localhost:5173`
+
+Confirm the backend's up:
 
 ```bash
 curl http://localhost:8000/health
 # {"status":"ok"}
 ```
 
-Then run the web app separately (it isn't containerized in this scaffold):
+If port 8000 or 5173 is already taken on your machine, add `BACKEND_HOST_PORT=<port>` and/or `WEB_HOST_PORT=<port>` to a root `.env` file (Compose reads it automatically) — containers still listen on their normal ports internally, only the host-side mapping changes.
 
-```bash
-cd web
-npm install
-npm run dev
-```
+The `web` container runs Vite's dev server with your `web/` directory bind-mounted, so edits on the host hot-reload inside the container — there's no separate `npm install`/`npm run dev` step needed for the Docker path. It proxies `/api/...` to the `backend` container directly over the Compose network (`VITE_API_PROXY_TARGET`, set in `docker-compose.yml`), independent of whatever `BACKEND_HOST_PORT` you chose.
+
+To run the web app directly on the host instead (outside Docker), see [`web/README.md`](web/README.md) — it needs `VITE_API_PROXY_TARGET` pointed at the backend's *host* port (via a `web/.env` file) since `localhost` inside a container and `localhost` on your host are different things.
 
 ## Manual setup (without Docker for the backend)
 
 See [`backend/README.md`](backend/README.md) for running the API directly against a local Postgres, and [`web/README.md`](web/README.md) for the web app. Both READMEs also cover running the test suites.
+
+## Local CI (git hooks)
+
+This repo isn't pushed to GitHub yet, so there's no Actions-based CI — instead, `scripts/setup-git-hooks.sh` installs local git hooks (tracked in `.githooks/`, copied into `.git/hooks/` since that directory itself isn't version-controlled) that gate commits/pushes:
+
+```bash
+scripts/setup-git-hooks.sh   # one-time, per clone
+```
+
+- **`pre-commit`** — fast checks only (`ruff` for backend, `oxlint` + `tsc` for web), scoped to whichever of `backend/`/`web/` you actually staged changes in.
+- **`pre-push`** — the full backend `pytest` suite and web `npm run build` (type-check + PWA build), unconditionally, since pushes are much less frequent than commits.
+
+Both fall back to a warning (not a failure) if the relevant toolchain isn't set up yet (no `backend/.venv`, no `web/node_modules`) rather than blocking you outright. Bypass either with `--no-verify` if you really need to. Once this repo does move to GitHub, the same checks belong in an Actions workflow — the hooks aren't meant to be the permanent answer, just what covers local-only development for now.
 
 ## Testing
 

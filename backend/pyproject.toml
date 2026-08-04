@@ -26,6 +26,16 @@ dev = [
     "ruff>=0.7",
 ]
 
+[tool.ruff.lint]
+ignore = [
+    # FastAPI's own recommended pattern for request-scoped dependencies is
+    # `param: X = Depends(get_x)` — that's exactly what B008 (no function
+    # calls in argument defaults) flags, on every single route handler in
+    # this codebase. Ignoring it here rather than one `# noqa` per
+    # parameter, of which there are dozens.
+    "B008",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 # All fixtures/tests share one event loop for the whole session — the
