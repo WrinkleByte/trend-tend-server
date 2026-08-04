@@ -7,6 +7,14 @@ import { VitePWA } from 'vite-plugin-pwa'
 // calls, CacheFirst+expiration for content-addressed attachment blobs, and
 // the iOS-specific manifest/meta-tag requirements.
 export default defineConfig({
+  server: {
+    // Backend runs separately (docker compose up, or `uvicorn` directly) —
+    // proxied here so the app can call same-origin `/api/v1/...` paths in
+    // both dev and the production Docker/nginx setup.
+    proxy: {
+      "/api": "http://localhost:8000",
+    },
+  },
   plugins: [
     react(),
     VitePWA({

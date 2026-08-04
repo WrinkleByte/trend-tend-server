@@ -1,0 +1,167 @@
+// Mirrors the FastAPI Pydantic response schemas field-for-field (snake_case,
+// as sent over the wire) — see backend/app/schemas/*.py. Deliberately
+// hand-written rather than generated for now; see ../../README.md.
+
+export interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+}
+
+export type AssetType = "vehicle" | "equipment" | "property" | "home_system";
+export type AssetStatus = "active" | "archived" | "disposed";
+
+export interface VehicleDetails {
+  vin: string | null;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  license_plate: string | null;
+  current_mileage: number | null;
+  mileage_unit: string;
+  fuel_type: string | null;
+}
+
+export interface EquipmentDetails {
+  manufacturer: string | null;
+  model_number: string | null;
+  serial_number: string | null;
+  warranty_expiration: string | null;
+}
+
+export interface PropertyDetails {
+  address: string | null;
+  parent_asset_id: string | null;
+  install_date: string | null;
+}
+
+export interface Asset {
+  id: string;
+  household_id: string;
+  asset_type: AssetType;
+  name: string;
+  notes: string | null;
+  status: AssetStatus;
+  purchase_date: string | null;
+  purchase_cost: number | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  vehicle_details: VehicleDetails | null;
+  equipment_details: EquipmentDetails | null;
+  property_details: PropertyDetails | null;
+}
+
+export interface AssetCreateInput {
+  asset_type: AssetType;
+  name: string;
+  notes?: string | null;
+  purchase_date?: string | null;
+  purchase_cost?: number | null;
+  vehicle_details?: Partial<VehicleDetails> | null;
+  equipment_details?: Partial<EquipmentDetails> | null;
+  property_details?: Partial<PropertyDetails> | null;
+}
+
+export interface MaintenanceRecord {
+  id: string;
+  household_id: string;
+  asset_id: string;
+  performed_at: string;
+  performed_by: string | null;
+  category: string;
+  custom_category: string | null;
+  description: string | null;
+  cost: number | null;
+  currency: string;
+  odometer_reading: number | null;
+  schedule_id: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MaintenanceRecordCreateInput {
+  asset_id: string;
+  performed_at: string;
+  performed_by?: string | null;
+  category: string;
+  custom_category?: string | null;
+  description?: string | null;
+  cost?: number | null;
+  currency?: string;
+  odometer_reading?: number | null;
+}
+
+export type IntervalType = "time" | "usage" | "both";
+
+export interface MaintenanceSchedule {
+  id: string;
+  household_id: string;
+  asset_id: string;
+  name: string;
+  interval_type: IntervalType;
+  interval_days: number | null;
+  interval_usage_amount: number | null;
+  usage_field: string | null;
+  anchor_date: string | null;
+  anchor_usage_value: number | null;
+  active: boolean;
+  next_due_date: string | null;
+  next_due_usage: number | null;
+  is_overdue: boolean;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MaintenanceScheduleCreateInput {
+  asset_id: string;
+  name: string;
+  interval_type: IntervalType;
+  interval_days?: number | null;
+  interval_usage_amount?: number | null;
+  usage_field?: string | null;
+  anchor_date?: string | null;
+  anchor_usage_value?: number | null;
+}
+
+export type StorageBackendType = "local_disk" | "s3";
+
+export interface Attachment {
+  id: string;
+  household_id: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  storage_backend: StorageBackendType;
+  sha256: string;
+  thumbnail_storage_key: string | null;
+  captured_at: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  url: string;
+}
+
+export interface ApiTokenSummary {
+  id: string;
+  name: string;
+  scopes: Record<string, unknown>;
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiTokenCreated extends ApiTokenSummary {
+  token: string;
+}
+
+export interface Household {
+  id: string;
+  name: string;
+  owner_user_id: string;
+  settings: Record<string, unknown>;
+  created_at: string;
+}

@@ -27,3 +27,6 @@ web/dev-dist/
 
 # Docker
 postgres_data/
+
+# Local dev attachment storage (STORAGE_LOCAL_ROOT default)
+backend/data/
