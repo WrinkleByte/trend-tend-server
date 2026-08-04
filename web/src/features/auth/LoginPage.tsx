@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { login } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { useAuthStore } from "../../auth/authStore";
@@ -11,6 +11,8 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const setTokens = useAuthStore((s) => s.setTokens);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const next = searchParams.get("next") || "/";
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -19,7 +21,7 @@ export function LoginPage() {
     try {
       const tokens = await login({ email, password });
       setTokens(tokens.access_token, tokens.refresh_token);
-      navigate("/");
+      navigate(next);
     } catch (err) {
       setError(err instanceof ApiError && err.status === 401 ? "Invalid email or password." : "Something went wrong.");
     } finally {

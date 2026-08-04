@@ -16,6 +16,7 @@ export function Layout() {
         {household && <span className="household-name">{household.name}</span>}
         <nav>
           <Link to="/">Assets</Link>
+          <Link to="/household">Household</Link>
           <Link to="/settings">Settings</Link>
           <button type="button" onClick={() => clear()}>
             Log out

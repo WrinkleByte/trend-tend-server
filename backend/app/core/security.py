@@ -75,3 +75,10 @@ def hash_api_token(raw_token: str) -> str:
 
 def is_api_token(token: str) -> bool:
     return token.startswith(API_TOKEN_PREFIX)
+
+
+def generate_invite_token() -> str:
+    # Unlike API tokens, an invite token is a single-purpose, expiring join
+    # code for one household — not a general bearer credential — so it's
+    # looked up (and stored) directly rather than hashed.
+    return secrets.token_urlsafe(24)

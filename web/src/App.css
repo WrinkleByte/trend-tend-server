@@ -157,7 +157,9 @@ ul {
 .asset-list li + li,
 .record-list li + li,
 .schedule-list li + li,
-.token-list li + li {
+.token-list li + li,
+.household-member-list li + li,
+.invite-list li + li {
   border-top: 1px solid var(--border);
 }
 
@@ -176,12 +178,34 @@ ul {
 
 .record-row,
 .schedule-list li,
-.token-list li {
+.token-list li,
+.household-member-list li,
+.invite-list li {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
   padding: 10px 0;
+}
+
+.member-email,
+.member-role {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.invite-status {
+  font-size: 14px;
+  text-transform: capitalize;
+}
+
+.invite-status-pending {
+  color: var(--accent);
+}
+
+.invite-status-revoked,
+.invite-status-expired {
+  color: #dc2626;
 }
 
 .record-cost {

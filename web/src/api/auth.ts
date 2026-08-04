@@ -5,7 +5,10 @@ export interface RegisterInput {
   email: string;
   password: string;
   display_name: string;
-  household_name: string;
+  // Exactly one of these is required — household_name creates a new
+  // household (normal signup), invite_token joins an existing one instead.
+  household_name?: string;
+  invite_token?: string;
 }
 
 export interface LoginInput {

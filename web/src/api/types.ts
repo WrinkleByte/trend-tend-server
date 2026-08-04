@@ -158,10 +158,40 @@ export interface ApiTokenCreated extends ApiTokenSummary {
   token: string;
 }
 
+export type HouseholdRole = "owner" | "member";
+export type InviteStatus = "pending" | "accepted" | "revoked" | "expired";
+
 export interface Household {
   id: string;
   name: string;
   owner_user_id: string;
   settings: Record<string, unknown>;
   created_at: string;
+  my_role: HouseholdRole;
+}
+
+export interface HouseholdMember {
+  user_id: string;
+  email: string;
+  display_name: string;
+  role: HouseholdRole;
+  joined_at: string;
+}
+
+export interface HouseholdInvite {
+  id: string;
+  invited_email: string;
+  role: HouseholdRole;
+  status: InviteStatus;
+  token: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface InvitePreview {
+  household_name: string;
+  invited_email: string;
+  role: HouseholdRole;
+  status: InviteStatus;
+  expires_at: string;
 }

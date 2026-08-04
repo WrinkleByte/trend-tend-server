@@ -12,7 +12,14 @@ from app.core.security import (
     verify_password,
 )
 from app.db.session import get_db
-from app.models.household import Household, HouseholdMembership, HouseholdRole
+from app.models.household import (
+    Household,
+    HouseholdInvite,
+    HouseholdMembership,
+    HouseholdRole,
+    InviteStatus,
+)
+from app.models.mixins import utcnow
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
@@ -24,11 +31,27 @@ from app.schemas.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+async def _consume_pending_invite(db: AsyncSession, token: str, email: str) -> HouseholdInvite:
+    result = await db.execute(select(HouseholdInvite).where(HouseholdInvite.token == token))
+    invite = result.scalar_one_or_none()
+    if invite is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invite not found")
+    if invite.status != InviteStatus.PENDING or invite.expires_at < utcnow():
+        raise HTTPException(status.HTTP_410_GONE, "Invite is no longer valid")
+    if invite.invited_email.lower() != email.lower():
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This invite was sent to a different email address")
+    return invite
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
+
+    invite = (
+        await _consume_pending_invite(db, payload.invite_token, payload.email) if payload.invite_token else None
+    )
 
     user = User(
         id=uuid.uuid4(),
@@ -39,22 +62,37 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     db.add(user)
     await db.flush()
 
-    household = Household(id=uuid.uuid4(), name=payload.household_name, owner_user_id=user.id, settings={})
-    db.add(household)
-    await db.flush()
+    if invite is not None:
+        household_id = invite.household_id
+        db.add(
+            HouseholdMembership(
+                id=uuid.uuid4(),
+                household_id=household_id,
+                user_id=user.id,
+                role=invite.role,
+                invited_by_user_id=invite.created_by_user_id,
+            )
+        )
+        invite.status = InviteStatus.ACCEPTED
+    else:
+        household = Household(id=uuid.uuid4(), name=payload.household_name, owner_user_id=user.id, settings={})
+        db.add(household)
+        await db.flush()
+        household_id = household.id
+        db.add(
+            HouseholdMembership(
+                id=uuid.uuid4(),
+                household_id=household_id,
+                user_id=user.id,
+                role=HouseholdRole.OWNER,
+            )
+        )
 
-    membership = HouseholdMembership(
-        id=uuid.uuid4(),
-        household_id=household.id,
-        user_id=user.id,
-        role=HouseholdRole.OWNER,
-    )
-    db.add(membership)
     await db.commit()
 
     return TokenResponse(
-        access_token=create_access_token(user_id=user.id, household_id=household.id),
-        refresh_token=create_refresh_token(user_id=user.id, household_id=household.id),
+        access_token=create_access_token(user_id=user.id, household_id=household_id),
+        refresh_token=create_refresh_token(user_id=user.id, household_id=household_id),
     )
 
 
