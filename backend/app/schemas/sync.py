@@ -138,6 +138,10 @@ class SyncChangeIn(BaseModel):
     base_version: int
     data: dict
     client_updated_at: datetime
+    # Soft-deletes push through the same endpoint as edits — `data` is
+    # ignored entirely when this is true (deleting doesn't require valid
+    # field values), matching pull's `deleted` flag on the way back down.
+    deleted: bool = False
 
 
 class SyncPushRequest(BaseModel):

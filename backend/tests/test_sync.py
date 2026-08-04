@@ -88,6 +88,87 @@ async def test_push_update_bumps_version(client, auth_headers):
     assert result["new_version"] == 2
 
 
+async def test_push_delete_soft_deletes_and_is_reflected_in_pull(client, auth_headers):
+    device_a = await _register_device(client, auth_headers, "Device A")
+    device_b = await _register_device(client, auth_headers, "Device B")
+    asset_id = str(uuid.uuid4())
+
+    await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_a,
+            "changes": [
+                {
+                    "entity_type": "asset",
+                    "id": asset_id,
+                    "base_version": 0,
+                    "client_updated_at": "2026-01-01T00:00:00Z",
+                    "data": {"asset_type": "equipment", "name": "Snow Blower"},
+                }
+            ],
+        },
+    )
+
+    delete_response = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_a,
+            "changes": [
+                {
+                    "entity_type": "asset",
+                    "id": asset_id,
+                    "base_version": 1,
+                    "client_updated_at": "2026-01-02T00:00:00Z",
+                    "data": {},
+                    "deleted": True,
+                }
+            ],
+        },
+    )
+    result = delete_response.json()["results"][0]
+    assert result["status"] == "accepted"
+    assert result["new_version"] == 2
+
+    get_response = await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)
+    assert get_response.status_code == 404
+
+    pull_as_b = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_b}
+    )
+    changes_as_b = {c["id"]: c for c in pull_as_b.json()["changes"]}
+    assert changes_as_b[asset_id]["deleted"] is True
+
+
+async def test_push_delete_of_never_synced_entity_is_a_harmless_noop(client, auth_headers):
+    device_id = await _register_device(client, auth_headers)
+    never_existed_id = str(uuid.uuid4())
+
+    response = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_id,
+            "changes": [
+                {
+                    "entity_type": "asset",
+                    "id": never_existed_id,
+                    "base_version": 0,
+                    "client_updated_at": "2026-01-01T00:00:00Z",
+                    "data": {},
+                    "deleted": True,
+                }
+            ],
+        },
+    )
+    result = response.json()["results"][0]
+    assert result["status"] == "accepted"
+
+    get_response = await client.get(f"/api/v1/assets/{never_existed_id}", headers=auth_headers)
+    assert get_response.status_code == 404
+
+
 async def test_push_stale_base_version_returns_conflict(client, auth_headers):
     device_id = await _register_device(client, auth_headers)
     asset_id = str(uuid.uuid4())

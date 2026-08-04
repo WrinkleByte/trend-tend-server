@@ -208,11 +208,6 @@ async def _apply_change(
     if config is None:
         return SyncPushResult(id=change.id, status="rejected", reason="unknown_entity_type", detail=change.entity_type)
 
-    try:
-        parsed = config.data_model.model_validate(change.data)
-    except ValidationError as exc:
-        return SyncPushResult(id=change.id, status="rejected", reason="validation_error", detail=str(exc))
-
     result = await db.execute(
         select(config.model).where(config.model.id == change.id, config.model.household_id == principal.household_id)
     )
@@ -226,6 +221,28 @@ async def _apply_change(
             server_data=_serialize_row(existing),
             client_data=change.data,
         )
+
+    if change.deleted:
+        if existing is None:
+            # Created and deleted locally before ever reaching the server —
+            # nothing to tombstone, and no other device could have seen it
+            # exist in the first place.
+            return SyncPushResult(id=change.id, status="accepted", new_version=1, server_updated_at=utcnow())
+        try:
+            async with db.begin_nested():
+                existing.deleted_at = utcnow()
+                existing.updated_by_device_id = device_id
+                existing.version += 1
+                existing.updated_at = utcnow()
+                await db.flush()
+        except SQLAlchemyError as exc:
+            return SyncPushResult(id=change.id, status="rejected", reason="database_error", detail=str(exc))
+        return SyncPushResult(id=change.id, status="accepted", new_version=existing.version, server_updated_at=existing.updated_at)
+
+    try:
+        parsed = config.data_model.model_validate(change.data)
+    except ValidationError as exc:
+        return SyncPushResult(id=change.id, status="rejected", reason="validation_error", detail=str(exc))
 
     try:
         # A SAVEPOINT per row, not one giant transaction — an error on one
