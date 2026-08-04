@@ -5,6 +5,7 @@ from app.api.v1 import (
     assets,
     attachments,
     auth,
+    fuel_logs,
     households,
     maintenance_records,
     maintenance_schedules,
@@ -17,6 +18,7 @@ api_router.include_router(households.router)
 api_router.include_router(assets.router)
 api_router.include_router(maintenance_records.router)
 api_router.include_router(maintenance_schedules.router)
+api_router.include_router(fuel_logs.router)
 api_router.include_router(attachments.router)
 api_router.include_router(api_tokens.router)
 api_router.include_router(sync.router)

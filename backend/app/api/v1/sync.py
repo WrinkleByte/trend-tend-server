@@ -14,6 +14,7 @@ from app.api.deps import Principal, get_current_principal
 from app.db.session import get_db
 from app.models.asset import Asset
 from app.models.attachment import Attachment
+from app.models.fuel_log import FuelLog
 from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.mixins import utcnow
@@ -21,6 +22,7 @@ from app.models.sync_device import SyncDevice
 from app.schemas.sync import (
     AssetSyncData,
     AttachmentSyncData,
+    FuelLogSyncData,
     MaintenanceRecordSyncData,
     MaintenanceScheduleSyncData,
     SyncChangeIn,
@@ -53,6 +55,7 @@ SYNC_REGISTRY: dict[str, EntitySyncConfig] = {
     "asset": EntitySyncConfig(Asset, AssetSyncData),
     "maintenance_record": EntitySyncConfig(MaintenanceRecord, MaintenanceRecordSyncData),
     "maintenance_schedule": EntitySyncConfig(MaintenanceSchedule, MaintenanceScheduleSyncData),
+    "fuel_log": EntitySyncConfig(FuelLog, FuelLogSyncData),
     "attachment": EntitySyncConfig(Attachment, AttachmentSyncData),
 }
 

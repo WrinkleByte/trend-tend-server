@@ -64,6 +64,24 @@ class MaintenanceRecordSyncData(BaseModel):
     schedule_id: uuid.UUID | None = None
 
 
+class FuelLogSyncData(BaseModel):
+    asset_id: uuid.UUID
+    performed_at: date
+    odometer_reading: int | None = None
+    gallons: Decimal
+    cost_per_gallon: Decimal | None = None
+    total_cost: Decimal | None = None
+    currency: str = "USD"
+    is_fill_up: bool = True
+    mpg: Decimal | None = None
+    octane: int | None = None
+    cetane: int | None = None
+    gas_brand: str | None = None
+    location: str | None = None
+    notes: str | None = None
+    additive: str | None = None
+
+
 class MaintenanceScheduleSyncData(BaseModel):
     asset_id: uuid.UUID
     name: str
