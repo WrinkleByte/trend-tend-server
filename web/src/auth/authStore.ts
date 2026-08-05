@@ -19,7 +19,7 @@ export const useAuthStore = create<AuthState>()(
       setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
       clear: () => set({ accessToken: null, refreshToken: null }),
     }),
-    { name: "maintainit-auth" },
+    { name: "tendfida-auth" },
   ),
 );
 

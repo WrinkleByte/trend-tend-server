@@ -65,7 +65,7 @@ export interface Attachment extends SyncEnvelope {
   capturedAt: string | null;
 }
 
-/** Mirrors the mobile shared module's outboxEntry table (MaintainIt.sq) —
+/** Mirrors the mobile shared module's outboxEntry table (Tendfida.sq) —
  * every local write also upserts a row here for SyncEngine to drain. */
 export interface OutboxEntry {
   id: string;
@@ -86,7 +86,7 @@ export interface PendingConflict {
   detectedAt: string;
 }
 
-export class MaintainItDb extends Dexie {
+export class TendfidaDb extends Dexie {
   assets!: EntityTable<Asset, "id">;
   maintenanceRecords!: EntityTable<MaintenanceRecord, "id">;
   maintenanceSchedules!: EntityTable<MaintenanceSchedule, "id">;
@@ -95,7 +95,7 @@ export class MaintainItDb extends Dexie {
   pendingConflicts!: EntityTable<PendingConflict, "id">;
 
   constructor() {
-    super("maintainit");
+    super("tendfida");
     this.version(1).stores({
       assets: "id, householdId, assetType, deletedAt",
       maintenanceRecords: "id, householdId, assetId, performedAt, deletedAt",

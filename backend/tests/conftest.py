@@ -18,7 +18,7 @@ async def engine():
     # Uses a dedicated database on the same Postgres server as dev, so test
     # runs never touch dev data. Created/dropped fresh every test session.
     admin_engine = create_async_engine(settings.database_url, isolation_level="AUTOCOMMIT")
-    test_db_name = f"maintainit_test_{uuid.uuid4().hex[:8]}"
+    test_db_name = f"tendfida_test_{uuid.uuid4().hex[:8]}"
     async with admin_engine.connect() as conn:
         await conn.execute(__import__("sqlalchemy").text(f'CREATE DATABASE "{test_db_name}"'))
     await admin_engine.dispose()

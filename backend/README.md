@@ -1,6 +1,6 @@
-# MaintainIt Backend
+# Tendfida Backend
 
-FastAPI + PostgreSQL API server for MaintainIt.
+FastAPI + PostgreSQL API server for Tendfida.
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ Set in `.env` (see `.env.example` for the full list, defaults shown):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | `postgresql+asyncpg://maintainit:maintainit@localhost:5432/maintainit` | Async SQLAlchemy connection string |
+| `DATABASE_URL` | `postgresql+asyncpg://tendfida:tendfida@localhost:5432/tendfida` | Async SQLAlchemy connection string |
 | `JWT_SECRET` | *(dev placeholder)* | HMAC signing key for access/refresh tokens — **generate a real random 32+ byte value for anything beyond local dev** (`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`) |
 | `JWT_ACCESS_TOKEN_TTL_MINUTES` | `15` | Access token lifetime |
 | `JWT_REFRESH_TOKEN_TTL_DAYS` | `30` | Refresh token lifetime |
@@ -59,7 +59,7 @@ alembic upgrade head
 
 ## Tests
 
-Tests run against a real, disposable PostgreSQL database — the test suite creates a fresh `maintainit_test_<random>` database (derived from your `DATABASE_URL`'s host/credentials) at the start of the session and drops it afterward, so it never touches your dev database, and all tables are truncated between individual tests for isolation.
+Tests run against a real, disposable PostgreSQL database — the test suite creates a fresh `tendfida_test_<random>` database (derived from your `DATABASE_URL`'s host/credentials) at the start of the session and drops it afterward, so it never touches your dev database, and all tables are truncated between individual tests for isolation.
 
 ```bash
 pytest
@@ -79,7 +79,7 @@ pytest -k household_isolation       # by keyword
 
 - `app/models/` — SQLAlchemy models. `mixins.py` defines the sync envelope (`id`, `household_id`, `version`, `updated_at`, `deleted_at`, `updated_by_device_id`) shared by every syncable entity — see `../docs/architecture.md`.
 - `app/api/v1/` — versioned REST endpoints. `sync.py` (Phase 2) will hold the dedicated sync protocol endpoint.
-- `app/core/recurrence.py` — canonical due-date/usage calculation, mirrored in the mobile app's Kotlin shared module (`shared/src/commonMain/kotlin/com/maintainit/domain/RecurrenceEngine.kt` in `maintainit-mobile`).
+- `app/core/recurrence.py` — canonical due-date/usage calculation, mirrored in the mobile app's Kotlin shared module (`shared/src/commonMain/kotlin/com/tendfida/domain/RecurrenceEngine.kt` in `tendfida-mobile`).
 - `app/storage/` — pluggable attachment storage (`local_disk` default, `s3` optional).
 - `alembic/` — schema migrations. Every model change needs a reviewed migration, not `create_all()`.
 - `tests/conftest.py` — the per-session disposable test database and per-test table truncation described above.

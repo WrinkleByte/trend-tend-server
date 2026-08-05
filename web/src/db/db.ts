@@ -1,3 +1,3 @@
-import { MaintainItDb } from "./schema";
+import { TendfidaDb } from "./schema";
 
-export const db = new MaintainItDb();
+export const db = new TendfidaDb();

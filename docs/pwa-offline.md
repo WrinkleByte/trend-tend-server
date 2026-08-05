@@ -1,6 +1,6 @@
-# MaintainIt Web — Offline & PWA Design
+# Tendfida Web — Offline & PWA Design
 
-This document covers the offline-capable, installable Progressive Web App (PWA) design for the MaintainIt web frontend (`web/`). It's split out from the main [`architecture.md`](architecture.md) because it's a distinct, self-contained feature: making the same React web app that self-hosters use as their "connected" admin UI also work as a mobile experience with no internet connection — notably on iOS Safari, which has real, non-obvious constraints that shape several of the decisions below.
+This document covers the offline-capable, installable Progressive Web App (PWA) design for the Tendfida web frontend (`web/`). It's split out from the main [`architecture.md`](architecture.md) because it's a distinct, self-contained feature: making the same React web app that self-hosters use as their "connected" admin UI also work as a mobile experience with no internet connection — notably on iOS Safari, which has real, non-obvious constraints that shape several of the decisions below.
 
 ## Purpose and dual role
 

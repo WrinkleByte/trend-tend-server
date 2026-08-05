@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql+asyncpg://maintainit:maintainit@localhost:5432/maintainit"
+    database_url: str = "postgresql+asyncpg://tendfida:tendfida@localhost:5432/tendfida"
 
     jwt_secret: str = "dev-secret-change-me"
     jwt_algorithm: str = "HS256"

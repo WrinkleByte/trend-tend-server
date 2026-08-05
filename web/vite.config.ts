@@ -30,8 +30,8 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['apple-touch-icon.png'],
         manifest: {
-          name: 'MaintainIt',
-          short_name: 'MaintainIt',
+          name: 'Tendfida',
+          short_name: 'Tendfida',
           description: 'Track maintenance for your home, vehicles, and equipment.',
           start_url: '/',
           display: 'standalone',

@@ -12,7 +12,7 @@ from app.models.mixins import SyncedEntityMixin
 
 class FuelLog(SyncedEntityMixin, Base):
     """Mirrors the mobile shared module's `fuelLog` table field-for-field
-    (see MaintainIt.sq in the companion mobile repo) — fuel fill-up entries
+    (see Tendfida.sq in the companion mobile repo) — fuel fill-up entries
     used for MPG/fuel-economy tracking, syncable the same as any other
     entity via SYNC_REGISTRY (see app/api/v1/sync.py)."""
 

@@ -1,6 +1,6 @@
-# MaintainIt — System Architecture
+# Tendfida — System Architecture
 
-MaintainIt tracks maintenance for homes, vehicles, and general equipment (lawn mowers, snow blowers, HVAC systems, and more) — recurring schedules, service history, and costs per asset.
+Tendfida tracks maintenance for homes, vehicles, and general equipment (lawn mowers, snow blowers, HVAC systems, and more) — recurring schedules, service history, and costs per asset.
 
 ## System overview
 
@@ -8,7 +8,7 @@ Three components, two repositories:
 
 - **Backend** (this repo, `backend/`): Python + FastAPI + PostgreSQL. Open source, self-hostable, free for personal use.
 - **Web app** (this repo, `web/`): React + Vite. Serves as the connected web UI for a self-hosted backend, and as an installable, offline-capable PWA. See [`pwa-offline.md`](pwa-offline.md) for the offline design specifically.
-- **Mobile apps** (companion `maintainit-mobile` repo): native iOS (SwiftUI) and Android (Jetpack Compose) apps sharing a Kotlin Multiplatform core, sold commercially, fully standalone-capable with optional sync to a self-hosted backend instance.
+- **Mobile apps** (companion `tendfida-mobile` repo): native iOS (SwiftUI) and Android (Jetpack Compose) apps sharing a Kotlin Multiplatform core, sold commercially, fully standalone-capable with optional sync to a self-hosted backend instance.
 
 Sync is optional in every direction: mobile apps work with zero backend, and the backend/web app work with zero mobile clients. Where sync does happen, all three client types (iOS, Android, web PWA) speak the exact same HTTP sync protocol (Section 3) against one backend contract.
 
@@ -151,10 +151,10 @@ The **web PWA** registers as its own `SyncDevice` (`platform=web`) and calls thi
 
 ## 4. Mobile (KMP) Architecture
 
-Lives in the companion `maintainit-mobile` repo.
+Lives in the companion `tendfida-mobile` repo.
 
 ```
-shared/src/commonMain/kotlin/com/maintainit/
+shared/src/commonMain/kotlin/com/tendfida/
   db/            # SQLDelight schema mirroring backend entities 1:1
   network/        # Ktor client, auth header injection, kotlinx.serialization DTOs
   sync/           # SyncEngine, Outbox, ConflictStore, SyncScheduler (expect/actual per platform)
@@ -178,8 +178,8 @@ See [`pwa-offline.md`](pwa-offline.md) for the full offline/PWA design. In short
 
 Two repos:
 
-- **`maintainit`** (this repo) — public, source-available under a noncommercial license (see root `LICENSE`). Monorepo containing `backend/` and `web/`, kept together because they share a tight OpenAPI contract and release together via one `docker-compose up` for self-hosters.
-- **`maintainit-mobile`** — private, commercial. Contains `shared/` (KMP module), `iosApp/` (SwiftUI), `androidApp/` (Compose), release automation.
+- **`tendfida`** (this repo) — public, source-available under a noncommercial license (see root `LICENSE`). Monorepo containing `backend/` and `web/`, kept together because they share a tight OpenAPI contract and release together via one `docker-compose up` for self-hosters.
+- **`tendfida-mobile`** — private, commercial. Contains `shared/` (KMP module), `iosApp/` (SwiftUI), `androidApp/` (Compose), release automation.
 
 Mobile and backend interact **only** over the versioned sync contract in Section 3 — no cross-repo code imports. The OpenAPI schema should be published as a versioned artifact mobile CI can pin against, so a backend change can't silently break a mobile build.
 

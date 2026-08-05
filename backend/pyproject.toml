@@ -1,7 +1,7 @@
 [project]
-name = "maintainit-backend"
+name = "tendfida-backend"
 version = "0.1.0"
-description = "MaintainIt backend API — FastAPI + PostgreSQL"
+description = "Tendfida backend API — FastAPI + PostgreSQL"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
