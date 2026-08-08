@@ -82,6 +82,17 @@ class FuelLogSyncData(BaseModel):
     additive: str | None = None
 
 
+class TripLogSyncData(BaseModel):
+    asset_id: uuid.UUID
+    performed_at: datetime
+    purpose: str
+    custom_purpose: str | None = None
+    start_odometer: Decimal | None = None
+    end_odometer: Decimal
+    distance: Decimal
+    notes: str | None = None
+
+
 class MaintenanceScheduleSyncData(BaseModel):
     asset_id: uuid.UUID
     name: str

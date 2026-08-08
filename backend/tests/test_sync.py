@@ -385,3 +385,46 @@ async def test_fuel_log_syncs_via_push_and_pull(client, auth_headers):
     changes_as_b = {c["id"]: c for c in pull_as_b.json()["changes"]}
     assert changes_as_b[fuel_log_id]["entity_type"] == "fuel_log"
     assert changes_as_b[fuel_log_id]["data"]["gallons"] == "12.500"
+
+
+async def test_trip_log_syncs_via_push_and_pull(client, auth_headers):
+    device_a = await _register_device(client, auth_headers, "Device A")
+    device_b = await _register_device(client, auth_headers, "Device B")
+
+    asset_id = (
+        await client.post("/api/v1/assets", headers=auth_headers, json={"asset_type": "vehicle", "name": "Truck"})
+    ).json()["id"]
+    trip_log_id = str(uuid.uuid4())
+
+    push = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_a,
+            "changes": [
+                {
+                    "entity_type": "trip_log",
+                    "id": trip_log_id,
+                    "base_version": 0,
+                    "client_updated_at": "2026-01-01T00:00:00Z",
+                    "data": {
+                        "asset_id": asset_id,
+                        "performed_at": "2026-01-01T09:00:00Z",
+                        "purpose": "business",
+                        "end_odometer": "41542.0",
+                        "distance": "42.0",
+                    },
+                }
+            ],
+        },
+    )
+    result = push.json()["results"][0]
+    assert result["status"] == "accepted"
+    assert result["new_version"] == 1
+
+    pull_as_b = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_b}
+    )
+    changes_as_b = {c["id"]: c for c in pull_as_b.json()["changes"]}
+    assert changes_as_b[trip_log_id]["entity_type"] == "trip_log"
+    assert changes_as_b[trip_log_id]["data"]["distance"] == "42.0"

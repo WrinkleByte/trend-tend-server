@@ -19,6 +19,7 @@ from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.mixins import utcnow
 from app.models.sync_device import SyncDevice
+from app.models.trip_log import TripLog
 from app.schemas.sync import (
     AssetSyncData,
     AttachmentSyncData,
@@ -34,6 +35,7 @@ from app.schemas.sync import (
     SyncPushRequest,
     SyncPushResponse,
     SyncPushResult,
+    TripLogSyncData,
 )
 
 router = APIRouter(prefix="/sync", tags=["sync"])
@@ -56,6 +58,7 @@ SYNC_REGISTRY: dict[str, EntitySyncConfig] = {
     "maintenance_record": EntitySyncConfig(MaintenanceRecord, MaintenanceRecordSyncData),
     "maintenance_schedule": EntitySyncConfig(MaintenanceSchedule, MaintenanceScheduleSyncData),
     "fuel_log": EntitySyncConfig(FuelLog, FuelLogSyncData),
+    "trip_log": EntitySyncConfig(TripLog, TripLogSyncData),
     "attachment": EntitySyncConfig(Attachment, AttachmentSyncData),
 }
 

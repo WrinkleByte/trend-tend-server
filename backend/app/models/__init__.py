@@ -6,6 +6,7 @@ from app.models.household import Household, HouseholdInvite, HouseholdMembership
 from app.models.maintenance_record import MaintenanceRecord, RecordAttachment
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.sync_device import SyncDevice
+from app.models.trip_log import TripLog
 from app.models.user import User
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "PropertyDetails",
     "RecordAttachment",
     "SyncDevice",
+    "TripLog",
     "User",
     "VehicleDetails",
 ]

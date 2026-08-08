@@ -10,6 +10,7 @@ from app.api.v1 import (
     maintenance_records,
     maintenance_schedules,
     sync,
+    trip_logs,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -19,6 +20,7 @@ api_router.include_router(assets.router)
 api_router.include_router(maintenance_records.router)
 api_router.include_router(maintenance_schedules.router)
 api_router.include_router(fuel_logs.router)
+api_router.include_router(trip_logs.router)
 api_router.include_router(attachments.router)
 api_router.include_router(api_tokens.router)
 api_router.include_router(sync.router)
