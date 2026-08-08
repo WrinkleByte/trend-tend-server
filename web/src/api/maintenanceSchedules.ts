@@ -1,8 +1,9 @@
 import { apiFetch } from "./client";
 import type { MaintenanceSchedule, MaintenanceScheduleCreateInput } from "./types";
 
-export function listMaintenanceSchedules(assetId: string): Promise<MaintenanceSchedule[]> {
-  return apiFetch(`/maintenance-schedules?asset_id=${assetId}`);
+export function listMaintenanceSchedules(assetId?: string): Promise<MaintenanceSchedule[]> {
+  const query = assetId ? `?asset_id=${encodeURIComponent(assetId)}` : "";
+  return apiFetch(`/maintenance-schedules${query}`);
 }
 
 export function createMaintenanceSchedule(input: MaintenanceScheduleCreateInput): Promise<MaintenanceSchedule> {

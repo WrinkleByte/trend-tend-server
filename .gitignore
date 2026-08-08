@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.venv
 venv/
 .pytest_cache/
 .mypy_cache/
@@ -30,3 +31,18 @@ postgres_data/
 
 # Local dev attachment storage (STORAGE_LOCAL_ROOT default)
 backend/data/
+
+# Local handoff notes with embedded dev-server credentials — not for version control
+WEB_APP_HANDOFF.md
+
+# Personal data export, not project source
+Fuelly Export.csv
+
+# AppleDouble files from network-share sync
+._*
+
+# Stray non-project files appearing in this directory from an unrelated
+# local tool/process — not Tendfida source. Broadened after a second,
+# differently-named one (tmSearchHistory...) showed up alongside the first
+# (tmSearchResults...); worth checking what's writing these.
+tmSearch*.xlsx

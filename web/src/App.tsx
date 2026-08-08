@@ -3,8 +3,10 @@ import { AssetDetailPage } from "./features/assets/AssetDetailPage";
 import { AssetsPage } from "./features/assets/AssetsPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import { RegisterPage } from "./features/auth/RegisterPage";
+import { ExportPage } from "./features/export/ExportPage";
 import { HouseholdPage } from "./features/household/HouseholdPage";
 import { JoinPage } from "./features/household/JoinPage";
+import { ImportPage } from "./features/import/ImportPage";
 import { Layout } from "./features/layout/Layout";
 import { ProtectedRoute } from "./features/layout/ProtectedRoute";
 import { ApiTokensPage } from "./features/settings/ApiTokensPage";
@@ -27,6 +29,8 @@ function App() {
         <Route path="/" element={<AssetsPage />} />
         <Route path="/assets/:id" element={<AssetDetailPage />} />
         <Route path="/household" element={<HouseholdPage />} />
+        <Route path="/import" element={<ImportPage />} />
+        <Route path="/export" element={<ExportPage />} />
         <Route path="/settings" element={<ApiTokensPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -72,7 +72,7 @@ export interface MaintenanceRecord {
   category: string;
   custom_category: string | null;
   description: string | null;
-  cost: number | null;
+  cost: string | null;
   currency: string;
   odometer_reading: number | null;
   schedule_id: string | null;
@@ -194,4 +194,46 @@ export interface InvitePreview {
   role: HouseholdRole;
   status: InviteStatus;
   expires_at: string;
+}
+
+// Fuel Logs
+export interface FuelLog {
+  id: string;
+  household_id: string;
+  asset_id: string;
+  performed_at: string;
+  odometer_reading: number | null;
+  gallons: string;
+  cost_per_gallon: string | null;
+  total_cost: string | null;
+  currency: string;
+  is_fill_up: boolean;
+  mpg: string | null;
+  octane: number | null;
+  cetane: number | null;
+  gas_brand: string | null;
+  location: string | null;
+  notes: string | null;
+  additive: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateFuelLogRequest {
+  asset_id: string;
+  performed_at: string;
+  odometer_reading?: number | null;
+  gallons: string;
+  cost_per_gallon?: string | null;
+  total_cost?: string | null;
+  currency?: string;
+  is_fill_up?: boolean;
+  mpg?: string | null;
+  octane?: number | null;
+  cetane?: number | null;
+  gas_brand?: string | null;
+  location?: string | null;
+  notes?: string | null;
+  additive?: string | null;
 }

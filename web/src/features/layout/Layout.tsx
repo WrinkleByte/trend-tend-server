@@ -17,6 +17,8 @@ export function Layout() {
         <nav>
           <Link to="/">Assets</Link>
           <Link to="/household">Household</Link>
+          <Link to="/import">Import</Link>
+          <Link to="/export">Export</Link>
           <Link to="/settings">Settings</Link>
           <button type="button" onClick={() => clear()}>
             Log out

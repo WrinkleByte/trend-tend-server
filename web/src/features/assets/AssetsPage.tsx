@@ -3,13 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createAsset, listAssets } from "../../api/assets";
 import type { AssetType } from "../../api/types";
-
-const ASSET_TYPES: { value: AssetType; label: string }[] = [
-  { value: "vehicle", label: "Vehicle" },
-  { value: "equipment", label: "Equipment" },
-  { value: "property", label: "Property" },
-  { value: "home_system", label: "Home System" },
-];
+import { ASSET_TYPES } from "./assetTypes";
 
 export function AssetsPage() {
   const queryClient = useQueryClient();
