@@ -1,3 +1,3 @@
-import { TendfidaDb } from "./schema";
+import { WrinkleByteDb } from "./schema";
 
-export const db = new TendfidaDb();
+export const db = new WrinkleByteDb();

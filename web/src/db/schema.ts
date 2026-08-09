@@ -65,7 +65,7 @@ export interface Attachment extends SyncEnvelope {
   capturedAt: string | null;
 }
 
-/** Mirrors the mobile shared module's outboxEntry table (Tendfida.sq) —
+/** Mirrors the mobile shared module's outboxEntry table (WrinkleByte.sq) —
  * every local write also upserts a row here for SyncEngine to drain. */
 export interface OutboxEntry {
   id: string;
@@ -86,7 +86,24 @@ export interface PendingConflict {
   detectedAt: string;
 }
 
-export class TendfidaDb extends Dexie {
+export const DEXIE_DB_NAME = "wrinklebyte";
+
+/** Shape of version 1's stores — also imported by migrateLegacyDatabase.ts
+ * for its legacy-read handle onto the pre-rename "tendfida" database,
+ * which had this exact same v1 schema. If this schema ever moves past
+ * version 1, migrateLegacyDatabase.ts must stop importing this constant
+ * and inline its own frozen copy instead, since the legacy database will
+ * always have been left in the v1 shape. */
+export const V1_STORES = {
+  assets: "id, householdId, assetType, deletedAt",
+  maintenanceRecords: "id, householdId, assetId, performedAt, deletedAt",
+  maintenanceSchedules: "id, householdId, assetId, deletedAt",
+  attachments: "id, householdId, sha256, deletedAt",
+  outbox: "id, entityType, queuedAt",
+  pendingConflicts: "id, entityType, detectedAt",
+} as const;
+
+export class WrinkleByteDb extends Dexie {
   assets!: EntityTable<Asset, "id">;
   maintenanceRecords!: EntityTable<MaintenanceRecord, "id">;
   maintenanceSchedules!: EntityTable<MaintenanceSchedule, "id">;
@@ -95,14 +112,7 @@ export class TendfidaDb extends Dexie {
   pendingConflicts!: EntityTable<PendingConflict, "id">;
 
   constructor() {
-    super("tendfida");
-    this.version(1).stores({
-      assets: "id, householdId, assetType, deletedAt",
-      maintenanceRecords: "id, householdId, assetId, performedAt, deletedAt",
-      maintenanceSchedules: "id, householdId, assetId, deletedAt",
-      attachments: "id, householdId, sha256, deletedAt",
-      outbox: "id, entityType, queuedAt",
-      pendingConflicts: "id, entityType, detectedAt",
-    });
+    super(DEXIE_DB_NAME);
+    this.version(1).stores(V1_STORES);
   }
 }

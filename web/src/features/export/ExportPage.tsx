@@ -39,12 +39,12 @@ export function ExportPage() {
         if (format === 'json') {
           downloadBlob(
             new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }),
-            `tendfida-export-${dateStr}.json`,
+            `wrinklebyte-export-${dateStr}.json`,
           );
         } else {
           downloadBlob(
             new Blob([buildFuellyCSV(bundle)], { type: 'text/csv' }),
-            `tendfida-fuelly-export-${dateStr}.csv`,
+            `wrinklebyte-fuelly-export-${dateStr}.csv`,
           );
         }
       } else {
@@ -77,7 +77,7 @@ export function ExportPage() {
         }
 
         const zipBlob = await zip.generateAsync({ type: 'blob' });
-        downloadBlob(zipBlob, `tendfida-export-${dateStr}.zip`);
+        downloadBlob(zipBlob, `wrinklebyte-export-${dateStr}.zip`);
       }
 
       setSummary({
