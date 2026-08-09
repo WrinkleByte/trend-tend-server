@@ -1,10 +1,10 @@
 # Fuel Economy Tracking
 
-Tendfida calculates your vehicle's real-world fuel economy (MPG) from your fill-up history, and can alert you when it drops enough to suggest something might be wrong. This page explains exactly how that works, so the numbers you see are never a mystery.
+WrinkleByte calculates your vehicle's real-world fuel economy (MPG) from your fill-up history, and can alert you when it drops enough to suggest something might be wrong. This page explains exactly how that works, so the numbers you see are never a mystery.
 
 ## How MPG is calculated
 
-Tendfida only calculates a fuel economy reading between two **full** fill-ups — never from a single fill-up alone, and never from a partial one.
+WrinkleByte only calculates a fuel economy reading between two **full** fill-ups — never from a single fill-up alone, and never from a partial one.
 
 Here's why: fuel economy is *distance traveled* divided by *fuel actually burned* over that distance. A full tank gives you a known starting point (100% full) and a known ending point (100% full again), so the gallons you put in at the second fill-up is exactly what you burned getting there. A **partial** fill-up doesn't give you that — if you only put in 5 gallons, you don't actually know how much fuel was in the tank before you started, so there's no way to know the true amount burned.
 
@@ -34,7 +34,7 @@ From any vehicle's detail screen, you can view its MPG trend over time. Pick a t
 
 ## Fuel economy drop alerts
 
-If you'd like, Tendfida can notify you when a new fill-up's calculated MPG drops significantly compared to your recent average — a real drop can be an early sign of something worth checking (tire pressure, an air filter, a developing mechanical issue).
+If you'd like, WrinkleByte can notify you when a new fill-up's calculated MPG drops significantly compared to your recent average — a real drop can be an early sign of something worth checking (tire pressure, an air filter, a developing mechanical issue).
 
 You control this in **Settings**:
 

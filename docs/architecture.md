@@ -1,6 +1,6 @@
-# Tendfida — System Architecture
+# WrinkleByte — System Architecture
 
-Tendfida tracks maintenance for homes, vehicles, and general equipment (lawn mowers, snow blowers, HVAC systems, and more) — recurring schedules, service history, and costs per asset.
+WrinkleByte tracks maintenance for homes, vehicles, and general equipment (lawn mowers, snow blowers, HVAC systems, and more) — recurring schedules, service history, and costs per asset.
 
 ## System overview
 

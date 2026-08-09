@@ -30,8 +30,8 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['apple-touch-icon.png'],
         manifest: {
-          name: 'Tendfida',
-          short_name: 'Tendfida',
+          name: 'WrinkleByte Tending and Trending',
+          short_name: 'WrinkleByte',
           description: 'Track maintenance for your home, vehicles, and equipment.',
           start_url: '/',
           display: 'standalone',

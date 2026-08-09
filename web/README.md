@@ -1,6 +1,6 @@
-# Tendfida Web
+# WrinkleByte Web
 
-React + Vite frontend for Tendfida. Serves two roles from one codebase: the connected web UI for a self-hosted backend, and an installable, offline-capable PWA (see [`../docs/pwa-offline.md`](../docs/pwa-offline.md)).
+React + Vite frontend for WrinkleByte. Serves two roles from one codebase: the connected web UI for a self-hosted backend, and an installable, offline-capable PWA (see [`../docs/pwa-offline.md`](../docs/pwa-offline.md)).
 
 ## Setup (Docker — recommended)
 

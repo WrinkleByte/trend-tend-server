@@ -1,6 +1,6 @@
-# Tendfida Backend
+# WrinkleByte Backend
 
-FastAPI + PostgreSQL API server for Tendfida.
+FastAPI + PostgreSQL API server for WrinkleByte.
 
 ## Prerequisites
 

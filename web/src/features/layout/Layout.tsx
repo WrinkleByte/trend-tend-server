@@ -11,7 +11,7 @@ export function Layout() {
     <div className="app-shell">
       <header className="app-nav">
         <Link to="/" className="brand">
-          Tendfida
+          WrinkleByte
         </Link>
         {household && <span className="household-name">{household.name}</span>}
         <nav>

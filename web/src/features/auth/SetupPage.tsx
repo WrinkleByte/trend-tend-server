@@ -44,7 +44,7 @@ export function SetupPage() {
   return (
     <div className="auth-page">
       <form className="auth-form" onSubmit={handleSubmit}>
-        <h1>Welcome to Tendfida</h1>
+        <h1>Welcome to WrinkleByte</h1>
         <p>This looks like a fresh install — set up the first account to get started.</p>
         {error && <p className="form-error">{error}</p>}
         <label>

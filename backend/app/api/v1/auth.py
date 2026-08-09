@@ -200,7 +200,7 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
             send_email,
             settings,
             to=user.email,
-            subject="Reset your Tendfida password",
+            subject="Reset your WrinkleByte password",
             body=(
                 f"Someone requested a password reset for this account.\n\n"
                 f"Reset token: {reset_token.token}\n\n"
