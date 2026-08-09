@@ -1,6 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { QRCodeSVG } from "qrcode.react";
 import { createApiToken, listApiTokens, revokeApiToken } from "../../api/apiTokens";
+import { InstanceSettingsSection } from "./InstanceSettingsSection";
+
+function buildPairingPayload(server: string, token: string): string {
+  return JSON.stringify({ v: 1, server, token });
+}
 
 export function ApiTokensPage() {
   const queryClient = useQueryClient();
@@ -29,16 +35,22 @@ export function ApiTokensPage() {
 
   return (
     <div>
-      <h1>API tokens</h1>
+      <h1>Settings</h1>
+
+      <InstanceSettingsSection />
+
+      <h2>API tokens</h2>
       <p>
-        Pair a mobile app to this household by generating a token here and entering it (or scanning its QR
-        code, once available) in the app&rsquo;s sync settings.
+        Pair a mobile app to this household by generating a token here and entering it — or scanning the QR
+        code below — in the app&rsquo;s sync settings.
       </p>
 
       {justCreated && (
         <div className="token-reveal">
           <p>Copy this token now — it won&rsquo;t be shown again.</p>
           <code>{justCreated}</code>
+          <p>Or scan this code from the mobile app&rsquo;s pairing screen:</p>
+          <QRCodeSVG value={buildPairingPayload(window.location.origin, justCreated)} size={200} />
           <button type="button" onClick={() => setJustCreated(null)}>
             Done
           </button>

@@ -82,3 +82,10 @@ def generate_invite_token() -> str:
     # code for one household — not a general bearer credential — so it's
     # looked up (and stored) directly rather than hashed.
     return secrets.token_urlsafe(24)
+
+
+def generate_password_reset_token() -> str:
+    # Same shape/rationale as generate_invite_token — a distinct name so
+    # call sites read clearly even though the underlying generation is
+    # identical.
+    return secrets.token_urlsafe(24)

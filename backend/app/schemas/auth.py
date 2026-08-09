@@ -41,3 +41,20 @@ class UserResponse(BaseModel):
     display_name: str
 
     model_config = {"from_attributes": True}
+
+
+class SetupStatusResponse(BaseModel):
+    # False only until the very first user ever registers — see
+    # api/v1/auth.py's setup_status(). Web/mobile clients use this to show
+    # a "Create Admin Account" screen instead of the normal login form on a
+    # freshly-deployed, empty instance.
+    setup_complete: bool
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str

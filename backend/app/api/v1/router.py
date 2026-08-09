@@ -7,6 +7,7 @@ from app.api.v1 import (
     auth,
     fuel_logs,
     households,
+    instance_settings,
     maintenance_records,
     maintenance_schedules,
     sync,
@@ -15,6 +16,7 @@ from app.api.v1 import (
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth.router)
+api_router.include_router(instance_settings.router)
 api_router.include_router(households.router)
 api_router.include_router(assets.router)
 api_router.include_router(maintenance_records.router)

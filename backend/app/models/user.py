@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,4 +20,10 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     password_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Set once, on whichever user registers first via the setup flow (see
+    # auth.py's register()) — an instance-wide (not household-scoped) admin
+    # flag, distinct from HouseholdRole.OWNER, since a self-hosted instance
+    # can host multiple independent households but has exactly one set of
+    # instance settings (SMTP, etc. — see InstanceSettings) to administer.
+    is_instance_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

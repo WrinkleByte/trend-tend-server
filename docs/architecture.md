@@ -93,7 +93,13 @@ backend/
 **Auth — both mechanisms as first-class, unified into one dependency.** `get_current_principal` resolves either a JWT bearer token or a prefixed API-key token (e.g. `mnt_live_...`, hashed at rest) into the same `Principal(user_id, household_id, role, device_id)` object — endpoints never know which auth mechanism was used.
 
 - Password login: `POST /auth/login` → short-lived access JWT (~15 min) + refresh token (httpOnly cookie on web, platform Keychain/Keystore on mobile).
-- API key pairing: created in web Settings (`POST /api_tokens`), shown once, rendered as a **QR code** for the "scan into mobile app" flow.
+- API key pairing: created in web Settings (`POST /api-tokens`), shown once, rendered as a QR code encoding a JSON pairing payload for the "scan into mobile app" flow:
+
+  ```json
+  {"v": 1, "server": "https://example.com", "token": "mnt_live_..."}
+  ```
+
+  `v` is a schema version (currently `1`); `server` is `window.location.origin` — the same origin the token was issued from; `token` is the raw bearer token, present only in this one response/QR. Mobile clients parse this directly (plain JSON, no base64 or custom URI scheme) into `SyncEngine.validateAndPair(server, token)`'s arguments.
 
 **Sharing/invite flow.** `POST /households/{id}/invites` creates a `HouseholdInvite`; `POST /auth/invite/accept` creates the `HouseholdMembership` row. Roles: `owner` (full control incl. removing members, deleting household) and `member` (full CRUD on assets/records/schedules).
 
