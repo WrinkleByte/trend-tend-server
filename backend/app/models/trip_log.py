@@ -12,7 +12,7 @@ from app.models.mixins import SyncedEntityMixin
 
 class TripLog(SyncedEntityMixin, Base):
     """Mirrors the mobile shared module's `tripLog` table field-for-field
-    (see Tendfida.sq in the companion mobile repo) — mileage-tracking trip
+    (see WrinkleByte.sq in the companion mobile repo) — mileage-tracking trip
     entries with a required odometer photo (via the generic attachment
     system), syncable the same as any other entity via SYNC_REGISTRY (see
     app/api/v1/sync.py)."""

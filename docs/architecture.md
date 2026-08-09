@@ -160,7 +160,7 @@ The **web PWA** registers as its own `SyncDevice` (`platform=web`) and calls thi
 Lives in the companion `tendfida-mobile` repo.
 
 ```
-shared/src/commonMain/kotlin/com/tendfida/
+shared/src/commonMain/kotlin/com/wrinklebyte/
   db/            # SQLDelight schema mirroring backend entities 1:1
   network/        # Ktor client, auth header injection, kotlinx.serialization DTOs
   sync/           # SyncEngine, Outbox, ConflictStore, SyncScheduler (expect/actual per platform)

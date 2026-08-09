@@ -1,7 +1,7 @@
 import type { ExportBundle } from '../../api/export';
 
 // Column order matches Fuelly's own CSV export exactly, so this file can be
-// re-imported into Fuelly or re-imported into Tendfida's own Fuelly
+// re-imported into Fuelly or re-imported into WrinkleByte's own Fuelly
 // importer (see features/import/FuellyImport.tsx) unchanged.
 const FUELLY_COLUMNS = [
   'Type', 'MPG', 'Date', 'Time', 'Vehicle', 'Odometer', 'Filled Up', 'Cost/Gallon', 'Gallons',

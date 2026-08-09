@@ -132,7 +132,7 @@ export function ExportPage() {
             style={{ marginRight: '8px' }}
           />
           Fuelly CSV — fuel logs + service history combined into one file, formatted to re-import into Fuelly (or
-          back into Tendfida)
+          back into WrinkleByte)
         </label>
 
         <label style={{ display: 'block' }}>
