@@ -11,7 +11,13 @@ services:
       POSTGRES_PASSWORD: wrinklebyte
       POSTGRES_DB: wrinklebyte
     ports:
-      - "5432:5432"
+      # Override via a POSTGRES_HOST_PORT=... entry in a root .env file if
+      # 5432 is already taken on your machine (Docker Compose reads that
+      # file automatically) — container still listens on 5432 internally,
+      # and `backend` talks to it over the Compose network at
+      # postgres:5432 regardless, so DATABASE_URL below never needs to
+      # change.
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

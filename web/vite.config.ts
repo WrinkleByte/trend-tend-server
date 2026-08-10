@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['apple-touch-icon.png'],
         manifest: {
-          name: 'WrinkleByte Tending and Trending',
+          name: 'WrinkleByte Maintenance Tracker',
           short_name: 'WrinkleByte',
           description: 'Track maintenance for your home, vehicles, and equipment.',
           start_url: '/',
