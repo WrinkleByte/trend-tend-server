@@ -7,6 +7,7 @@ from app.api.v1 import (
     auth,
     fuel_logs,
     households,
+    import_restore,
     instance_settings,
     maintenance_records,
     maintenance_schedules,
@@ -24,5 +25,6 @@ api_router.include_router(maintenance_schedules.router)
 api_router.include_router(fuel_logs.router)
 api_router.include_router(trip_logs.router)
 api_router.include_router(attachments.router)
+api_router.include_router(import_restore.router)
 api_router.include_router(api_tokens.router)
 api_router.include_router(sync.router)
