@@ -4,7 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import Principal, require_instance_admin
 from app.core.instance_settings import get_or_create_instance_settings
 from app.db.session import get_db
-from app.schemas.instance_settings import InstanceSettingsResponse, InstanceSettingsUpdate
+from app.schemas.instance_settings import (
+    InstanceSettingsResponse,
+    InstanceSettingsUpdate,
+)
 
 router = APIRouter(prefix="/instance-settings", tags=["instance-settings"])
 
