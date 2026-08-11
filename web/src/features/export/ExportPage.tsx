@@ -67,12 +67,16 @@ export function ExportPage() {
           const blobs = await fetchAllAttachmentBlobs(bundle.attachments, (done, total) =>
             setProgress({ done, total }),
           );
-          const usedNames = new Set<string>();
           for (const { attachment, blob } of blobs) {
-            let name = attachment.original_filename || attachment.id;
-            if (usedNames.has(name)) name = `${attachment.id}-${name}`;
-            usedNames.add(name);
-            zip.file(`attachments/${name}`, blob);
+            // Named by id, not original_filename — two different attachments
+            // can share a filename (e.g. two photos both named "IMG_001.jpg"),
+            // but ids are always unique. A restore implementation matches
+            // each attachments[] JSON row back to its file this same way, on
+            // every platform, so this can't be a cosmetic-only choice.
+            const extension = attachment.original_filename.includes('.')
+              ? attachment.original_filename.slice(attachment.original_filename.lastIndexOf('.'))
+              : '';
+            zip.file(`attachments/${attachment.id}${extension}`, blob);
           }
         }
 

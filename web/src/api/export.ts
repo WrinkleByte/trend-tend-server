@@ -5,11 +5,15 @@ import { listMaintenanceRecords } from "./maintenanceRecords";
 import { listMaintenanceSchedules } from "./maintenanceSchedules";
 import type { Asset, Attachment, FuelLog, MaintenanceRecord, MaintenanceSchedule } from "./types";
 
-// record_id for a maintenance-record receipt, asset_id for an asset's
-// profile photo — exactly one is set, matching which export it came from.
+// Generalized discriminator matching mobile's AttachmentExportRow shape
+// (entity_type/entity_id) rather than a record_id/asset_id split — keeps
+// the two platforms' export/restore formats interchangeable. Web only ever
+// produces "maintenance_record" or "asset" today (no fuel_log/trip_log
+// attachment support on web yet), but a restore reading either platform's
+// backup only needs to understand this one pair.
 export interface AttachmentExportEntry extends Attachment {
-  record_id?: string;
-  asset_id?: string;
+  entity_type: 'maintenance_record' | 'asset';
+  entity_id: string;
 }
 
 export interface ExportBundle {
@@ -34,7 +38,7 @@ export async function gatherExportData(): Promise<ExportBundle> {
   const attachmentLists = await Promise.all(
     maintenanceRecords.map((record) =>
       listAttachmentsForRecord(record.id).then((atts) =>
-        atts.map((attachment): AttachmentExportEntry => ({ ...attachment, record_id: record.id })),
+        atts.map((attachment): AttachmentExportEntry => ({ ...attachment, entity_type: 'maintenance_record', entity_id: record.id })),
       ),
     ),
   );
@@ -46,7 +50,7 @@ export async function gatherExportData(): Promise<ExportBundle> {
       .filter((asset): asset is Asset & { photo_attachment_id: string } => asset.photo_attachment_id !== null)
       .map((asset) =>
         getAttachment(asset.photo_attachment_id).then(
-          (attachment): AttachmentExportEntry => ({ ...attachment, asset_id: asset.id }),
+          (attachment): AttachmentExportEntry => ({ ...attachment, entity_type: 'asset', entity_id: asset.id }),
         ),
       ),
   );
