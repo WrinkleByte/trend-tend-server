@@ -44,6 +44,10 @@ export interface Asset {
   status: AssetStatus;
   purchase_date: string | null;
   purchase_cost: number | null;
+  // Set via POST /attachments?asset_id=..., cleared via
+  // DELETE /assets/{id}/photo — not part of AssetCreateInput, same
+  // reasoning as the backend's AssetCreate/AssetUpdate schemas.
+  photo_attachment_id: string | null;
   version: number;
   created_at: string;
   updated_at: string;

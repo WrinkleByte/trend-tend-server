@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import Principal, get_current_principal, household_scoped_query
 from app.db.session import get_db
 from app.models.asset import Asset, EquipmentDetails, PropertyDetails, VehicleDetails
+from app.models.attachment import Attachment
 from app.models.mixins import utcnow
 from app.schemas.asset import AssetCreate, AssetResponse, AssetUpdate
 
@@ -138,6 +139,33 @@ async def update_asset(
     await db.refresh(asset)
     details = await _load_details(db, asset)
     return _to_response(asset, details)
+
+
+@router.delete("/{asset_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_asset_photo(
+    asset_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    asset = await _get_owned_asset(db, principal, asset_id)
+    photo_attachment_id = asset.photo_attachment_id
+    if photo_attachment_id is None:
+        return
+    asset.photo_attachment_id = None
+    asset.updated_by_device_id = principal.device_id
+    asset.version += 1
+    asset.updated_at = utcnow()
+
+    # Same soft-delete-metadata-only tradeoff as attachments.delete_attachment
+    # -- the blob is left in place rather than adding cascade-delete logic.
+    result = await db.execute(select(Attachment).where(Attachment.id == photo_attachment_id))
+    attachment = result.scalar_one_or_none()
+    if attachment is not None:
+        attachment.deleted_at = utcnow()
+        attachment.updated_by_device_id = principal.device_id
+        attachment.version += 1
+
+    await db.commit()
 
 
 @router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)

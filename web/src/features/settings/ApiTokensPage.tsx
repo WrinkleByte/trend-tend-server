@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { createApiToken, listApiTokens, revokeApiToken } from "../../api/apiTokens";
+import { useAssetPhotosEnabled } from "./assetPhotosSetting";
 import { InstanceSettingsSection } from "./InstanceSettingsSection";
 
 function buildPairingPayload(server: string, token: string): string {
@@ -13,6 +14,7 @@ export function ApiTokensPage() {
   const { data: tokens, isLoading } = useQuery({ queryKey: ["api-tokens"], queryFn: listApiTokens });
   const [name, setName] = useState("");
   const [justCreated, setJustCreated] = useState<string | null>(null);
+  const [assetPhotosEnabled, setAssetPhotosEnabled] = useAssetPhotosEnabled();
 
   const createMutation = useMutation({
     mutationFn: () => createApiToken(name),
@@ -38,6 +40,17 @@ export function ApiTokensPage() {
       <h1>Settings</h1>
 
       <InstanceSettingsSection />
+
+      <h2>Preferences</h2>
+      <label style={{ display: "block", marginBottom: "16px" }}>
+        <input
+          type="checkbox"
+          checked={assetPhotosEnabled}
+          onChange={(e) => setAssetPhotosEnabled(e.target.checked)}
+          style={{ marginRight: "8px" }}
+        />
+        Show asset profile photos
+      </label>
 
       <h2>API tokens</h2>
       <p>

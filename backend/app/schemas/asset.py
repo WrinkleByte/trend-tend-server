@@ -62,6 +62,12 @@ class AssetResponse(BaseModel):
     status: AssetStatus
     purchase_date: date | None
     purchase_cost: Decimal | None
+    # Set via POST /attachments?asset_id=..., cleared via
+    # DELETE /assets/{id}/photo -- not settable directly through
+    # AssetCreate/AssetUpdate, same reasoning as record_id on the
+    # attachment-upload endpoint: the relationship is driven by the upload
+    # itself, not a raw id field a client could point anywhere.
+    photo_attachment_id: uuid.UUID | None = None
     version: int
     created_at: datetime
     updated_at: datetime

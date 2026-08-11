@@ -5,6 +5,7 @@ import { deleteAsset, getAsset, updateAsset } from "../../api/assets";
 import type { AssetCreateInput } from "../../api/types";
 import { MaintenanceRecordsSection } from "../maintenance/MaintenanceRecordsSection";
 import { SchedulesSection } from "../schedules/SchedulesSection";
+import { AssetProfilePhoto } from "./AssetProfilePhoto";
 
 export function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -54,6 +55,8 @@ export function AssetDetailPage() {
   return (
     <div>
       <h1>{asset.name}</h1>
+
+      <AssetProfilePhoto asset={asset} />
 
       <form className="asset-edit-form" onSubmit={handleSubmit}>
         <label>

@@ -4,10 +4,12 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import RedirectResponse, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_principal, household_scoped_query
 from app.db.session import get_db
+from app.models.asset import Asset
 from app.models.attachment import Attachment, StorageBackendType
 from app.models.maintenance_record import MaintenanceRecord, RecordAttachment
 from app.models.mixins import utcnow
@@ -25,6 +27,15 @@ async def _get_owned_record(db: AsyncSession, principal: Principal, record_id: u
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Maintenance record not found")
     return record
+
+
+async def _get_owned_asset(db: AsyncSession, principal: Principal, asset_id: uuid.UUID) -> Asset:
+    query = household_scoped_query(Asset, principal).where(Asset.id == asset_id)
+    result = await db.execute(query)
+    asset = result.scalar_one_or_none()
+    if asset is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Asset not found")
+    return asset
 
 
 async def _get_owned_attachment(db: AsyncSession, principal: Principal, attachment_id: uuid.UUID) -> Attachment:
@@ -46,6 +57,7 @@ def _to_response(attachment: Attachment, storage: StorageBackend) -> AttachmentR
 async def upload_attachment(
     file: UploadFile,
     record_id: uuid.UUID | None = None,
+    asset_id: uuid.UUID | None = None,
     captured_at: datetime | None = None,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
@@ -53,6 +65,15 @@ async def upload_attachment(
 ) -> AttachmentResponse:
     if record_id is not None:
         await _get_owned_record(db, principal, record_id)
+    asset: Asset | None = None
+    if asset_id is not None:
+        # A profile photo is 1:1 with its asset (a direct FK column, not a
+        # join table like RecordAttachment) -- fetched up front so its
+        # previous photo_attachment_id is on hand once the new attachment
+        # exists, same "old id captured before the new row lands" shape
+        # every other update in this codebase uses.
+        asset = await _get_owned_asset(db, principal, asset_id)
+    previous_photo_attachment_id = asset.photo_attachment_id if asset is not None else None
 
     data = await file.read()
     attachment_id = uuid.uuid4()
@@ -78,6 +99,23 @@ async def upload_attachment(
 
     if record_id is not None:
         db.add(RecordAttachment(id=uuid.uuid4(), record_id=record_id, attachment_id=attachment.id))
+    if asset is not None:
+        asset.photo_attachment_id = attachment.id
+        asset.updated_by_device_id = principal.device_id
+        asset.version += 1
+        asset.updated_at = utcnow()
+        if previous_photo_attachment_id is not None:
+            # Same soft-delete-metadata-only tradeoff as delete_attachment
+            # below -- the old blob is left in place rather than adding
+            # cascade-delete logic.
+            prev_result = await db.execute(
+                select(Attachment).where(Attachment.id == previous_photo_attachment_id)
+            )
+            previous_attachment = prev_result.scalar_one_or_none()
+            if previous_attachment is not None:
+                previous_attachment.deleted_at = utcnow()
+                previous_attachment.updated_by_device_id = principal.device_id
+                previous_attachment.version += 1
 
     await db.commit()
     await db.refresh(attachment)

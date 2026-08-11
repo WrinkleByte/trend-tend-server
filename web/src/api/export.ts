@@ -1,12 +1,15 @@
-import { fetchAttachmentBlob, listAttachmentsForRecord } from "./attachments";
+import { getAttachment, fetchAttachmentBlob, listAttachmentsForRecord } from "./attachments";
 import { listAssets } from "./assets";
 import { listFuelLogs } from "./fuelLogs";
 import { listMaintenanceRecords } from "./maintenanceRecords";
 import { listMaintenanceSchedules } from "./maintenanceSchedules";
 import type { Asset, Attachment, FuelLog, MaintenanceRecord, MaintenanceSchedule } from "./types";
 
+// record_id for a maintenance-record receipt, asset_id for an asset's
+// profile photo — exactly one is set, matching which export it came from.
 export interface AttachmentExportEntry extends Attachment {
-  record_id: string;
+  record_id?: string;
+  asset_id?: string;
 }
 
 export interface ExportBundle {
@@ -36,13 +39,25 @@ export async function gatherExportData(): Promise<ExportBundle> {
     ),
   );
 
+  // Asset profile photos are a direct FK on the asset row, not a listable
+  // link — one GET /attachments/{id} per asset that actually has one.
+  const assetPhotoEntries = await Promise.all(
+    assets
+      .filter((asset): asset is Asset & { photo_attachment_id: string } => asset.photo_attachment_id !== null)
+      .map((asset) =>
+        getAttachment(asset.photo_attachment_id).then(
+          (attachment): AttachmentExportEntry => ({ ...attachment, asset_id: asset.id }),
+        ),
+      ),
+  );
+
   return {
     exported_at: new Date().toISOString(),
     assets,
     fuel_logs: fuelLogs,
     maintenance_records: maintenanceRecords,
     maintenance_schedules: maintenanceSchedules,
-    attachments: attachmentLists.flat(),
+    attachments: [...attachmentLists.flat(), ...assetPhotoEntries],
   };
 }
 
