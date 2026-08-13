@@ -21,6 +21,24 @@ class Settings(BaseSettings):
     storage_s3_access_key: str = ""
     storage_s3_secret_key: str = ""
 
+    # One-time seed for the DB-backed instance_settings singleton (see
+    # core/instance_settings.py) — only applied the first time that row is
+    # created. After that, the admin instance-settings UI/API is the source
+    # of truth and these env vars are never read again, unless
+    # smtp_force_env is set.
+    smtp_enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int | None = None
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
+    smtp_from_address: str = ""
+    # Re-applies the smtp_* env vars above on every read instead of just at
+    # creation, overwriting anything set via the admin instance-settings
+    # UI — for deployments that want .env to be the sole SMTP source of
+    # truth rather than a one-time default.
+    smtp_force_env: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

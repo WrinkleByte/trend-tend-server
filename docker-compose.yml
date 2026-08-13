@@ -33,6 +33,21 @@ services:
       JWT_SECRET: dev-secret-change-me
       STORAGE_BACKEND: local_disk
       STORAGE_LOCAL_ROOT: /data/attachments
+      # Seeds the instance_settings singleton on first boot only (see
+      # backend/app/core/instance_settings.py) — set these in a root .env
+      # file (git-ignored; see .env.example) rather than editing here, so
+      # SMTP_PASSWORD never ends up committed. No effect after the row
+      # already exists; reconfigure via the instance-settings admin UI then.
+      SMTP_ENABLED: ${SMTP_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
+      # If true, the SMTP_* values above are re-applied on every request,
+      # overwriting anything set via the admin instance-settings UI.
+      SMTP_FORCE_ENV: ${SMTP_FORCE_ENV:-false}
     ports:
       # Override via a BACKEND_HOST_PORT=... entry in a root .env file if
       # 8000 is already taken on your machine (Docker Compose reads that
