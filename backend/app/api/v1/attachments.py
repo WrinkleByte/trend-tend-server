@@ -56,6 +56,7 @@ def _to_response(attachment: Attachment, storage: StorageBackend) -> AttachmentR
 @router.post("", response_model=AttachmentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_attachment(
     file: UploadFile,
+    attachment_id: uuid.UUID | None = None,
     record_id: uuid.UUID | None = None,
     asset_id: uuid.UUID | None = None,
     captured_at: datetime | None = None,
@@ -63,6 +64,31 @@ async def upload_attachment(
     db: AsyncSession = Depends(get_db),
     storage: StorageBackend = Depends(get_storage_backend),
 ) -> AttachmentResponse:
+    # A client-supplied attachment_id (mobile's sync outbox retries an
+    # upload with the same locally-generated id after a dropped connection,
+    # same as every other synced entity's client-generated UUID) makes
+    # retries idempotent -- skip re-uploading the blob and re-linking
+    # entirely, just return what's already there. Web never sends this, so
+    # its behavior (server always mints a fresh id) is unchanged.
+    if attachment_id is not None:
+        existing = await db.execute(
+            household_scoped_query(Attachment, principal).where(Attachment.id == attachment_id)
+        )
+        existing_attachment = existing.scalar_one_or_none()
+        if existing_attachment is not None:
+            return _to_response(existing_attachment, storage)
+
+        # id is a global primary key, not household-scoped, so a collision
+        # with another household's attachment (deliberate or a genuine
+        # UUID clash) can't just fall through to the insert below -- that
+        # would surface as an unhandled 500 (unique constraint violation)
+        # rather than a clean error, and do it *after* already writing the
+        # blob to storage. Check existence globally, without touching any
+        # of that row's data, so nothing about the other household leaks.
+        collision = await db.execute(select(Attachment.id).where(Attachment.id == attachment_id))
+        if collision.scalar_one_or_none() is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "attachment_id already in use")
+
     if record_id is not None:
         await _get_owned_record(db, principal, record_id)
     asset: Asset | None = None
@@ -76,7 +102,7 @@ async def upload_attachment(
     previous_photo_attachment_id = asset.photo_attachment_id if asset is not None else None
 
     data = await file.read()
-    attachment_id = uuid.uuid4()
+    attachment_id = attachment_id or uuid.uuid4()
     storage_key = f"{principal.household_id}/{attachment_id}/{file.filename}"
     await storage.put(storage_key, data)
 
