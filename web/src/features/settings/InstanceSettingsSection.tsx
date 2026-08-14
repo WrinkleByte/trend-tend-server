@@ -153,7 +153,7 @@ export function InstanceSettingsSection() {
           ))}
           <span>Fills in host/port/TLS — you still need to add your address and a password below.</span>
         </div>
-        <label>
+        <label className="check-label">
           <input
             type="checkbox"
             checked={form.smtp_enabled ?? false}
@@ -178,7 +178,7 @@ export function InstanceSettingsSection() {
             placeholder="587"
           />
         </label>
-        <label>
+        <label className="check-label">
           <input
             type="checkbox"
             checked={form.smtp_use_tls ?? true}

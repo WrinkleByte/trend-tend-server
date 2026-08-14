@@ -107,44 +107,32 @@ export function ExportPage() {
 
       <section className="panel" style={{ marginTop: '20px' }}>
         <h3>Format</h3>
-        <label style={{ display: 'block', marginBottom: '8px' }}>
-          <input
-            type="radio"
-            name="format"
-            checked={format === 'json'}
-            onChange={() => setFormat('json')}
-            style={{ marginRight: '8px' }}
-          />
+        <label className="check-label">
+          <input type="radio" name="format" checked={format === 'json'} onChange={() => setFormat('json')} />
           JSON — a single structured backup file, full fidelity, best for re-importing later
         </label>
-        <label style={{ display: 'block', marginBottom: '8px' }}>
-          <input
-            type="radio"
-            name="format"
-            checked={format === 'csv'}
-            onChange={() => setFormat('csv')}
-            style={{ marginRight: '8px' }}
-          />
+        <label className="check-label">
+          <input type="radio" name="format" checked={format === 'csv'} onChange={() => setFormat('csv')} />
           CSV — one spreadsheet per record type, easy to open in Excel/Sheets
         </label>
-        <label style={{ display: 'block', marginBottom: '12px' }}>
+        <label className="check-label" style={{ alignItems: 'flex-start', marginBottom: '16px' }}>
           <input
             type="radio"
             name="format"
             checked={format === 'fuelly'}
             onChange={() => setFormat('fuelly')}
-            style={{ marginRight: '8px' }}
+            style={{ marginTop: '4px' }}
           />
           Fuelly CSV — fuel logs + service history combined into one file, formatted to re-import into Fuelly (or
           back into WrinkleByte)
         </label>
 
-        <label style={{ display: 'block' }}>
+        <label className="check-label" style={{ alignItems: 'flex-start', marginBottom: 0 }}>
           <input
             type="checkbox"
             checked={includeAttachments}
             onChange={(e) => setIncludeAttachments(e.target.checked)}
-            style={{ marginRight: '8px' }}
+            style={{ marginTop: '4px' }}
           />
           Include attachment files (receipts, photos) — downloads every file, may take a while
         </label>

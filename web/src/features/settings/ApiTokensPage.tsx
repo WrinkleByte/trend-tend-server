@@ -53,12 +53,11 @@ export function ApiTokensPage() {
             <option value="dark">Dark</option>
           </select>
         </label>
-        <label style={{ display: "block" }}>
+        <label className="check-label" style={{ marginBottom: 0 }}>
           <input
             type="checkbox"
             checked={assetPhotosEnabled}
             onChange={(e) => setAssetPhotosEnabled(e.target.checked)}
-            style={{ marginRight: "8px" }}
           />
           Show asset profile photos
         </label>

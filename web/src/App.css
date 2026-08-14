@@ -170,6 +170,22 @@ label {
   color: var(--text);
 }
 
+/* Checkbox/radio labels want the input inline with its text, not stacked
+   above it — the default column layout above stretches a checkbox to the
+   label's full width, which Chromium renders as a centered checkbox glyph
+   rather than one aligned with its text. */
+.check-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.check-label input {
+  margin: 0;
+}
+
 input,
 select,
 textarea,
