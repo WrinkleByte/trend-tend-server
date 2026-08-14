@@ -1,4 +1,4 @@
-/* Layout */
+﻿/* Layout */
 .app-shell {
   display: flex;
   flex-direction: column;
@@ -84,7 +84,7 @@
   flex: 1;
 }
 
-/* Grouped sections — used to give distinct settings/config areas (e.g. the
+/* Grouped sections â€” used to give distinct settings/config areas (e.g. the
    admin-only SMTP section) a clear visual boundary instead of just an <h2>
    floating in the page flow. */
 .panel {
@@ -175,7 +175,7 @@ label {
 }
 
 /* Checkbox/radio labels want the input inline with its text, not stacked
-   above it — the default column layout above stretches a checkbox to the
+   above it â€” the default column layout above stretches a checkbox to the
    label's full width, which Chromium renders as a centered checkbox glyph
    rather than one aligned with its text. */
 .check-label {
@@ -327,6 +327,54 @@ ul {
   padding: 12px 4px;
 }
 
+/* Record rows — CSS Grid so long descriptions don't break button/cost alignment */
+.record-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto min-content;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 14px 0;
+}
+
+.record-date {
+  font-size: 13px;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.record-category {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-alt);
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.record-description {
+  font-size: 14px;
+  color: var(--text-h);
+  grid-column: 3 / -2;
+  word-wrap: break-word;
+  min-width: 0;
+}
+
+.record-cost {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.record-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  white-space: nowrap;
+  align-items: center;
+  grid-column: auto / -1;
+}
+
 .admin-household-list li {
   padding: 16px 0;
 }
@@ -430,4 +478,223 @@ ul {
   display: block;
   margin: 8px 0;
   word-break: break-all;
+}
+
+
+/* ── Asset detail page — new view (alternative route) ─────────────── */
+
+.asset-detail-page {
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+
+/* Header bar */
+.asset-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 28px;
+  background: linear-gradient(135deg, var(--navy-top), var(--navy-bottom));
+  color: var(--cream);
+  border-radius: var(--radius-lg);
+  margin-bottom: 24px;
+}
+
+.asset-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.header-top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.header-top-row h1 {
+  color: var(--cream);
+  font-size: 22px;
+  margin: 0;
+  word-break: break-word;
+}
+
+.asset-type-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+}
+
+.status-pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.status-active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-archived {
+  background: var(--code-bg);
+  color: var(--text);
+}
+
+.status-disposed {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.asset-header-right {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.asset-header-right button + button {
+  margin-left: 0;
+}
+
+/* Main body — two-column grid */
+.asset-body {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr);
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+/* Left column — info panel */
+.asset-info-panel {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.asset-info-panel h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-h);
+  margin: 0 0 14px;
+}
+
+/* Field grid — horizontal pairs */
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 20px;
+}
+
+.field-compact {
+  gap: 10px 16px;
+}
+
+.field-full {
+  grid-column: 1 / -1;
+}
+
+.form-field label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+
+/* Right column — sidebar */
+.asset-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.detail-group,
+.meta-panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+}
+
+.detail-group h2,
+.meta-panel h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-h);
+  margin: 0 0 12px;
+}
+
+/* Metadata — definition list */
+.meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.meta-list dt {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  margin: 0;
+}
+
+.meta-list dd {
+  font-size: 15px;
+  color: var(--text-h);
+  margin: 0 0 2px;
+  font-weight: 500;
+}
+
+/* Bottom panels */
+.asset-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.asset-detail-panel {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.asset-detail-panel h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-h);
+  margin: 0 0 14px;
+}
+
+/* Mobile responsive */
+@media (max-width: 900px) {
+  .asset-body {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .field-grid,
+  .field-compact {
+    grid-template-columns: 1fr !important;
+  }
+  .asset-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
 }

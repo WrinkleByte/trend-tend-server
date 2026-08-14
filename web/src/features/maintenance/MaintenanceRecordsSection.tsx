@@ -80,14 +80,16 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
             <div className="record-row">
               <span className="record-date">{record.performed_at}</span>
               <span className="record-category">{record.category.replace("_", " ")}</span>
-              <span className="record-description">{record.description}</span>
+              <span className="record-description">{record.description || "—"}</span>
               <span className="record-cost">{record.cost != null ? `$${record.cost}` : ""}</span>
-              <button type="button" onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}>
-                {expandedId === record.id ? "Hide receipts" : "Receipts"}
-              </button>
-              <button type="button" className="danger" onClick={() => deleteMutation.mutate(record.id)}>
-                Delete
-              </button>
+              <div className="record-actions">
+                <button type="button" onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}>
+                  {expandedId === record.id ? "Hide receipts" : "Receipts"}
+                </button>
+                <button type="button" className="danger" onClick={() => deleteMutation.mutate(record.id)}>
+                  Delete
+                </button>
+              </div>
             </div>
             {expandedId === record.id && <AttachmentsSection recordId={record.id} />}
           </li>

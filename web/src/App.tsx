@@ -1,5 +1,5 @@
-import { Navigate, Route, Routes } from "react-router-dom";
-import { AssetDetailPage } from "./features/assets/AssetDetailPage";
+﻿import { Navigate, Route, Routes } from "react-router-dom";
+import { AssetDetailPageNewView as AssetDetailPage } from "./features/assets/AssetDetailPage.NewView";
 import { AssetsPage } from "./features/assets/AssetsPage";
 import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
 import { LoginPage } from "./features/auth/LoginPage";
