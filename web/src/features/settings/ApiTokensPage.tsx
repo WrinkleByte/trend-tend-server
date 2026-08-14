@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { createApiToken, listApiTokens, revokeApiToken } from "../../api/apiTokens";
+import { AdminHouseholdsSection } from "./AdminHouseholdsSection";
 import { useAssetPhotosEnabled } from "./assetPhotosSetting";
 import { InstanceSettingsSection } from "./InstanceSettingsSection";
 import { useThemePreference, type ThemePreference } from "./themeSetting";
@@ -42,6 +43,7 @@ export function ApiTokensPage() {
       <h1>Settings</h1>
 
       <InstanceSettingsSection />
+      <AdminHouseholdsSection />
 
       <section className="panel">
         <h2>Preferences</h2>

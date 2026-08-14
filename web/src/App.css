@@ -287,7 +287,8 @@ ul {
 .schedule-list li + li,
 .token-list li + li,
 .household-member-list li + li,
-.invite-list li + li {
+.invite-list li + li,
+.admin-household-list li + li {
   border-top: 1px solid var(--border);
 }
 
@@ -313,12 +314,44 @@ ul {
 .schedule-list li,
 .token-list li,
 .household-member-list li,
-.invite-list li {
+.invite-list li,
+.admin-member-list li {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
   padding: 12px 4px;
+}
+
+.admin-household-list li {
+  padding: 16px 0;
+}
+
+.admin-household-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.admin-household-counts {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.admin-member-list {
+  margin-top: 8px;
+}
+
+.admin-member-list li {
+  padding: 8px 4px;
+  background: var(--bg-alt);
+  border-radius: var(--radius-sm);
+}
+
+.admin-member-list li + li {
+  margin-top: 4px;
 }
 
 .member-email,
