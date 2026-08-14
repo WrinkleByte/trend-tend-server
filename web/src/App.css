@@ -95,6 +95,10 @@
   margin-bottom: 24px;
 }
 
+.panel-danger {
+  border-color: #dc2626;
+}
+
 /* Single-column forms/wizards (import, export) read better constrained
    than stretched across the full desktop-width .app-content. */
 .page-narrow {

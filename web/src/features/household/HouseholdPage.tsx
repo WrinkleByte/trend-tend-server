@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   createInvite,
+  deleteHousehold,
   getCurrentHousehold,
   listInvites,
   listMembers,
@@ -9,6 +11,7 @@ import {
   revokeInvite,
 } from "../../api/households";
 import type { HouseholdRole } from "../../api/types";
+import { useAuthStore } from "../../auth/authStore";
 
 function inviteLink(token: string): string {
   return `${window.location.origin}/join?token=${encodeURIComponent(token)}`;
@@ -16,9 +19,13 @@ function inviteLink(token: string): string {
 
 export function HouseholdPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const clearAuth = useAuthStore((s) => s.clear);
   const { data: household } = useQuery({ queryKey: ["household"], queryFn: getCurrentHousehold });
   const { data: members, isLoading: membersLoading } = useQuery({ queryKey: ["members"], queryFn: listMembers });
   const isOwner = household?.my_role === "owner";
+  const [confirmDeleteText, setConfirmDeleteText] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const { data: invites } = useQuery({
     queryKey: ["invites"],
@@ -46,6 +53,18 @@ export function HouseholdPage() {
   const removeMutation = useMutation({
     mutationFn: (userId: string) => removeMember(userId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["members"] }),
+  });
+
+  const deleteHouseholdMutation = useMutation({
+    mutationFn: () => deleteHousehold(),
+    onSuccess: () => {
+      // Every member's session for this household is invalid the moment
+      // it's gone, including the owner's who just deleted it — there's no
+      // "switch to another household" here, just a clean logout. Anyone
+      // with a membership elsewhere just logs back in normally.
+      clearAuth();
+      navigate("/login");
+    },
   });
 
   function handleInvite(event: FormEvent) {
@@ -122,6 +141,52 @@ export function HouseholdPage() {
           </ul>
           {invites?.length === 0 && <p>No invites yet.</p>}
         </>
+      )}
+
+      {isOwner && household && (
+        <section className="panel panel-danger">
+          <h2>Danger zone</h2>
+          {!confirmingDelete ? (
+            <button type="button" className="danger" onClick={() => setConfirmingDelete(true)}>
+              Delete household
+            </button>
+          ) : (
+            <div className="notice notice-error">
+              <p>
+                This permanently deletes <strong>{household.name}</strong> — every asset, service record, fuel
+                and trip log, schedule, and member. Every other member (including any co-owners) loses access
+                immediately. This cannot be undone.
+              </p>
+              <label style={{ marginTop: "12px" }}>
+                Type <strong>{household.name}</strong> to confirm
+                <input value={confirmDeleteText} onChange={(e) => setConfirmDeleteText(e.target.value)} />
+              </label>
+              {deleteHouseholdMutation.isError && (
+                <p className="form-error">Something went wrong — the household was not deleted.</p>
+              )}
+              <div className="form-actions" style={{ marginTop: "12px" }}>
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={confirmDeleteText !== household.name || deleteHouseholdMutation.isPending}
+                  onClick={() => deleteHouseholdMutation.mutate()}
+                >
+                  {deleteHouseholdMutation.isPending ? "Deleting…" : "Permanently delete household"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setConfirmingDelete(false);
+                    setConfirmDeleteText("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

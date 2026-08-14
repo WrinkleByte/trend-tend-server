@@ -13,6 +13,10 @@ export function removeMember(userId: string): Promise<void> {
   return apiFetch(`/households/members/${userId}`, { method: "DELETE" });
 }
 
+export function deleteHousehold(): Promise<void> {
+  return apiFetch("/households/me", { method: "DELETE" });
+}
+
 export function listInvites(): Promise<HouseholdInvite[]> {
   return apiFetch("/households/invites");
 }

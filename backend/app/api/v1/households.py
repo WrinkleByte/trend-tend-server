@@ -2,7 +2,7 @@ import uuid
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_principal
@@ -12,6 +12,10 @@ from app.core.security import (
     generate_invite_token,
 )
 from app.db.session import get_db
+from app.models.api_token import ApiToken
+from app.models.asset import Asset, EquipmentDetails, PropertyDetails, VehicleDetails
+from app.models.attachment import Attachment
+from app.models.fuel_log import FuelLog
 from app.models.household import (
     Household,
     HouseholdInvite,
@@ -19,7 +23,11 @@ from app.models.household import (
     HouseholdRole,
     InviteStatus,
 )
+from app.models.maintenance_record import MaintenanceRecord, RecordAttachment
+from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.mixins import utcnow
+from app.models.sync_device import SyncDevice
+from app.models.trip_log import TripLog
 from app.models.user import User
 from app.schemas.auth import TokenResponse
 from app.schemas.household import (
@@ -41,6 +49,39 @@ def _require_owner(principal: Principal) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the household owner can do this")
 
 
+async def _delete_household_data(db: AsyncSession, household_id: uuid.UUID) -> None:
+    """Hard-deletes every row belonging to a household, in FK-safe order —
+    the one place in the app that does real deletion rather than the
+    deleted_at soft-delete every synced entity normally uses elsewhere,
+    since the household itself is going away entirely, not just one record
+    in it. Attachment blob files are deliberately left in place — same
+    accepted storage-leak tradeoff as a normal single attachment delete
+    (see attachments.py's delete_attachment) — only metadata rows go here.
+
+    Order matters: children before whatever they reference. Adding a new
+    entity type (mirroring fuel_log, per the root CLAUDE.md invariant)
+    means adding it here too, or this silently stops covering it.
+    """
+    record_ids = select(MaintenanceRecord.id).where(MaintenanceRecord.household_id == household_id)
+    asset_ids = select(Asset.id).where(Asset.household_id == household_id)
+
+    await db.execute(delete(RecordAttachment).where(RecordAttachment.record_id.in_(record_ids)))
+    await db.execute(delete(VehicleDetails).where(VehicleDetails.asset_id.in_(asset_ids)))
+    await db.execute(delete(EquipmentDetails).where(EquipmentDetails.asset_id.in_(asset_ids)))
+    await db.execute(delete(PropertyDetails).where(PropertyDetails.asset_id.in_(asset_ids)))
+    await db.execute(delete(MaintenanceRecord).where(MaintenanceRecord.household_id == household_id))
+    await db.execute(delete(MaintenanceSchedule).where(MaintenanceSchedule.household_id == household_id))
+    await db.execute(delete(FuelLog).where(FuelLog.household_id == household_id))
+    await db.execute(delete(TripLog).where(TripLog.household_id == household_id))
+    await db.execute(delete(Asset).where(Asset.household_id == household_id))
+    await db.execute(delete(Attachment).where(Attachment.household_id == household_id))
+    await db.execute(delete(ApiToken).where(ApiToken.household_id == household_id))
+    await db.execute(delete(SyncDevice).where(SyncDevice.household_id == household_id))
+    await db.execute(delete(HouseholdInvite).where(HouseholdInvite.household_id == household_id))
+    await db.execute(delete(HouseholdMembership).where(HouseholdMembership.household_id == household_id))
+    await db.execute(delete(Household).where(Household.id == household_id))
+
+
 @router.get("/me", response_model=HouseholdResponse)
 async def get_current_household(
     principal: Principal = Depends(get_current_principal), db: AsyncSession = Depends(get_db)
@@ -48,6 +89,20 @@ async def get_current_household(
     result = await db.execute(select(Household).where(Household.id == principal.household_id))
     household = result.scalar_one()
     return HouseholdResponse.model_validate({**household.__dict__, "my_role": principal.role})
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_household(
+    principal: Principal = Depends(get_current_principal), db: AsyncSession = Depends(get_db)
+) -> None:
+    """Permanently deletes the caller's own household and everything in it —
+    every other member (including any co-owners) loses access immediately;
+    their existing session tokens still decode, but the next request 403s
+    at get_current_principal's membership check, same as a removed member.
+    There's no undo short of restoring from a backup."""
+    _require_owner(principal)
+    await _delete_household_data(db, principal.household_id)
+    await db.commit()
 
 
 @router.get("/members", response_model=list[HouseholdMemberResponse])
