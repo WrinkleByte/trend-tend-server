@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 from datetime import timedelta
 
@@ -6,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.email import send_email
 from app.core.instance_settings import get_or_create_instance_settings
 from app.core.security import (
@@ -38,6 +40,7 @@ from app.schemas.auth import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger("app.auth")
 
 # Reset links are short-lived on purpose — this only needs to survive one
 # email round-trip, not sit in an inbox indefinitely as a standing risk.
@@ -193,18 +196,26 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
         db.add(reset_token)
         await db.commit()
 
-        settings = await get_or_create_instance_settings(db)
+        # The token by itself isn't something a user can do anything with —
+        # it's a URL query param for ResetPasswordPage.tsx, not a password.
+        # Logged unconditionally (not just on send failure) so an admin can
+        # still hand someone this link manually from the logs, e.g. before
+        # SMTP is configured on a fresh install.
+        reset_link = f"{get_settings().frontend_url.rstrip('/')}/reset-password?token={reset_token.token}"
+        logger.info("Password reset requested for %s: %s", user.email, reset_link)
+
+        instance_settings = await get_or_create_instance_settings(db)
         # smtplib is blocking — offload so this request (and the shared
         # event loop) doesn't stall on a slow/unreachable SMTP relay.
         await asyncio.to_thread(
             send_email,
-            settings,
+            instance_settings,
             to=user.email,
             subject="Reset your WrinkleByte password",
             body=(
                 f"Someone requested a password reset for this account.\n\n"
-                f"Reset token: {reset_token.token}\n\n"
-                f"This token expires in 1 hour. If you didn't request this, ignore this email."
+                f"Reset your password: {reset_link}\n\n"
+                f"This link expires in 1 hour. If you didn't request this, ignore this email."
             ),
         )
 

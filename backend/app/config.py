@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     jwt_access_token_ttl_minutes: int = 15
     jwt_refresh_token_ttl_days: int = 30
 
+    # Base URL of the web app, used to build links in outgoing email (just
+    # password-reset today). No trailing slash. Must be set to the real
+    # public URL in production — the localhost default only makes sense for
+    # local dev, since it's baked into an email that could be opened from
+    # any device.
+    frontend_url: str = "http://localhost:5173"
+
     storage_backend: Literal["local_disk", "s3"] = "local_disk"
     storage_local_root: str = "./data/attachments"
     storage_s3_bucket: str = ""

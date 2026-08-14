@@ -33,6 +33,10 @@ services:
       JWT_SECRET: dev-secret-change-me
       STORAGE_BACKEND: local_disk
       STORAGE_LOCAL_ROOT: /data/attachments
+      # Base URL the web app is reachable at — used to build the link in
+      # password-reset email. Set this to your real public URL in a root
+      # .env file for any non-local deployment (see .env.example).
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       # Seeds the instance_settings singleton on first boot only (see
       # backend/app/core/instance_settings.py) — set these in a root .env
       # file (git-ignored; see .env.example) rather than editing here, so
