@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { listAllHouseholds, promoteUserToInstanceAdmin } from "../../api/admin";
+import { demoteUserFromInstanceAdmin, listAllHouseholds, promoteUserToInstanceAdmin } from "../../api/admin";
+import { ApiError } from "../../api/client";
 
 function formatCounts(counts: {
   assets: number;
@@ -36,7 +37,15 @@ export function AdminHouseholdsSection() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-households"] }),
   });
 
+  const demoteMutation = useMutation({
+    mutationFn: (userId: string) => demoteUserFromInstanceAdmin(userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-households"] }),
+  });
+
   if (isError || !households) return null;
+
+  const pending = promoteMutation.isPending || demoteMutation.isPending;
+  const error = promoteMutation.error ?? demoteMutation.error;
 
   return (
     <section className="panel">
@@ -46,6 +55,9 @@ export function AdminHouseholdsSection() {
         Every household on this instance, who belongs to each, and how much data they hold. Promoting a member
         gives them this same instance-wide access, including SMTP config and this household list.
       </p>
+      {error && (
+        <p className="form-error">{error instanceof ApiError ? error.message : "Something went wrong."}</p>
+      )}
 
       <ul className="admin-household-list">
         {households.map((household) => (
@@ -61,12 +73,22 @@ export function AdminHouseholdsSection() {
                   <span className="member-email">{member.email}</span>
                   <span className="member-role">{member.role}</span>
                   {member.is_instance_admin ? (
-                    <span className="panel-eyebrow">Admin</span>
+                    <>
+                      <span className="panel-eyebrow">Admin</span>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={pending}
+                        onClick={() => demoteMutation.mutate(member.user_id)}
+                      >
+                        Demote
+                      </button>
+                    </>
                   ) : (
                     <button
                       type="button"
                       className="secondary"
-                      disabled={promoteMutation.isPending}
+                      disabled={pending}
                       onClick={() => promoteMutation.mutate(member.user_id)}
                     >
                       Promote to admin

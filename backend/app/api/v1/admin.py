@@ -100,3 +100,27 @@ async def promote_user_to_instance_admin(
     await db.commit()
     await db.refresh(user)
     return PromoteUserResponse(id=user.id, email=user.email, is_instance_admin=user.is_instance_admin)
+
+
+@router.post("/users/{user_id}/demote", response_model=PromoteUserResponse)
+async def demote_user_from_instance_admin(
+    user_id: uuid.UUID,
+    principal: Principal = Depends(require_instance_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PromoteUserResponse:
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+    if user.is_instance_admin:
+        admin_count = (
+            await db.execute(select(func.count()).select_from(User).where(User.is_instance_admin.is_(True)))
+        ).scalar_one()
+        if admin_count <= 1:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot demote the last remaining instance admin")
+
+    user.is_instance_admin = False
+    await db.commit()
+    await db.refresh(user)
+    return PromoteUserResponse(id=user.id, email=user.email, is_instance_admin=user.is_instance_admin)

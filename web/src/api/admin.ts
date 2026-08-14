@@ -38,3 +38,7 @@ export function listAllHouseholds(): Promise<AdminHouseholdSummary[]> {
 export function promoteUserToInstanceAdmin(userId: string): Promise<PromoteUserResponse> {
   return apiFetch(`/admin/users/${userId}/promote`, { method: "POST" });
 }
+
+export function demoteUserFromInstanceAdmin(userId: string): Promise<PromoteUserResponse> {
+  return apiFetch(`/admin/users/${userId}/demote`, { method: "POST" });
+}
