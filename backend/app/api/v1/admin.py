@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, require_instance_admin
+from app.core.household_deletion import delete_household_data
 from app.db.session import get_db
 from app.models.asset import Asset
 from app.models.fuel_log import FuelLog
@@ -83,6 +84,23 @@ async def list_all_households(
         )
 
     return summaries
+
+
+@router.delete("/households/{household_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_household_as_admin(
+    household_id: uuid.UUID,
+    principal: Principal = Depends(require_instance_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Same hard delete as an owner deleting their own household
+    (households.py's delete_household) — just reachable for any household
+    on the instance, gated on instance-admin instead of ownership."""
+    household = (await db.execute(select(Household).where(Household.id == household_id))).scalar_one_or_none()
+    if household is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Household not found")
+
+    await delete_household_data(db, household_id)
+    await db.commit()
 
 
 @router.post("/users/{user_id}/promote", response_model=PromoteUserResponse)

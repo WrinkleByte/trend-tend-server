@@ -74,6 +74,45 @@ async def test_admin_household_counts_exclude_soft_deleted_records(client):
     assert household["record_counts"]["assets"] == 0
 
 
+async def test_admin_delete_household_requires_instance_admin(client):
+    alice = await _register(client, "alice@example.com", "Alice's House")
+    bob = await _register(client, "bob@example.com", "Bob's House")
+
+    households = (await client.get("/api/v1/admin/households", headers=_headers(alice))).json()
+    bob_household_id = next(h["id"] for h in households if h["name"] == "Bob's House")
+
+    response = await client.delete(f"/api/v1/admin/households/{bob_household_id}", headers=_headers(bob))
+    assert response.status_code == 403
+
+
+async def test_admin_can_delete_any_household(client, db_session):
+    alice = await _register(client, "alice@example.com", "Alice's House")
+    bob = await _register(client, "bob@example.com", "Bob's House")
+    await client.post("/api/v1/assets", headers=_headers(bob), json={"asset_type": "equipment", "name": "Mower"})
+
+    households = (await client.get("/api/v1/admin/households", headers=_headers(alice))).json()
+    bob_household_id = next(h["id"] for h in households if h["name"] == "Bob's House")
+
+    response = await client.delete(f"/api/v1/admin/households/{bob_household_id}", headers=_headers(alice))
+    assert response.status_code == 204
+
+    remaining = (await client.get("/api/v1/admin/households", headers=_headers(alice))).json()
+    assert [h["name"] for h in remaining] == ["Alice's House"]
+
+    # bob's own session is dead now — his household is gone.
+    bob_check = await client.get("/api/v1/assets", headers=_headers(bob))
+    assert bob_check.status_code == 403
+
+
+async def test_admin_delete_unknown_household_404s(client):
+    alice = await _register(client, "alice@example.com", "Alice's House")
+
+    response = await client.delete(
+        "/api/v1/admin/households/00000000-0000-0000-0000-000000000000", headers=_headers(alice)
+    )
+    assert response.status_code == 404
+
+
 async def test_promote_user_requires_instance_admin(client, db_session):
     await _register(client, "alice@example.com", "Alice's House")
     bob = await _register(client, "bob@example.com", "Bob's House")

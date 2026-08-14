@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { demoteUserFromInstanceAdmin, listAllHouseholds, promoteUserToInstanceAdmin } from "../../api/admin";
+import {
+  deleteHouseholdAsAdmin,
+  demoteUserFromInstanceAdmin,
+  listAllHouseholds,
+  promoteUserToInstanceAdmin,
+} from "../../api/admin";
 import { ApiError } from "../../api/client";
 
 function formatCounts(counts: {
@@ -42,10 +47,21 @@ export function AdminHouseholdsSection() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-households"] }),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (householdId: string) => deleteHouseholdAsAdmin(householdId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-households"] }),
+  });
+
   if (isError || !households) return null;
 
-  const pending = promoteMutation.isPending || demoteMutation.isPending;
-  const error = promoteMutation.error ?? demoteMutation.error;
+  const pending = promoteMutation.isPending || demoteMutation.isPending || deleteMutation.isPending;
+  const error = promoteMutation.error ?? demoteMutation.error ?? deleteMutation.error;
+
+  function handleDelete(householdId: string, householdName: string) {
+    if (window.confirm(`Permanently delete "${householdName}" and everything in it? This cannot be undone.`)) {
+      deleteMutation.mutate(householdId);
+    }
+  }
 
   return (
     <section className="panel">
@@ -65,6 +81,16 @@ export function AdminHouseholdsSection() {
             <div className="admin-household-header">
               <strong>{household.name}</strong>
               <span className="admin-household-counts">{formatCounts(household.record_counts)}</span>
+              <button
+                type="button"
+                className="danger admin-household-delete"
+                title={`Delete ${household.name}`}
+                aria-label={`Delete ${household.name}`}
+                disabled={pending}
+                onClick={() => handleDelete(household.id, household.name)}
+              >
+                ×
+              </button>
             </div>
             <ul className="admin-member-list">
               {household.members.map((member) => (

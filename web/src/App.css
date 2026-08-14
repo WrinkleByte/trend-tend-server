@@ -344,6 +344,16 @@ ul {
   font-size: 14px;
 }
 
+.admin-household-delete {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  line-height: 1;
+  font-size: 18px;
+  border-radius: 999px;
+}
+
 .admin-member-list {
   margin-top: 8px;
 }

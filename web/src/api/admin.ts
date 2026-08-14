@@ -42,3 +42,7 @@ export function promoteUserToInstanceAdmin(userId: string): Promise<PromoteUserR
 export function demoteUserFromInstanceAdmin(userId: string): Promise<PromoteUserResponse> {
   return apiFetch(`/admin/users/${userId}/demote`, { method: "POST" });
 }
+
+export function deleteHouseholdAsAdmin(householdId: string): Promise<void> {
+  return apiFetch(`/admin/households/${householdId}`, { method: "DELETE" });
+}
