@@ -40,6 +40,22 @@ Set in `.env` (see `.env.example` for the full list, defaults shown):
 | `STORAGE_BACKEND` | `local_disk` | `local_disk` or `s3` — see `app/storage/` |
 | `STORAGE_LOCAL_ROOT` | `./data/attachments` | Only used when `STORAGE_BACKEND=local_disk` |
 | `STORAGE_S3_*` | *(empty)* | Bucket/endpoint/credentials — only used when `STORAGE_BACKEND=s3`; works against AWS S3 or any S3-compatible endpoint (MinIO, R2, B2) |
+| `FRONTEND_URL` | `http://localhost:5173` | Public URL the web app is reachable at — baked into the password-reset link sent by email. **Set this to your real domain in production**, or reset emails will link to `localhost`. |
+| `SMTP_*` | *(disabled)* | One-time seed for the SMTP relay used to send password-reset email (`SMTP_ENABLED`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS`, `SMTP_FROM_ADDRESS`) — only applied the first time the settings row is created; reconfigure afterward via the instance-admin Settings UI, or set `SMTP_FORCE_ENV=true` to make these env vars the permanent source of truth instead. |
+
+## Admin operations
+
+- **Manually reset a user's password** — for an admin locked out with no SMTP configured yet, or anyone who'd rather not wait on email. Run from inside the backend container (or `.venv` locally):
+  ```bash
+  docker compose exec backend scripts/reset-password.sh --list                      # see existing accounts
+  docker compose exec backend scripts/reset-password.sh user@example.com            # prompts for the new password
+  docker compose exec backend scripts/reset-password.sh user@example.com --password 'new password'
+  ```
+  Goes through the real `hash_password()` — same Argon2 hasher `login()`/`register()` use — so the result is an ordinary password, not a special case; the user can change it again from the app afterward like any other password. See `scripts/reset_password.py` for the implementation.
+- **Promote a user to instance admin** — instance admins can manage SMTP settings and see every household on the instance (Settings → All households, in the web app, once already an instance admin). The *first* user ever registered on an instance becomes instance admin automatically; to promote anyone else, an existing instance admin can use the "Promote to admin" button next to their name in that same Settings page. There's currently no way to demote one, or to promote the very first admin on a fresh instance before anyone qualifies — that still needs a direct database update:
+  ```sql
+  UPDATE users SET is_instance_admin = true WHERE email = 'user@example.com';
+  ```
 
 ## Database migrations
 

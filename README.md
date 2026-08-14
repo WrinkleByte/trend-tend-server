@@ -51,6 +51,12 @@ To run the web app directly on the host instead (outside Docker), see [`web/READ
 
 See [`backend/README.md`](backend/README.md) for running the API directly against a local Postgres, and [`web/README.md`](web/README.md) for the web app. Both READMEs also cover running the test suites.
 
+## Administering a self-hosted instance
+
+The first account ever registered on an instance automatically becomes its **instance admin** — separate from a household's "owner" role, since one instance can host many independent households but has only one set of instance-wide settings (SMTP relay, and visibility into every household). An instance admin gets an "All households" panel and SMTP config in the web app's Settings page, and can promote other users to instance admin from there too.
+
+Locked out, or need to act before any admin exists? `backend/scripts/reset-password.sh` resets a user's password directly against the database, no email required — see [`backend/README.md`](backend/README.md#admin-operations) for usage and for the direct-database fallback to promote the very first admin on a fresh instance.
+
 ## Local CI (git hooks)
 
 This repo isn't pushed to GitHub yet, so there's no Actions-based CI — instead, `scripts/setup-git-hooks.sh` installs local git hooks (tracked in `.githooks/`, copied into `.git/hooks/` since that directory itself isn't version-controlled) that gate commits/pushes:
