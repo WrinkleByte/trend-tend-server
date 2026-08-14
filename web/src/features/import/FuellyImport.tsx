@@ -374,13 +374,13 @@ export function FuellyImport({ assets, onAssetsCreated }: { assets: Asset[]; onA
   const selectedGroupCount = selectedGroup ? selectedGroup.fuelLogs.length + selectedGroup.maintenanceRecords.length : 0;
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+    <section className="panel">
       <h2>Import from Fuelly</h2>
       <p>Upload your Fuelly CSV export to import your fuel log and service history.</p>
 
       {/* Step 1: Upload File */}
-      <div style={{ marginBottom: '20px', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-        <h3>Step 1: Select CSV File</h3>
+      <div style={{ marginTop: '16px' }}>
+        <h3>Step 1: Select CSV file</h3>
         <input
           ref={fileInputRef}
           type="file"
@@ -393,8 +393,8 @@ export function FuellyImport({ assets, onAssetsCreated }: { assets: Asset[]; onA
 
       {/* Step 2: Review & choose import mode */}
       {parseResult && (
-        <div style={{ marginBottom: '20px', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-          <h3>Step 2: Choose Import Mode</h3>
+        <div style={{ marginTop: '20px' }}>
+          <h3>Step 2: Choose import mode</h3>
           <p>
             Found {totalFuelLogs} fuel-up record{totalFuelLogs === 1 ? '' : 's'} and {totalMaintenance} service
             record{totalMaintenance === 1 ? '' : 's'} across {vehicleGroups.size} asset entr
@@ -461,7 +461,7 @@ export function FuellyImport({ assets, onAssetsCreated }: { assets: Asset[]; onA
           {mode === 'specific' && (
             <div>
               {importableAssets.length === 0 ? (
-                <p style={{ color: '#b00' }}>
+                <p className="form-error">
                   You don't have any assets yet. Add one on the Assets page, or use "Import everything" above to
                   create them automatically from this file.
                 </p>
@@ -502,41 +502,22 @@ export function FuellyImport({ assets, onAssetsCreated }: { assets: Asset[]; onA
 
       {/* Step 3: Import */}
       {parseResult && totalRecords > 0 && (
-        <div style={{ marginBottom: '20px', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
+        <div style={{ marginTop: '20px' }}>
           <h3>Step 3: Import</h3>
-          <button
-            onClick={handleImport}
-            disabled={importing || !canImport}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: importing || !canImport ? '#ccc' : '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: importing || !canImport ? 'not-allowed' : 'pointer',
-              fontSize: '16px',
-            }}
-          >
+          <button onClick={handleImport} disabled={importing || !canImport}>
             {importing
               ? 'Importing...'
               : mode === 'all'
-                ? `Import ${totalRecords} Records (${vehicleGroups.size} assets)`
-                : `Import ${selectedGroupCount} Records`}
+                ? `Import ${totalRecords} records (${vehicleGroups.size} assets)`
+                : `Import ${selectedGroupCount} records`}
           </button>
         </div>
       )}
 
       {/* Results */}
       {result && (
-        <div
-          style={{
-            padding: '20px',
-            border: '2px solid #28a745',
-            borderRadius: '8px',
-            backgroundColor: '#d4edda',
-          }}
-        >
-          <h3>Import Complete!</h3>
+        <div className="notice notice-success">
+          <h3>Import complete</h3>
           <p>✓ Fuel logs imported: {result.fuelImported}</p>
           {result.fuelErrors > 0 && <p>✗ Fuel log errors: {result.fuelErrors}</p>}
           <p>✓ Service records imported: {result.maintenanceImported}</p>
@@ -545,6 +526,6 @@ export function FuellyImport({ assets, onAssetsCreated }: { assets: Asset[]; onA
           {result.vehiclesMatched.length > 0 && <p>Matched existing assets: {result.vehiclesMatched.join(', ')}</p>}
         </div>
       )}
-    </div>
+    </section>
   );
 }

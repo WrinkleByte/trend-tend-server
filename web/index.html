@@ -11,6 +11,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="WrinkleByte Maintenance Tracker" />
     <title>WrinkleByte Maintenance Tracker</title>
+    <script>
+      // Blocking (not type="module") so this runs before first paint —
+      // applies a saved light/dark override before CSS has a chance to
+      // paint with the system default and flash the wrong theme.
+      (function () {
+        var theme = localStorage.getItem("theme");
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.setAttribute("data-theme", theme);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { getCurrentHousehold } from "../../api/households";
 import { useAuthStore } from "../../auth/authStore";
+
+function navLinkClass({ isActive }: { isActive: boolean }) {
+  return isActive ? "active" : undefined;
+}
 
 export function Layout() {
   const clear = useAuthStore((s) => s.clear);
@@ -11,15 +15,26 @@ export function Layout() {
     <div className="app-shell">
       <header className="app-nav">
         <Link to="/" className="brand">
+          <img src="/icon-192.png" alt="" />
           WrinkleByte
         </Link>
         {household && <span className="household-name">{household.name}</span>}
         <nav>
-          <Link to="/">Assets</Link>
-          <Link to="/household">Household</Link>
-          <Link to="/import">Import</Link>
-          <Link to="/export">Export</Link>
-          <Link to="/settings">Settings</Link>
+          <NavLink to="/" end className={navLinkClass}>
+            Assets
+          </NavLink>
+          <NavLink to="/household" className={navLinkClass}>
+            Household
+          </NavLink>
+          <NavLink to="/import" className={navLinkClass}>
+            Import
+          </NavLink>
+          <NavLink to="/export" className={navLinkClass}>
+            Export
+          </NavLink>
+          <NavLink to="/settings" className={navLinkClass}>
+            Settings
+          </NavLink>
           <button type="button" onClick={() => clear()}>
             Log out
           </button>

@@ -69,39 +69,33 @@ export function RestoreBackup({ onRestored }: RestoreBackupProps) {
   };
 
   return (
-    <div style={{ marginBottom: '20px', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-      <h3>Restore from Backup</h3>
+    <section className="panel">
+      <h3>Restore from backup</h3>
       <p>
         Seed this household from a JSON backup zip (produced by the Export page, mobile or web). Every restored
         record gets a brand-new id — this <strong>adds</strong> data, it does not merge or overwrite by matching
         against the backup's original records.
       </p>
-      <p style={{ color: '#856404', backgroundColor: '#fff3cd', padding: '10px', borderRadius: '4px' }}>
+      <p className="notice notice-warning" style={{ marginTop: '12px' }}>
         This is for seeding a household that has no data yet — recovering a device that's still connected to a
         household with existing data should use that connection's normal sync instead, not this. Restoring into a
         household that already has data risks visible duplicates (see the override warning below).
       </p>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".zip"
-        onChange={handleFileChosen}
-        disabled={state.status === 'restoring'}
-      />
+      <div style={{ marginTop: '16px' }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".zip"
+          onChange={handleFileChosen}
+          disabled={state.status === 'restoring'}
+        />
+      </div>
 
-      {state.status === 'restoring' && <p>Restoring...</p>}
+      {state.status === 'restoring' && <p style={{ marginTop: '12px' }}>Restoring…</p>}
 
       {state.status === 'conflict' && state.conflict && (
-        <div
-          style={{
-            marginTop: '16px',
-            padding: '16px',
-            border: '2px solid #dc3545',
-            borderRadius: '8px',
-            backgroundColor: '#f8d7da',
-          }}
-        >
+        <div className="notice notice-error">
           <h4>This household already has data</h4>
           <p>
             {state.conflict.existing_assets} assets, {state.conflict.existing_fuel_logs} fuel logs,{' '}
@@ -114,31 +108,11 @@ export function RestoreBackup({ onRestored }: RestoreBackupProps) {
             same household restored from an old snapshot), you will end up with duplicates of everything that
             overlaps. Only continue if you specifically intend that.
           </p>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button
-              onClick={handleConfirmOverride}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#dc3545',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Restore Anyway (may create duplicates)
+          <div className="form-actions">
+            <button className="danger" onClick={handleConfirmOverride}>
+              Restore anyway (may create duplicates)
             </button>
-            <button
-              onClick={handleCancelOverride}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#6c757d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
+            <button className="secondary" onClick={handleCancelOverride}>
               Cancel
             </button>
           </div>
@@ -146,16 +120,8 @@ export function RestoreBackup({ onRestored }: RestoreBackupProps) {
       )}
 
       {state.status === 'success' && state.summary && (
-        <div
-          style={{
-            marginTop: '16px',
-            padding: '16px',
-            border: '2px solid #28a745',
-            borderRadius: '8px',
-            backgroundColor: '#d4edda',
-          }}
-        >
-          <h4>Restore Complete</h4>
+        <div className="notice notice-success">
+          <h4>Restore complete</h4>
           <p>
             {state.summary.assets} assets, {state.summary.fuel_logs} fuel logs,{' '}
             {state.summary.maintenance_records} maintenance records, {state.summary.maintenance_schedules}{' '}
@@ -166,9 +132,7 @@ export function RestoreBackup({ onRestored }: RestoreBackupProps) {
         </div>
       )}
 
-      {state.status === 'error' && (
-        <p style={{ color: '#dc3545', marginTop: '12px' }}>{state.errorMessage}</p>
-      )}
-    </div>
+      {state.status === 'error' && <p className="form-error" style={{ marginTop: '12px' }}>{state.errorMessage}</p>}
+    </section>
   );
 }

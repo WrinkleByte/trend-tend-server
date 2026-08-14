@@ -137,7 +137,8 @@ export function InstanceSettingsSection() {
   if (isError || !settings) return null;
 
   return (
-    <section>
+    <section className="panel">
+      <span className="panel-eyebrow">Instance admin</span>
       <h2>Email (SMTP)</h2>
       <p>
         Configure an SMTP relay so &ldquo;forgot password&rdquo; emails can actually be delivered. Without this,

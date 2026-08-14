@@ -101,11 +101,11 @@ export function ExportPage() {
   };
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
-      <h2>Export Your Data</h2>
+    <div className="page-narrow">
+      <h1>Export</h1>
       <p>Download every record in your household — assets, fuel logs, service history, and maintenance schedules.</p>
 
-      <div style={{ marginBottom: '20px', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
+      <section className="panel" style={{ marginTop: '20px' }}>
         <h3>Format</h3>
         <label style={{ display: 'block', marginBottom: '8px' }}>
           <input
@@ -148,21 +148,9 @@ export function ExportPage() {
           />
           Include attachment files (receipts, photos) — downloads every file, may take a while
         </label>
-      </div>
+      </section>
 
-      <button
-        onClick={handleExport}
-        disabled={exporting}
-        style={{
-          padding: '12px 24px',
-          backgroundColor: exporting ? '#ccc' : '#007bff',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: exporting ? 'not-allowed' : 'pointer',
-          fontSize: '16px',
-        }}
-      >
+      <button onClick={handleExport} disabled={exporting}>
         {exporting
           ? progress
             ? `Downloading attachments... ${progress.done}/${progress.total}`
@@ -171,16 +159,8 @@ export function ExportPage() {
       </button>
 
       {summary && (
-        <div
-          style={{
-            marginTop: '20px',
-            padding: '20px',
-            border: '2px solid #28a745',
-            borderRadius: '8px',
-            backgroundColor: '#d4edda',
-          }}
-        >
-          <h3>Export Complete!</h3>
+        <div className="notice notice-success">
+          <h3>Export complete</h3>
           <p>
             {summary.assets} assets, {summary.fuelLogs} fuel logs, {summary.maintenanceRecords} maintenance
             records, {summary.maintenanceSchedules} maintenance schedules

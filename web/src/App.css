@@ -4,54 +4,135 @@
   flex-direction: column;
   min-height: 100svh;
   text-align: left;
+  background: var(--bg);
 }
 
 .app-nav {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
+  gap: 20px;
+  padding: 14px 32px;
+  background: linear-gradient(180deg, var(--navy-top), var(--navy-bottom));
+  color: var(--cream);
 }
 
 .app-nav .brand {
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--text-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--cream);
   text-decoration: none;
 }
 
+.app-nav .brand img {
+  width: 28px;
+  height: 28px;
+}
+
 .household-name {
-  color: var(--text);
+  color: #b9c2d4;
   font-size: 14px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(244, 241, 234, 0.2);
 }
 
 .app-nav nav {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 24px;
 }
 
 .app-nav nav a {
-  color: var(--text);
+  color: #b9c2d4;
+  font-weight: 600;
+  font-size: 14px;
   text-decoration: none;
+  padding: 6px 0;
+  border-bottom: 2px solid transparent;
+}
+
+.app-nav nav a:hover {
+  color: var(--cream);
+}
+
+.app-nav nav a.active {
+  color: var(--amber);
+  border-bottom-color: var(--amber);
+}
+
+.app-nav nav button {
+  background: transparent;
+  border: 1px solid rgba(244, 241, 234, 0.3);
+  color: #b9c2d4;
+  font-size: 14px;
+  padding: 6px 14px;
+}
+
+.app-nav nav button:hover {
+  border-color: var(--cream);
+  color: var(--cream);
 }
 
 .app-content {
-  padding: 24px;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 40px 32px 64px;
   flex: 1;
 }
 
-.app-content h1 {
-  text-align: left;
-  font-size: 32px;
-  margin: 0 0 16px;
+/* Grouped sections — used to give distinct settings/config areas (e.g. the
+   admin-only SMTP section) a clear visual boundary instead of just an <h2>
+   floating in the page flow. */
+.panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 24px;
 }
 
-.app-content h2 {
-  text-align: left;
-  margin-top: 32px;
+/* Single-column forms/wizards (import, export) read better constrained
+   than stretched across the full desktop-width .app-content. */
+.page-narrow {
+  max-width: 640px;
+}
+
+.notice {
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-top: 20px;
+}
+
+.notice-success {
+  border: 1px solid #16a34a;
+  background: rgba(22, 163, 74, 0.08);
+}
+
+.notice-warning {
+  border: 1px solid var(--amber-dark);
+  background: var(--accent-bg);
+}
+
+.notice-error {
+  border: 1px solid #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.panel-eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin-bottom: 10px;
 }
 
 /* Auth pages */
@@ -63,7 +144,7 @@
 
 .auth-form {
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -72,7 +153,7 @@
 
 .auth-form h1 {
   text-align: left;
-  font-size: 28px;
+  font-size: 26px;
 }
 
 .form-error {
@@ -94,18 +175,33 @@ select,
 textarea,
 button {
   font: inherit;
-  padding: 8px 10px;
-  border-radius: 6px;
+  font-size: 15px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-h);
 }
 
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 1px;
+}
+
 button {
   cursor: pointer;
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--navy-bottom);
+  font-weight: 600;
+}
+
+button:hover:not(:disabled) {
+  background: #ffb84d;
+  border-color: #ffb84d;
 }
 
 button:disabled {
@@ -117,14 +213,30 @@ button.danger {
   background: transparent;
   border-color: #dc2626;
   color: #dc2626;
+  font-weight: 500;
+}
+
+button.danger:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+button.secondary {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+button.secondary:hover:not(:disabled) {
+  background: var(--bg-alt);
 }
 
 .inline-form {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .asset-edit-form {
@@ -136,7 +248,7 @@ button.danger {
 
 .asset-edit-form fieldset {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -166,9 +278,14 @@ ul {
 .asset-list a {
   display: flex;
   gap: 12px;
-  padding: 12px 0;
+  padding: 14px 4px;
   color: var(--text-h);
   text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.asset-list a:hover {
+  background: var(--bg-alt);
 }
 
 .asset-type {
@@ -185,7 +302,7 @@ ul {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
-  padding: 10px 0;
+  padding: 12px 4px;
 }
 
 .member-email,
@@ -240,9 +357,10 @@ ul {
 
 .token-reveal {
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   margin-bottom: 16px;
+  background: var(--accent-bg);
 }
 
 .token-reveal code {

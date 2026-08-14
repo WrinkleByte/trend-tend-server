@@ -1,22 +1,35 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
+  --navy-top: #1b2c4c;
+  --navy-bottom: #0f1b2d;
+  --cream: #f4f1ea;
+  --cream-alt: #e3ddd0;
+  --amber: #f2a93b;
+  --amber-dark: #c97f17;
+
+  --text: #4c5a72;
+  --text-h: #1b2c4c;
   --bg: #fff;
-  --border: #e5e4e7;
+  --bg-alt: var(--cream);
+  --border: var(--cream-alt);
   --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
+  --accent: var(--amber-dark);
+  --accent-bg: rgba(201, 127, 23, 0.1);
+  --accent-border: rgba(201, 127, 23, 0.5);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+
+  --content-max: 1240px;
+
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --heading: var(--sans);
   --mono: ui-monospace, Consolas, monospace;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
+  font: 16px/145% var(--sans);
+  letter-spacing: 0.1px;
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
@@ -24,39 +37,62 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
+/* Native form controls/scrollbars follow the explicit pick too, not just
+   the CSS variables above. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Dark tokens apply either by system preference (unless the user picked
+   "Light" explicitly, via data-theme) or by an explicit "Dark" pick,
+   regardless of system preference — see themeSetting.ts. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --text: #9ca3af;
     --text-h: #f3f4f6;
     --bg: #16171d;
+    --bg-alt: #1c1e26;
     --border: #2e303a;
     --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
+    --accent: var(--amber);
+    --accent-bg: rgba(242, 169, 59, 0.15);
+    --accent-border: rgba(242, 169, 59, 0.5);
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }
+}
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+:root[data-theme="dark"] {
+  --text: #9ca3af;
+  --text-h: #f3f4f6;
+  --bg: #16171d;
+  --bg-alt: #1c1e26;
+  --border: #2e303a;
+  --code-bg: #1f2028;
+  --accent: var(--amber);
+  --accent-bg: rgba(242, 169, 59, 0.15);
+  --accent-border: rgba(242, 169, 59, 0.5);
+  --shadow:
+    rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
 }
 
 #root {
   width: 100%;
-  max-width: 960px;
-  margin: 0 auto;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -64,31 +100,36 @@ body {
   margin: 0;
 }
 
+a {
+  color: var(--accent);
+}
+
 h1,
-h2 {
+h2,
+h3 {
   font-family: var(--heading);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-h);
 }
 
 h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
+  font-size: 32px;
+  letter-spacing: -0.4px;
+  margin: 0 0 24px;
 }
+
 h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
+  font-size: 20px;
+  line-height: 130%;
+  letter-spacing: -0.2px;
+  margin: 0 0 12px;
 }
+
+h3 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
 p {
   margin: 0;
 }
@@ -102,7 +143,7 @@ code,
 }
 
 code {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);

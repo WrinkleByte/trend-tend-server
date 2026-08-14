@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listAssets } from '../../api/assets';
+import { AcarImport } from './AcarImport';
 import { FuellyImport } from './FuellyImport';
 import { RestoreBackup } from './RestoreBackup';
 
@@ -24,13 +25,22 @@ export function ImportPage() {
   });
 
   if (isLoading) {
-    return <div style={{ padding: '20px' }}>Loading assets...</div>;
+    return (
+      <div className="page-narrow">
+        <p>Loading assets…</p>
+      </div>
+    );
   }
 
   return (
-    <div>
+    <div className="page-narrow">
+      <h1>Import</h1>
       <RestoreBackup onRestored={() => invalidateAllHouseholdData(queryClient)} />
       <FuellyImport
+        assets={assets}
+        onAssetsCreated={() => queryClient.invalidateQueries({ queryKey: ['assets'] })}
+      />
+      <AcarImport
         assets={assets}
         onAssetsCreated={() => queryClient.invalidateQueries({ queryKey: ['assets'] })}
       />
