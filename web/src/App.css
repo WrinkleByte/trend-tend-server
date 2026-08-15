@@ -1,4 +1,4 @@
-﻿/* Layout */
+/* Layout */
 .app-shell {
   display: flex;
   flex-direction: column;
@@ -84,7 +84,7 @@
   flex: 1;
 }
 
-/* Grouped sections â€” used to give distinct settings/config areas (e.g. the
+/* Grouped sections — used to give distinct settings/config areas (e.g. the
    admin-only SMTP section) a clear visual boundary instead of just an <h2>
    floating in the page flow. */
 .panel {
@@ -175,7 +175,7 @@ label {
 }
 
 /* Checkbox/radio labels want the input inline with its text, not stacked
-   above it â€” the default column layout above stretches a checkbox to the
+   above it — the default column layout above stretches a checkbox to the
    label's full width, which Chromium renders as a centered checkbox glyph
    rather than one aligned with its text. */
 .check-label {
@@ -240,15 +240,30 @@ button.danger:hover:not(:disabled) {
   background: rgba(220, 38, 38, 0.08);
 }
 
-button.secondary {
+button.secondary,
+label.secondary {
   background: transparent;
   border-color: var(--border);
   color: var(--text-h);
   font-weight: 500;
 }
 
-button.secondary:hover:not(:disabled) {
+button.secondary:hover:not(:disabled),
+label.secondary:hover {
   background: var(--bg-alt);
+}
+
+/* A <label> wrapping a hidden file input, styled to look like a button —
+   used for the asset photo upload trigger. Unlike a real <button>, <label>
+   isn't a form control, so it needs its own box/cursor rules restated. */
+label.secondary {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 15px;
 }
 
 .inline-form {
@@ -522,6 +537,11 @@ ul {
   word-break: break-word;
 }
 
+/* One consistent treatment for every asset type — the label text already
+   says which type it is, so there's no functional need for per-type hues
+   (and a rainbow of ad hoc colors here would fight the rest of the brand
+   palette everywhere else). Same "amber pill on dark" language the nav
+   bar's active-link state and .panel-eyebrow already use elsewhere. */
 .asset-type-badge {
   font-size: 11px;
   font-weight: 700;
@@ -529,7 +549,8 @@ ul {
   letter-spacing: 0.05em;
   padding: 3px 10px;
   border-radius: 999px;
-  background: var(--accent-bg);
+  background: rgba(244, 241, 234, 0.15);
+  color: var(--amber);
 }
 
 .status-pill {
@@ -586,6 +607,49 @@ ul {
   letter-spacing: 0.06em;
   color: var(--text-h);
   margin: 0 0 14px;
+}
+
+/* Profile photo — left-aligned and sized to actually read as a photo,
+   not the small centered thumbnail this used to be (see Vikunja #14/#23,
+   which flagged that as wasted space). */
+.asset-profile-photo {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.asset-photo-circle {
+  flex-shrink: 0;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  /* .asset-info-panel's own background is --bg-alt — use plain --bg here
+     so an empty placeholder circle doesn't just disappear into it. */
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.asset-photo-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.asset-photo-circle span {
+  font-size: 36px;
+  color: var(--text);
+}
+
+.asset-photo-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 /* Field grid — horizontal pairs */

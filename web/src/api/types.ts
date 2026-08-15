@@ -60,6 +60,10 @@ export interface AssetCreateInput {
   asset_type: AssetType;
   name: string;
   notes?: string | null;
+  // Update-only — a new asset always starts "active" (the backend model's
+  // default), never sent on create; present here so `Partial<AssetCreateInput>`
+  // stays the one type `updateAsset` needs, matching backend AssetUpdate.
+  status?: AssetStatus;
   purchase_date?: string | null;
   purchase_cost?: number | null;
   vehicle_details?: Partial<VehicleDetails> | null;

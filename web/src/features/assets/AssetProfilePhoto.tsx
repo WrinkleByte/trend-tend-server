@@ -46,33 +46,16 @@ export function AssetProfilePhoto({ asset }: { asset: Asset }) {
   if (!assetPhotosEnabled) return null;
 
   return (
-    <div className="asset-profile-photo" style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-        <div
-          style={{
-            width: "88px",
-            height: "88px",
-            borderRadius: "50%",
-            overflow: "hidden",
-            backgroundColor: "#e0e0e0",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {objectUrl ? (
-            <img
-              src={objectUrl}
-              alt={`${asset.name} profile`}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          ) : (
-            <span aria-hidden="true" style={{ fontSize: "32px", color: "#888" }}>
-              📷
-            </span>
-          )}
-        </div>
-        <label style={{ cursor: "pointer" }}>
+    <div className="asset-profile-photo">
+      <div className="asset-photo-circle">
+        {objectUrl ? (
+          <img src={objectUrl} alt={`${asset.name} profile`} />
+        ) : (
+          <span aria-hidden="true">📷</span>
+        )}
+      </div>
+      <div className="asset-photo-actions">
+        <label className="secondary">
           <input
             type="file"
             accept="image/*"
@@ -83,7 +66,7 @@ export function AssetProfilePhoto({ asset }: { asset: Asset }) {
               e.target.value = "";
             }}
           />
-          <span>{asset.photo_attachment_id ? "Change Photo" : "Add Photo"}</span>
+          {asset.photo_attachment_id ? "Change photo" : "Add photo"}
         </label>
         {asset.photo_attachment_id && (
           <button
@@ -92,7 +75,7 @@ export function AssetProfilePhoto({ asset }: { asset: Asset }) {
             onClick={() => removeMutation.mutate()}
             disabled={removeMutation.isPending}
           >
-            Remove Photo
+            Remove
           </button>
         )}
       </div>
