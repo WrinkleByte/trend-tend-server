@@ -17,6 +17,10 @@ export function deleteHousehold(): Promise<void> {
   return apiFetch("/households/me", { method: "DELETE" });
 }
 
+export function wipeHouseholdData(): Promise<void> {
+  return apiFetch("/households/me/wipe-data", { method: "POST" });
+}
+
 export function listInvites(): Promise<HouseholdInvite[]> {
   return apiFetch("/households/invites");
 }

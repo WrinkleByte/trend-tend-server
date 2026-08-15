@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_principal
-from app.core.household_deletion import delete_household_data
+from app.core.household_deletion import delete_household_data, wipe_household_data
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -62,6 +62,20 @@ async def delete_household(
     There's no undo short of restoring from a backup."""
     _require_owner(principal)
     await delete_household_data(db, principal.household_id)
+    await db.commit()
+
+
+@router.post("/me/wipe-data", status_code=status.HTTP_204_NO_CONTENT)
+async def wipe_household(
+    principal: Principal = Depends(get_current_principal), db: AsyncSession = Depends(get_db)
+) -> None:
+    """The 'start over' reset (Vikunja #27) — clears every asset, log,
+    record, schedule, and attachment in the household, but the household
+    itself, its members, invites, API tokens, and sync devices all survive.
+    Distinct from delete_household above, which removes the household
+    entirely. No undo short of restoring from a backup."""
+    _require_owner(principal)
+    await wipe_household_data(db, principal.household_id)
     await db.commit()
 
 

@@ -9,6 +9,7 @@ import {
   listMembers,
   removeMember,
   revokeInvite,
+  wipeHouseholdData,
 } from "../../api/households";
 import type { HouseholdRole } from "../../api/types";
 import { useAuthStore } from "../../auth/authStore";
@@ -26,6 +27,10 @@ export function HouseholdPage() {
   const isOwner = household?.my_role === "owner";
   const [confirmDeleteText, setConfirmDeleteText] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmWipeText, setConfirmWipeText] = useState("");
+  const [wipeAcknowledged, setWipeAcknowledged] = useState(false);
+  const [confirmingWipe, setConfirmingWipe] = useState(false);
+  const [wiped, setWiped] = useState(false);
 
   const { data: invites } = useQuery({
     queryKey: ["invites"],
@@ -64,6 +69,27 @@ export function HouseholdPage() {
       // with a membership elsewhere just logs back in normally.
       clearAuth();
       navigate("/login");
+    },
+  });
+
+  const wipeHouseholdMutation = useMutation({
+    mutationFn: () => wipeHouseholdData(),
+    onSuccess: () => {
+      // Unlike delete, the session and household survive — just refetch
+      // everything asset-scoped so stale cached data doesn't linger on
+      // whatever page the owner navigates to next. The 1-element key
+      // prefixes below partial-match every per-asset-scoped query
+      // regardless of asset id, same pattern ImportPage's restore-invalidation
+      // already relies on.
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: ["maintenance-records"] });
+      queryClient.invalidateQueries({ queryKey: ["maintenance-schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["trip-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["fuel-logs"] });
+      setConfirmingWipe(false);
+      setConfirmWipeText("");
+      setWipeAcknowledged(false);
+      setWiped(true);
     },
   });
 
@@ -146,6 +172,67 @@ export function HouseholdPage() {
       {isOwner && household && (
         <section className="panel panel-danger">
           <h2>Danger zone</h2>
+
+          <h3>Wipe all data</h3>
+          {wiped && !confirmingWipe && (
+            <p className="notice notice-success">
+              All data has been wiped. {household.name} still exists — assets, logs, and records just start
+              empty again.
+            </p>
+          )}
+          {!confirmingWipe ? (
+            <button type="button" className="danger" onClick={() => setConfirmingWipe(true)}>
+              Wipe all data
+            </button>
+          ) : (
+            <div className="notice notice-error">
+              <p>
+                This permanently deletes every asset, service record, schedule, fuel log, trip log, and photo in{" "}
+                <strong>{household.name}</strong>. The household itself, its members, and their logins are
+                <strong> not</strong> affected — this is for starting over, not leaving. This cannot be undone.
+              </p>
+              <label style={{ marginTop: "12px" }}>
+                Type <strong>{household.name}</strong> to confirm
+                <input value={confirmWipeText} onChange={(e) => setConfirmWipeText(e.target.value)} />
+              </label>
+              <label className="check-label" style={{ marginTop: "12px" }}>
+                <input
+                  type="checkbox"
+                  checked={wipeAcknowledged}
+                  onChange={(e) => setWipeAcknowledged(e.target.checked)}
+                />
+                I understand every asset and record will be permanently deleted and this cannot be undone
+              </label>
+              {wipeHouseholdMutation.isError && (
+                <p className="form-error">Something went wrong — no data was wiped.</p>
+              )}
+              <div className="form-actions" style={{ marginTop: "12px" }}>
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={
+                    confirmWipeText !== household.name || !wipeAcknowledged || wipeHouseholdMutation.isPending
+                  }
+                  onClick={() => wipeHouseholdMutation.mutate()}
+                >
+                  {wipeHouseholdMutation.isPending ? "Wiping…" : "Permanently wipe all data"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setConfirmingWipe(false);
+                    setConfirmWipeText("");
+                    setWipeAcknowledged(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          <h3 style={{ marginTop: "24px" }}>Delete household</h3>
           {!confirmingDelete ? (
             <button type="button" className="danger" onClick={() => setConfirmingDelete(true)}>
               Delete household
