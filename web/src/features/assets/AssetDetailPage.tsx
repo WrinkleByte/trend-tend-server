@@ -5,6 +5,8 @@ import { deleteAsset, getAsset, updateAsset } from "../../api/assets";
 import type { AssetCreateInput, AssetStatus } from "../../api/types";
 import { MaintenanceRecordsSection } from "../maintenance/MaintenanceRecordsSection";
 import { SchedulesSection } from "../schedules/SchedulesSection";
+import { FuelLogsSection } from "../trips/FuelLogsSection";
+import { TripLogsSection } from "../trips/TripLogsSection";
 import { AssetProfilePhoto } from "./AssetProfilePhoto";
 import { ASSET_TYPES } from "./assetTypes";
 
@@ -337,13 +339,21 @@ export function AssetDetailPage() {
 
       <div className="asset-bottom">
         <section className="asset-detail-panel">
-          <h2>Maintenance records</h2>
           <MaintenanceRecordsSection assetId={asset.id} />
         </section>
         <section className="asset-detail-panel">
-          <h2>Schedules</h2>
           <SchedulesSection assetId={asset.id} />
         </section>
+        {asset.asset_type === "vehicle" && (
+          <>
+            <section className="asset-detail-panel">
+              <TripLogsSection assetId={asset.id} />
+            </section>
+            <section className="asset-detail-panel">
+              <FuelLogsSection assetId={asset.id} />
+            </section>
+          </>
+        )}
       </div>
     </div>
   );

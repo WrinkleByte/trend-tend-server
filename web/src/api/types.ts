@@ -245,3 +245,37 @@ export interface CreateFuelLogRequest {
   notes?: string | null;
   additive?: string | null;
 }
+
+// Trip Logs
+// purpose is a fixed set (business/personal/medical/charity/commute/other)
+// plus free text, same pattern as maintenance record category/custom_category
+// — see shared/src/commonMain/kotlin/com/wrinklebyte/domain/TripLogInput.kt
+// in tendfida-mobile for where that set is defined.
+export type TripPurpose = "business" | "personal" | "medical" | "charity" | "commute" | "other";
+
+export interface TripLog {
+  id: string;
+  household_id: string;
+  asset_id: string;
+  performed_at: string;
+  purpose: TripPurpose;
+  custom_purpose: string | null;
+  start_odometer: string | null;
+  end_odometer: string;
+  distance: string;
+  notes: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTripLogRequest {
+  asset_id: string;
+  performed_at: string;
+  purpose: TripPurpose;
+  custom_purpose?: string | null;
+  start_odometer?: string | null;
+  end_odometer: string;
+  distance: string;
+  notes?: string | null;
+}
