@@ -75,7 +75,7 @@ async def wipe_household(
     Distinct from delete_household above, which removes the household
     entirely. No undo short of restoring from a backup."""
     _require_owner(principal)
-    await wipe_household_data(db, principal.household_id)
+    await wipe_household_data(db, principal.household_id, principal.device_id)
     await db.commit()
 
 

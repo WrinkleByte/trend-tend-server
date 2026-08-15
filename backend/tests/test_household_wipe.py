@@ -103,23 +103,36 @@ async def test_wipe_household_clears_data_but_keeps_household(client, db_session
     response = await client.post("/api/v1/households/me/wipe-data", headers=headers)
     assert response.status_code == 204
 
-    # Data is gone.
-    assert (await db_session.execute(select(Asset).where(Asset.id == asset_id))).scalar_one_or_none() is None
+    # Data rows are soft-deleted, not gone entirely — mobile sync needs the
+    # tombstone (deleted_at) to know to clear its own local copy; a hard
+    # delete here would be invisible to a paired device that's still
+    # connected to this same (surviving) household.
+    asset = (await db_session.execute(select(Asset).where(Asset.id == asset_id))).scalar_one()
+    assert asset.deleted_at is not None
+    assert asset.version == 2
+
+    # The non-synced detail child row can be hard-deleted immediately —
+    # it's never independently synced, only ever read alongside its parent.
     assert (
         await db_session.execute(select(VehicleDetails).where(VehicleDetails.asset_id == asset_id))
     ).scalar_one_or_none() is None
-    assert (
-        await db_session.execute(select(FuelLog).where(FuelLog.household_id == household_id))
-    ).scalar_one_or_none() is None
-    assert (
-        await db_session.execute(select(TripLog).where(TripLog.household_id == household_id))
-    ).scalar_one_or_none() is None
-    assert (
+
+    fuel_log = (await db_session.execute(select(FuelLog).where(FuelLog.household_id == household_id))).scalar_one()
+    assert fuel_log.deleted_at is not None
+    trip_log = (await db_session.execute(select(TripLog).where(TripLog.household_id == household_id))).scalar_one()
+    assert trip_log.deleted_at is not None
+    schedule = (
         await db_session.execute(select(MaintenanceSchedule).where(MaintenanceSchedule.household_id == household_id))
-    ).scalar_one_or_none() is None
-    assert (
+    ).scalar_one()
+    assert schedule.deleted_at is not None
+    record = (
         await db_session.execute(select(MaintenanceRecord).where(MaintenanceRecord.household_id == household_id))
-    ).scalar_one_or_none() is None
+    ).scalar_one()
+    assert record.deleted_at is not None
+
+    # The API surface (what clients actually see) reports nothing left.
+    assets_after = await client.get("/api/v1/assets", headers=headers)
+    assert assets_after.json() == []
 
     # But the household, its membership, and its API token all survive.
     assert (
