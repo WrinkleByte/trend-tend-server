@@ -98,6 +98,15 @@ export function AssetDetailPage() {
     saveMutation.mutate();
   }
 
+  // A single click here used to delete the asset outright, no confirmation
+  // at all -- lost a real vehicle's full history this way once (Vikunja
+  // #34). Mirrors AdminHouseholdsSection.tsx's existing confirm() pattern.
+  function handleDelete() {
+    if (window.confirm(`Permanently delete "${asset?.name}" and all its maintenance, fuel, and trip history? This cannot be undone.`)) {
+      deleteMutation.mutate();
+    }
+  }
+
   if (isLoading || !asset) return <p>Loading…</p>;
 
   const assetTypeLabel = ASSET_TYPES.find((t) => t.value === asset.asset_type)?.label ?? asset.asset_type;
@@ -121,12 +130,7 @@ export function AssetDetailPage() {
           >
             {asset.status === "active" ? "Archive" : "Activate"}
           </button>
-          <button
-            type="button"
-            className="danger"
-            onClick={() => deleteMutation.mutate()}
-            disabled={deleteMutation.isPending}
-          >
+          <button type="button" className="danger" onClick={handleDelete} disabled={deleteMutation.isPending}>
             Delete
           </button>
         </div>
