@@ -53,3 +53,66 @@ async def test_protected_endpoint_works_with_valid_token(client, auth_headers):
     response = await client.get("/api/v1/households/me", headers=auth_headers)
     assert response.status_code == 200
     assert response.json()["name"] == "Alice's House"
+
+
+async def test_login_rate_limited_after_too_many_attempts(client, registered_user):
+    # _auth_attempt_limiter allows 10 per 60s (auth.py) — the 11th request
+    # from the same (synthetic, shared-across-this-test-client) IP should
+    # be rejected before it even touches password verification, regardless
+    # of whether the credentials themselves are right or wrong.
+    for _ in range(10):
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "alice@example.com", "password": "wrong password"},
+        )
+        assert response.status_code == 401
+
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "alice@example.com", "password": "wrong password"},
+    )
+    assert response.status_code == 429
+    assert "Retry-After" in response.headers
+
+
+async def test_register_rate_limited_after_too_many_attempts(client):
+    payload = {
+        "email": "spammer@example.com",
+        "password": "hunter2hunter2",
+        "display_name": "Spammer",
+        "household_name": "Spammer's House",
+    }
+    for _ in range(10):
+        response = await client.post("/api/v1/auth/register", json=payload)
+        assert response.status_code in (201, 409)
+
+    response = await client.post("/api/v1/auth/register", json=payload)
+    assert response.status_code == 429
+    assert "Retry-After" in response.headers
+
+
+async def test_forgot_password_rate_limited_after_too_many_attempts(client, registered_user):
+    # _password_reset_limiter allows 5 per 300s — stricter than login/register.
+    for _ in range(5):
+        response = await client.post("/api/v1/auth/forgot-password", json={"email": "alice@example.com"})
+        assert response.status_code == 200
+
+    response = await client.post("/api/v1/auth/forgot-password", json={"email": "alice@example.com"})
+    assert response.status_code == 429
+    assert "Retry-After" in response.headers
+
+
+async def test_reset_password_rate_limited_after_too_many_attempts(client):
+    for _ in range(5):
+        response = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": "not-a-real-token", "new_password": "irrelevant password"},
+        )
+        assert response.status_code == 400
+
+    response = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "not-a-real-token", "new_password": "irrelevant password"},
+    )
+    assert response.status_code == 429
+    assert "Retry-After" in response.headers

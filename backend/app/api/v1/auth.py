@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.email import send_email
 from app.core.instance_settings import get_or_create_instance_settings
+from app.core.rate_limit import RateLimiter
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -46,6 +47,23 @@ logger = logging.getLogger("app.auth")
 # email round-trip, not sit in an inbox indefinitely as a standing risk.
 PASSWORD_RESET_TOKEN_TTL = timedelta(hours=1)
 
+# Baseline brute-force/credential-stuffing defense (Vikunja #35) — these
+# four endpoints are the only unauthenticated, password-adjacent surface
+# on an internet-facing-by-design app. Keyed by IP rather than by
+# account/email: locking an *account* out after N failures is its own
+# denial-of-service vector (anyone who knows a victim's email address
+# could lock them out), so IP is the standard baseline instead. A
+# separate instance per endpoint rather than one shared limiter — login
+# and register are different threat models (credential stuffing vs. spam
+# signups), and a real user's own register call shouldn't eat into their
+# own login budget. forgot-password/reset-password get a stricter,
+# longer-window limit since they're higher-value (email enumeration,
+# account takeover) than a login attempt.
+_login_limiter = RateLimiter(times=10, seconds=60)
+_register_limiter = RateLimiter(times=10, seconds=60)
+_forgot_password_limiter = RateLimiter(times=5, seconds=300)
+_reset_password_limiter = RateLimiter(times=5, seconds=300)
+
 
 async def _consume_pending_invite(db: AsyncSession, token: str, email: str) -> HouseholdInvite:
     result = await db.execute(select(HouseholdInvite).where(HouseholdInvite.token == token))
@@ -70,7 +88,11 @@ async def setup_status(db: AsyncSession = Depends(get_db)) -> SetupStatusRespons
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+async def register(
+    payload: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(_register_limiter),
+) -> TokenResponse:
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
@@ -132,7 +154,10 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
-    payload: LoginRequest, household_id: uuid.UUID | None = None, db: AsyncSession = Depends(get_db)
+    payload: LoginRequest,
+    household_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(_login_limiter),
 ) -> TokenResponse:
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
@@ -179,7 +204,11 @@ async def refresh(payload: RefreshRequest) -> TokenResponse:
 
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
-async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)) -> dict:
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(_forgot_password_limiter),
+) -> dict:
     """Always returns 200 with the same generic body regardless of whether
     the email matches an account — a distinguishable response here would
     let anyone enumerate which addresses are registered."""
@@ -223,7 +252,11 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
 
 
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
-async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)) -> dict:
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(_reset_password_limiter),
+) -> dict:
     result = await db.execute(select(PasswordResetToken).where(PasswordResetToken.token == payload.token))
     reset_token = result.scalar_one_or_none()
     if reset_token is None or reset_token.used_at is not None or reset_token.expires_at < utcnow():

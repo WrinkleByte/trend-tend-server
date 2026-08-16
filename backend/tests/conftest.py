@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
+from app.core.rate_limit import reset_all_rate_limiters
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -35,6 +36,20 @@ async def engine():
     async with admin_engine.connect() as conn:
         await conn.execute(__import__("sqlalchemy").text(f'DROP DATABASE IF EXISTS "{test_db_name}"'))
     await admin_engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiters():
+    # The `app` instance (and therefore every RateLimiter's in-memory hit
+    # dict) is shared across the whole test session, and httpx's
+    # ASGITransport gives every test the same synthetic client IP — without
+    # this, unrelated tests hammering /auth/register or /auth/login via the
+    # registered_user/auth_headers fixtures would trip the real limiter and
+    # cause spurious 429s well before any dedicated rate-limit test gets to
+    # run its own assertions.
+    reset_all_rate_limiters()
+    yield
+    reset_all_rate_limiters()
 
 
 @pytest.fixture(autouse=True)
