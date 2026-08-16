@@ -4,10 +4,15 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_principal, household_scoped_query
+from app.api.deps import (
+    Principal,
+    get_current_principal,
+    household_scoped_query,
+    verify_owned_reference,
+)
 from app.core.recurrence import ScheduleState, compute_due_status
 from app.db.session import get_db
-from app.models.asset import VehicleDetails
+from app.models.asset import Asset, VehicleDetails
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.mixins import utcnow
 from app.schemas.maintenance_schedule import (
@@ -22,12 +27,18 @@ router = APIRouter(prefix="/maintenance-schedules", tags=["maintenance-schedules
 async def _current_usage(db: AsyncSession, schedule: MaintenanceSchedule) -> int | None:
     if schedule.usage_field != "current_mileage":
         return None
-    result = await db.execute(VehicleDetails.__table__.select().where(VehicleDetails.asset_id == schedule.asset_id))
+    result = await db.execute(
+        VehicleDetails.__table__.select().where(
+            VehicleDetails.asset_id == schedule.asset_id
+        )
+    )
     row = result.first()
     return row.current_mileage if row else None
 
 
-async def _to_response(db: AsyncSession, schedule: MaintenanceSchedule) -> MaintenanceScheduleResponse:
+async def _to_response(
+    db: AsyncSession, schedule: MaintenanceSchedule
+) -> MaintenanceScheduleResponse:
     state = ScheduleState(
         interval_type=schedule.interval_type,
         interval_days=schedule.interval_days,
@@ -36,7 +47,9 @@ async def _to_response(db: AsyncSession, schedule: MaintenanceSchedule) -> Maint
         anchor_usage_value=schedule.anchor_usage_value,
     )
     current_usage = await _current_usage(db, schedule)
-    due = compute_due_status(state, today=datetime.now(UTC).date(), current_usage=current_usage)
+    due = compute_due_status(
+        state, today=datetime.now(UTC).date(), current_usage=current_usage
+    )
     return MaintenanceScheduleResponse.model_validate(
         {
             **schedule.__dict__,
@@ -60,12 +73,15 @@ async def list_schedules(
     return [await _to_response(db, s) for s in result.scalars().all()]
 
 
-@router.post("", response_model=MaintenanceScheduleResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=MaintenanceScheduleResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_schedule(
     payload: MaintenanceScheduleCreate,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> MaintenanceScheduleResponse:
+    await verify_owned_reference(db, principal, Asset, payload.asset_id, "Asset")
     schedule = MaintenanceSchedule(
         id=uuid.uuid4(),
         household_id=principal.household_id,
@@ -78,8 +94,12 @@ async def create_schedule(
     return await _to_response(db, schedule)
 
 
-async def _get_owned_schedule(db: AsyncSession, principal: Principal, schedule_id: uuid.UUID) -> MaintenanceSchedule:
-    query = household_scoped_query(MaintenanceSchedule, principal).where(MaintenanceSchedule.id == schedule_id)
+async def _get_owned_schedule(
+    db: AsyncSession, principal: Principal, schedule_id: uuid.UUID
+) -> MaintenanceSchedule:
+    query = household_scoped_query(MaintenanceSchedule, principal).where(
+        MaintenanceSchedule.id == schedule_id
+    )
     result = await db.execute(query)
     schedule = result.scalar_one_or_none()
     if schedule is None:

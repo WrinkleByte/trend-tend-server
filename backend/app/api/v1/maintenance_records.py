@@ -3,9 +3,16 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_principal, household_scoped_query
+from app.api.deps import (
+    Principal,
+    get_current_principal,
+    household_scoped_query,
+    verify_owned_reference,
+)
 from app.db.session import get_db
+from app.models.asset import Asset
 from app.models.maintenance_record import MaintenanceRecord
+from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.mixins import utcnow
 from app.schemas.maintenance_record import (
     MaintenanceRecordCreate,
@@ -29,12 +36,23 @@ async def list_records(
     return list(result.scalars().all())
 
 
-@router.post("", response_model=MaintenanceRecordResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=MaintenanceRecordResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_record(
     payload: MaintenanceRecordCreate,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> MaintenanceRecord:
+    await verify_owned_reference(db, principal, Asset, payload.asset_id, "Asset")
+    if payload.schedule_id is not None:
+        await verify_owned_reference(
+            db,
+            principal,
+            MaintenanceSchedule,
+            payload.schedule_id,
+            "Maintenance schedule",
+        )
     record = MaintenanceRecord(
         id=uuid.uuid4(),
         household_id=principal.household_id,
@@ -47,8 +65,12 @@ async def create_record(
     return record
 
 
-async def _get_owned_record(db: AsyncSession, principal: Principal, record_id: uuid.UUID) -> MaintenanceRecord:
-    query = household_scoped_query(MaintenanceRecord, principal).where(MaintenanceRecord.id == record_id)
+async def _get_owned_record(
+    db: AsyncSession, principal: Principal, record_id: uuid.UUID
+) -> MaintenanceRecord:
+    query = household_scoped_query(MaintenanceRecord, principal).where(
+        MaintenanceRecord.id == record_id
+    )
     result = await db.execute(query)
     record = result.scalar_one_or_none()
     if record is None:

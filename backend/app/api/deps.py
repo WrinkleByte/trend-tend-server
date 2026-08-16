@@ -29,7 +29,9 @@ class Principal:
     device_id: uuid.UUID | None
 
 
-async def _get_membership(db: AsyncSession, user_id: uuid.UUID, household_id: uuid.UUID) -> HouseholdMembership:
+async def _get_membership(
+    db: AsyncSession, user_id: uuid.UUID, household_id: uuid.UUID
+) -> HouseholdMembership:
     result = await db.execute(
         select(HouseholdMembership).where(
             HouseholdMembership.user_id == user_id,
@@ -51,15 +53,21 @@ async def get_current_principal(
     token = credentials.credentials
 
     if is_api_token(token):
-        result = await db.execute(select(ApiToken).where(ApiToken.token_hash == hash_api_token(token)))
+        result = await db.execute(
+            select(ApiToken).where(ApiToken.token_hash == hash_api_token(token))
+        )
         api_token = result.scalar_one_or_none()
         if api_token is None or api_token.revoked_at is not None:
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or revoked API key")
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED, "Invalid or revoked API key"
+            )
         if api_token.expires_at is not None and api_token.expires_at < utcnow():
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Expired API key")
         api_token.last_used_at = utcnow()
         await db.commit()
-        membership = await _get_membership(db, api_token.user_id, api_token.household_id)
+        membership = await _get_membership(
+            db, api_token.user_id, api_token.household_id
+        )
         return Principal(
             user_id=api_token.user_id,
             household_id=api_token.household_id,
@@ -70,7 +78,9 @@ async def get_current_principal(
     try:
         payload = decode_token(token)
     except pyjwt.PyJWTError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token") from exc
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Invalid or expired token"
+        ) from exc
     if payload.get("type") != "access":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong token type")
 
@@ -78,7 +88,12 @@ async def get_current_principal(
     household_id = uuid.UUID(payload["household_id"])
     device_id = uuid.UUID(payload["device_id"]) if payload.get("device_id") else None
     membership = await _get_membership(db, user_id, household_id)
-    return Principal(user_id=user_id, household_id=household_id, role=membership.role, device_id=device_id)
+    return Principal(
+        user_id=user_id,
+        household_id=household_id,
+        role=membership.role,
+        device_id=device_id,
+    )
 
 
 async def require_instance_admin(
@@ -89,7 +104,9 @@ async def require_instance_admin(
     dependency rather than a field on Principal, since checking
     is_instance_admin needs a User-table lookup that every other endpoint
     (the overwhelming majority of requests) has no reason to pay for."""
-    result = await db.execute(select(User.is_instance_admin).where(User.id == principal.user_id))
+    result = await db.execute(
+        select(User.is_instance_admin).where(User.id == principal.user_id)
+    )
     is_admin = result.scalar_one_or_none()
     if not is_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Instance admin access required")
@@ -100,4 +117,30 @@ def household_scoped_query(model, principal: Principal):
     """Every household-scoped query should be built from this helper rather
     than hand-rolling the filter, so tenant isolation is structurally hard to
     forget rather than a convention any single handler could skip."""
-    return select(model).where(model.household_id == principal.household_id, model.deleted_at.is_(None))
+    return select(model).where(
+        model.household_id == principal.household_id, model.deleted_at.is_(None)
+    )
+
+
+async def verify_owned_reference(
+    db: AsyncSession, principal: Principal, model, ref_id: uuid.UUID, label: str
+) -> None:
+    """Guards a client-supplied foreign key (e.g. a fuel log's asset_id, or
+    a maintenance record's schedule_id) against pointing at another
+    household's row. Unlike an endpoint's own primary resource -- which
+    always goes through household_scoped_query, so a mismatched id 404s
+    automatically -- a *referenced* id on create/update is just a bare UUID
+    in the payload with nothing forcing it through that same check unless
+    each call site remembers to do it. Raises 404 (not 403) so a
+    foreign-household id is indistinguishable from a nonexistent one,
+    matching every other "not found vs not yours" response in this API.
+    """
+    result = await db.execute(
+        select(model.id).where(
+            model.id == ref_id,
+            model.household_id == principal.household_id,
+            model.deleted_at.is_(None),
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"{label} not found")

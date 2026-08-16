@@ -3,8 +3,14 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_principal, household_scoped_query
+from app.api.deps import (
+    Principal,
+    get_current_principal,
+    household_scoped_query,
+    verify_owned_reference,
+)
 from app.db.session import get_db
+from app.models.asset import Asset
 from app.models.mixins import utcnow
 from app.models.trip_log import TripLog
 from app.schemas.trip_log import TripLogCreate, TripLogResponse, TripLogUpdate
@@ -31,6 +37,7 @@ async def create_trip_log(
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> TripLog:
+    await verify_owned_reference(db, principal, Asset, payload.asset_id, "Asset")
     trip_log = TripLog(
         id=uuid.uuid4(),
         household_id=principal.household_id,
@@ -43,7 +50,9 @@ async def create_trip_log(
     return trip_log
 
 
-async def _get_owned_trip_log(db: AsyncSession, principal: Principal, trip_log_id: uuid.UUID) -> TripLog:
+async def _get_owned_trip_log(
+    db: AsyncSession, principal: Principal, trip_log_id: uuid.UUID
+) -> TripLog:
     query = household_scoped_query(TripLog, principal).where(TripLog.id == trip_log_id)
     result = await db.execute(query)
     trip_log = result.scalar_one_or_none()

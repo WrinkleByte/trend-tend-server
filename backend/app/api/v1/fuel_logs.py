@@ -3,8 +3,14 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_principal, household_scoped_query
+from app.api.deps import (
+    Principal,
+    get_current_principal,
+    household_scoped_query,
+    verify_owned_reference,
+)
 from app.db.session import get_db
+from app.models.asset import Asset
 from app.models.fuel_log import FuelLog
 from app.models.mixins import utcnow
 from app.schemas.fuel_log import FuelLogCreate, FuelLogResponse, FuelLogUpdate
@@ -31,6 +37,7 @@ async def create_fuel_log(
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> FuelLog:
+    await verify_owned_reference(db, principal, Asset, payload.asset_id, "Asset")
     fuel_log = FuelLog(
         id=uuid.uuid4(),
         household_id=principal.household_id,
@@ -43,7 +50,9 @@ async def create_fuel_log(
     return fuel_log
 
 
-async def _get_owned_fuel_log(db: AsyncSession, principal: Principal, fuel_log_id: uuid.UUID) -> FuelLog:
+async def _get_owned_fuel_log(
+    db: AsyncSession, principal: Principal, fuel_log_id: uuid.UUID
+) -> FuelLog:
     query = household_scoped_query(FuelLog, principal).where(FuelLog.id == fuel_log_id)
     result = await db.execute(query)
     fuel_log = result.scalar_one_or_none()

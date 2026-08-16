@@ -10,7 +10,7 @@ from sqlalchemy import and_, literal, or_, select, union_all
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_principal
+from app.api.deps import Principal, get_current_principal, verify_owned_reference
 from app.db.session import get_db
 from app.models.asset import Asset
 from app.models.attachment import Attachment
@@ -55,11 +55,28 @@ class EntitySyncConfig:
 # endpoint.
 SYNC_REGISTRY: dict[str, EntitySyncConfig] = {
     "asset": EntitySyncConfig(Asset, AssetSyncData),
-    "maintenance_record": EntitySyncConfig(MaintenanceRecord, MaintenanceRecordSyncData),
-    "maintenance_schedule": EntitySyncConfig(MaintenanceSchedule, MaintenanceScheduleSyncData),
+    "maintenance_record": EntitySyncConfig(
+        MaintenanceRecord, MaintenanceRecordSyncData
+    ),
+    "maintenance_schedule": EntitySyncConfig(
+        MaintenanceSchedule, MaintenanceScheduleSyncData
+    ),
     "fuel_log": EntitySyncConfig(FuelLog, FuelLogSyncData),
     "trip_log": EntitySyncConfig(TripLog, TripLogSyncData),
     "attachment": EntitySyncConfig(Attachment, AttachmentSyncData),
+}
+
+# Every *SyncData schema above is a "full row replace" (see their shared doc
+# comment) -- any of these fields present on an incoming change is a client-
+# supplied foreign key that needs the same cross-tenant check
+# verify_owned_reference gives the REST create endpoints, for both the
+# create-new-row and update-existing-row paths in _apply_change below.
+# Without this, a client could push a fuel_log/trip_log/maintenance_record/
+# maintenance_schedule whose asset_id (or a maintenance_record's
+# schedule_id) points at another household's row entirely.
+_REFERENCE_FIELDS: dict[str, tuple[type, str]] = {
+    "asset_id": (Asset, "Asset"),
+    "schedule_id": (MaintenanceSchedule, "Maintenance schedule"),
 }
 
 
@@ -91,9 +108,14 @@ def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid cursor") from exc
 
 
-async def _get_active_device(db: AsyncSession, principal: Principal, device_id: uuid.UUID) -> SyncDevice:
+async def _get_active_device(
+    db: AsyncSession, principal: Principal, device_id: uuid.UUID
+) -> SyncDevice:
     result = await db.execute(
-        select(SyncDevice).where(SyncDevice.id == device_id, SyncDevice.household_id == principal.household_id)
+        select(SyncDevice).where(
+            SyncDevice.id == device_id,
+            SyncDevice.household_id == principal.household_id,
+        )
     )
     device = result.scalar_one_or_none()
     if device is None or device.revoked_at is not None:
@@ -101,7 +123,9 @@ async def _get_active_device(db: AsyncSession, principal: Principal, device_id: 
     return device
 
 
-@router.post("/devices", response_model=SyncDeviceResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/devices", response_model=SyncDeviceResponse, status_code=status.HTTP_201_CREATED
+)
 async def register_device(
     payload: SyncDeviceRegister,
     principal: Principal = Depends(get_current_principal),
@@ -209,10 +233,18 @@ async def _apply_change(
 ) -> SyncPushResult:
     config = SYNC_REGISTRY.get(change.entity_type)
     if config is None:
-        return SyncPushResult(id=change.id, status="rejected", reason="unknown_entity_type", detail=change.entity_type)
+        return SyncPushResult(
+            id=change.id,
+            status="rejected",
+            reason="unknown_entity_type",
+            detail=change.entity_type,
+        )
 
     result = await db.execute(
-        select(config.model).where(config.model.id == change.id, config.model.household_id == principal.household_id)
+        select(config.model).where(
+            config.model.id == change.id,
+            config.model.household_id == principal.household_id,
+        )
     )
     existing = result.scalar_one_or_none()
 
@@ -230,7 +262,12 @@ async def _apply_change(
             # Created and deleted locally before ever reaching the server —
             # nothing to tombstone, and no other device could have seen it
             # exist in the first place.
-            return SyncPushResult(id=change.id, status="accepted", new_version=1, server_updated_at=utcnow())
+            return SyncPushResult(
+                id=change.id,
+                status="accepted",
+                new_version=1,
+                server_updated_at=utcnow(),
+            )
         try:
             async with db.begin_nested():
                 existing.deleted_at = utcnow()
@@ -239,19 +276,49 @@ async def _apply_change(
                 existing.updated_at = utcnow()
                 await db.flush()
         except SQLAlchemyError as exc:
-            return SyncPushResult(id=change.id, status="rejected", reason="database_error", detail=str(exc))
-        return SyncPushResult(id=change.id, status="accepted", new_version=existing.version, server_updated_at=existing.updated_at)
+            return SyncPushResult(
+                id=change.id,
+                status="rejected",
+                reason="database_error",
+                detail=str(exc),
+            )
+        return SyncPushResult(
+            id=change.id,
+            status="accepted",
+            new_version=existing.version,
+            server_updated_at=existing.updated_at,
+        )
 
     try:
         parsed = config.data_model.model_validate(change.data)
     except ValidationError as exc:
-        return SyncPushResult(id=change.id, status="rejected", reason="validation_error", detail=str(exc))
+        return SyncPushResult(
+            id=change.id, status="rejected", reason="validation_error", detail=str(exc)
+        )
+
+    for field_name, (ref_model, label) in _REFERENCE_FIELDS.items():
+        ref_id = getattr(parsed, field_name, None)
+        if ref_id is None:
+            continue
+        try:
+            await verify_owned_reference(db, principal, ref_model, ref_id, label)
+        except HTTPException:
+            return SyncPushResult(
+                id=change.id,
+                status="rejected",
+                reason="invalid_reference",
+                detail=f"{label} not found",
+            )
 
     try:
         # A SAVEPOINT per row, not one giant transaction — an error on one
         # row (e.g. a bad foreign key in its data) rolls back only that
         # row's work, so the rest of the batch still gets processed and
-        # committed. See docs/architecture.md Section 3.
+        # committed. See docs/architecture.md Section 3. (Note: a foreign
+        # key pointing at a REAL row in another household satisfies the
+        # DB's own FK constraint fine — the check above is what actually
+        # catches that case; a SQLAlchemyError here is a different kind of
+        # bad reference, e.g. a genuinely nonexistent id.)
         async with db.begin_nested():
             if existing is None:
                 row = config.model(
@@ -273,9 +340,16 @@ async def _apply_change(
                 await db.flush()
                 new_version, server_updated_at = existing.version, existing.updated_at
     except SQLAlchemyError as exc:
-        return SyncPushResult(id=change.id, status="rejected", reason="database_error", detail=str(exc))
+        return SyncPushResult(
+            id=change.id, status="rejected", reason="database_error", detail=str(exc)
+        )
 
-    return SyncPushResult(id=change.id, status="accepted", new_version=new_version, server_updated_at=server_updated_at)
+    return SyncPushResult(
+        id=change.id,
+        status="accepted",
+        new_version=new_version,
+        server_updated_at=server_updated_at,
+    )
 
 
 @router.post("/push", response_model=SyncPushResponse)
@@ -286,7 +360,10 @@ async def push(
 ) -> SyncPushResponse:
     device = await _get_active_device(db, principal, payload.device_id)
 
-    results = [await _apply_change(db, principal, payload.device_id, change) for change in payload.changes]
+    results = [
+        await _apply_change(db, principal, payload.device_id, change)
+        for change in payload.changes
+    ]
 
     device.last_sync_at = utcnow()
     await db.commit()
