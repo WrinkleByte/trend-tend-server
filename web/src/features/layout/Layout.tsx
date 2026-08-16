@@ -16,7 +16,7 @@ export function Layout() {
       <header className="app-nav">
         <Link to="/" className="brand">
           <img src="/icon-192.png" alt="" />
-          WrinkleByte
+          Trend & Tend
         </Link>
         {household && <span className="household-name">{household.name}</span>}
         <nav>
