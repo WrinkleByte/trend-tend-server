@@ -48,6 +48,18 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
     createMutation.mutate();
   }
 
+  // Mirrors AssetDetailPage.tsx's confirm() guard (Vikunja #34) -- extended
+  // to fuel/service/trip records per explicit follow-up request rather than
+  // left as a latent gap like the other unguarded deletes in this app. This
+  // is the exact entity type that prompted the follow-up (an accidental
+  // single-click delete on this same section).
+  function handleDelete(recordId: string, performedAt: string, category: string) {
+    const label = category.replace("_", " ");
+    if (window.confirm(`Permanently delete this ${label} record from ${performedAt.slice(0, 10)}? This cannot be undone.`)) {
+      deleteMutation.mutate(recordId);
+    }
+  }
+
   return (
     <section>
       <h2>Service history</h2>
@@ -86,7 +98,11 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
                 <button type="button" onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}>
                   {expandedId === record.id ? "Hide receipts" : "Receipts"}
                 </button>
-                <button type="button" className="danger" onClick={() => deleteMutation.mutate(record.id)}>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => handleDelete(record.id, record.performed_at, record.category)}
+                >
                   Delete
                 </button>
               </div>

@@ -72,6 +72,15 @@ export function TripLogsSection({ assetId }: { assetId: string }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["trip-logs", assetId] }),
   });
 
+  // Mirrors AssetDetailPage.tsx's confirm() guard (Vikunja #34) -- extended
+  // to fuel/service/trip records per explicit follow-up request rather than
+  // left as a latent gap like the other unguarded deletes in this app.
+  function handleDelete(tripId: string, performedAt: string) {
+    if (window.confirm(`Permanently delete the trip from ${performedAt.slice(0, 10)}? This cannot be undone.`)) {
+      deleteMutation.mutate(tripId);
+    }
+  }
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (endOdometer && distance) createMutation.mutate();
@@ -141,7 +150,7 @@ export function TripLogsSection({ assetId }: { assetId: string }) {
                 <button type="button" onClick={() => setExpandedId(expandedId === trip.id ? null : trip.id)}>
                   {expandedId === trip.id ? "Hide receipts" : "Receipts"}
                 </button>
-                <button type="button" className="danger" onClick={() => deleteMutation.mutate(trip.id)}>
+                <button type="button" className="danger" onClick={() => handleDelete(trip.id, trip.performed_at)}>
                   Delete
                 </button>
               </div>
