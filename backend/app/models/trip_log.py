@@ -27,3 +27,19 @@ class TripLog(SyncedEntityMixin, Base):
     end_odometer: Mapped[Decimal] = mapped_column(Numeric(10, 1), nullable=False)
     distance: Mapped[Decimal] = mapped_column(Numeric(10, 1), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class TripLogAttachment(Base):
+    """Join table linking a TripLog to N Attachments — mirrors
+    RecordAttachment (app/models/maintenance_record.py). Backs the
+    "required odometer photo" mentioned in TripLog's docstring above."""
+
+    __tablename__ = "trip_log_attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    trip_log_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trip_logs.id"), nullable=False, index=True
+    )
+    attachment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("attachments.id"), nullable=False, index=True
+    )

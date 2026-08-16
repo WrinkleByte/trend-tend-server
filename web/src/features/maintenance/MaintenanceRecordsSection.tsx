@@ -91,7 +91,7 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
                 </button>
               </div>
             </div>
-            {expandedId === record.id && <AttachmentsSection recordId={record.id} />}
+            {expandedId === record.id && <AttachmentsSection entityType="record" entityId={record.id} />}
           </li>
         ))}
       </ul>

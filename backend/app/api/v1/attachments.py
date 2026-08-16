@@ -11,8 +11,10 @@ from app.api.deps import Principal, get_current_principal, household_scoped_quer
 from app.db.session import get_db
 from app.models.asset import Asset
 from app.models.attachment import Attachment, StorageBackendType
+from app.models.fuel_log import FuelLog, FuelLogAttachment
 from app.models.maintenance_record import MaintenanceRecord, RecordAttachment
 from app.models.mixins import utcnow
+from app.models.trip_log import TripLog, TripLogAttachment
 from app.schemas.attachment import AttachmentResponse
 from app.storage.base import StorageBackend
 from app.storage.factory import get_storage_backend
@@ -27,6 +29,24 @@ async def _get_owned_record(db: AsyncSession, principal: Principal, record_id: u
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Maintenance record not found")
     return record
+
+
+async def _get_owned_fuel_log(db: AsyncSession, principal: Principal, fuel_log_id: uuid.UUID) -> FuelLog:
+    query = household_scoped_query(FuelLog, principal).where(FuelLog.id == fuel_log_id)
+    result = await db.execute(query)
+    fuel_log = result.scalar_one_or_none()
+    if fuel_log is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fuel log not found")
+    return fuel_log
+
+
+async def _get_owned_trip_log(db: AsyncSession, principal: Principal, trip_log_id: uuid.UUID) -> TripLog:
+    query = household_scoped_query(TripLog, principal).where(TripLog.id == trip_log_id)
+    result = await db.execute(query)
+    trip_log = result.scalar_one_or_none()
+    if trip_log is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Trip log not found")
+    return trip_log
 
 
 async def _get_owned_asset(db: AsyncSession, principal: Principal, asset_id: uuid.UUID) -> Asset:
@@ -58,6 +78,8 @@ async def upload_attachment(
     file: UploadFile,
     attachment_id: uuid.UUID | None = None,
     record_id: uuid.UUID | None = None,
+    fuel_log_id: uuid.UUID | None = None,
+    trip_log_id: uuid.UUID | None = None,
     asset_id: uuid.UUID | None = None,
     captured_at: datetime | None = None,
     principal: Principal = Depends(get_current_principal),
@@ -91,6 +113,10 @@ async def upload_attachment(
 
     if record_id is not None:
         await _get_owned_record(db, principal, record_id)
+    if fuel_log_id is not None:
+        await _get_owned_fuel_log(db, principal, fuel_log_id)
+    if trip_log_id is not None:
+        await _get_owned_trip_log(db, principal, trip_log_id)
     asset: Asset | None = None
     if asset_id is not None:
         # A profile photo is 1:1 with its asset (a direct FK column, not a
@@ -125,6 +151,10 @@ async def upload_attachment(
 
     if record_id is not None:
         db.add(RecordAttachment(id=uuid.uuid4(), record_id=record_id, attachment_id=attachment.id))
+    if fuel_log_id is not None:
+        db.add(FuelLogAttachment(id=uuid.uuid4(), fuel_log_id=fuel_log_id, attachment_id=attachment.id))
+    if trip_log_id is not None:
+        db.add(TripLogAttachment(id=uuid.uuid4(), trip_log_id=trip_log_id, attachment_id=attachment.id))
     if asset is not None:
         asset.photo_attachment_id = attachment.id
         asset.updated_by_device_id = principal.device_id
@@ -149,18 +179,42 @@ async def upload_attachment(
 
 
 @router.get("", response_model=list[AttachmentResponse])
-async def list_attachments_for_record(
-    record_id: uuid.UUID,
+async def list_attachments(
+    record_id: uuid.UUID | None = None,
+    fuel_log_id: uuid.UUID | None = None,
+    trip_log_id: uuid.UUID | None = None,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
     storage: StorageBackend = Depends(get_storage_backend),
 ) -> list[AttachmentResponse]:
-    await _get_owned_record(db, principal, record_id)
-    query = (
-        household_scoped_query(Attachment, principal)
-        .join(RecordAttachment, RecordAttachment.attachment_id == Attachment.id)
-        .where(RecordAttachment.record_id == record_id)
-    )
+    provided = [x for x in (record_id, fuel_log_id, trip_log_id) if x is not None]
+    if len(provided) != 1:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Exactly one of record_id, fuel_log_id, trip_log_id is required"
+        )
+
+    if record_id is not None:
+        await _get_owned_record(db, principal, record_id)
+        query = (
+            household_scoped_query(Attachment, principal)
+            .join(RecordAttachment, RecordAttachment.attachment_id == Attachment.id)
+            .where(RecordAttachment.record_id == record_id)
+        )
+    elif fuel_log_id is not None:
+        await _get_owned_fuel_log(db, principal, fuel_log_id)
+        query = (
+            household_scoped_query(Attachment, principal)
+            .join(FuelLogAttachment, FuelLogAttachment.attachment_id == Attachment.id)
+            .where(FuelLogAttachment.fuel_log_id == fuel_log_id)
+        )
+    else:
+        await _get_owned_trip_log(db, principal, trip_log_id)
+        query = (
+            household_scoped_query(Attachment, principal)
+            .join(TripLogAttachment, TripLogAttachment.attachment_id == Attachment.id)
+            .where(TripLogAttachment.trip_log_id == trip_log_id)
+        )
+
     result = await db.execute(query)
     return [_to_response(a, storage) for a in result.scalars().all()]
 

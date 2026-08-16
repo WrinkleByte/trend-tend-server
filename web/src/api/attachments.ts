@@ -2,14 +2,27 @@ import { apiFetch, apiFetchBlob, apiUpload } from "./client";
 import { getAsset } from "./assets";
 import type { Asset, Attachment } from "./types";
 
-export function listAttachmentsForRecord(recordId: string): Promise<Attachment[]> {
-  return apiFetch(`/attachments?record_id=${recordId}`);
+// Matches the three join tables on the backend (RecordAttachment /
+// FuelLogAttachment / TripLogAttachment) — "record" here means
+// MaintenanceRecord, kept short since it's the query-param prefix too.
+export type AttachmentEntityType = "record" | "fuel_log" | "trip_log";
+
+function entityQueryParam(entityType: AttachmentEntityType): string {
+  return entityType === "record" ? "record_id" : `${entityType}_id`;
 }
 
-export function uploadAttachment(recordId: string, file: File): Promise<Attachment> {
+export function listAttachments(entityType: AttachmentEntityType, entityId: string): Promise<Attachment[]> {
+  return apiFetch(`/attachments?${entityQueryParam(entityType)}=${entityId}`);
+}
+
+export function uploadAttachment(
+  entityType: AttachmentEntityType,
+  entityId: string,
+  file: File,
+): Promise<Attachment> {
   const formData = new FormData();
   formData.append("file", file);
-  return apiUpload(`/attachments?record_id=${recordId}`, formData);
+  return apiUpload(`/attachments?${entityQueryParam(entityType)}=${entityId}`, formData);
 }
 
 export function getAttachment(id: string): Promise<Attachment> {

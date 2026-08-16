@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createTripLog, deleteTripLog, listTripLogs } from "../../api/tripLogs";
 import type { TripPurpose } from "../../api/types";
+import { AttachmentsSection } from "../attachments/AttachmentsSection";
 
 // Fixed set plus free text — same pattern as maintenance record
 // category/custom_category. See TripLogInput.kt in tendfida-mobile's
@@ -20,6 +21,7 @@ export function TripLogsSection({ assetId }: { assetId: string }) {
     queryFn: () => listTripLogs(assetId),
   });
 
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [performedAt, setPerformedAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [purpose, setPurpose] = useState<TripPurpose>(PURPOSES[0]);
   const [customPurpose, setCustomPurpose] = useState("");
@@ -136,11 +138,15 @@ export function TripLogsSection({ assetId }: { assetId: string }) {
               <span className="record-description">{trip.notes || "—"}</span>
               <span className="record-cost">{trip.distance} mi</span>
               <div className="record-actions">
+                <button type="button" onClick={() => setExpandedId(expandedId === trip.id ? null : trip.id)}>
+                  {expandedId === trip.id ? "Hide receipts" : "Receipts"}
+                </button>
                 <button type="button" className="danger" onClick={() => deleteMutation.mutate(trip.id)}>
                   Delete
                 </button>
               </div>
             </div>
+            {expandedId === trip.id && <AttachmentsSection entityType="trip_log" entityId={trip.id} />}
           </li>
         ))}
       </ul>

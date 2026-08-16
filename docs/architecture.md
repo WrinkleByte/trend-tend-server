@@ -45,7 +45,7 @@ Base: `id`, `household_id`, `asset_type` (`vehicle` | `equipment` | `property` |
 This keeps the base `assets` table narrow and shared across list/sync/reminder logic, while type-specific fields live in focused side tables joined only when needed. Adding a new asset type later (e.g. `boat`) doesn't require migrating the base table.
 
 ### MaintenanceRecord
-`id`, `household_id`, `asset_id`, `performed_at`, `performed_by`/`performed_by_user_id` (nullable — could be a third-party shop), `category` (enum + free-text `custom_category`), `description`, `cost`, `currency`, `odometer_reading` (nullable, vehicles), `schedule_id` (nullable — if this record fulfills a scheduled reminder), plus sync mixin. Attachments link via a `RecordAttachment` join table, not a column.
+`id`, `household_id`, `asset_id`, `performed_at`, `performed_by`/`performed_by_user_id` (nullable — could be a third-party shop), `category` (enum + free-text `custom_category`), `description`, `cost`, `currency`, `odometer_reading` (nullable, vehicles), `schedule_id` (nullable — if this record fulfills a scheduled reminder), plus sync mixin. Attachments link via a `RecordAttachment` join table, not a column — `FuelLog` and `TripLog` link the same way, via `FuelLogAttachment`/`TripLogAttachment`.
 
 ### MaintenanceSchedule (recurring reminder rule)
 `id`, `household_id`, `asset_id`, `name` (e.g. "Oil change"), `interval_type` (`time` | `usage` | `both`), `interval_days`, `interval_usage_amount` (e.g. 5000 miles), `usage_field`, `anchor_date`/`anchor_usage_value`, `last_completed_record_id`, `active`, plus sync mixin.
@@ -53,7 +53,7 @@ This keeps the base `assets` table narrow and shared across list/sync/reminder l
 `next_due_date` / `next_due_usage` / `is_overdue` are **computed, not stored** — derived by a recurrence engine implemented identically in Python (`backend/app/core/recurrence.py`) and Kotlin (mobile shared module), validated against a shared test-vector fixture set so both stay behaviorally identical.
 
 ### Attachment
-`id`, `household_id`, `original_filename`, `content_type`, `size_bytes`, `storage_backend` (`local_disk` | `s3`), `storage_key`, `sha256` (integrity; not currently used for content-based dedup — see Section 3), `thumbnail_storage_key`, `captured_at`, plus sync mixin. Blob bytes never travel through the row-sync JSON payload — only metadata syncs there; bytes sync via a separate transfer (Section 3). Immutable blobs mean there is no conflict case for blob bytes, ever.
+`id`, `household_id`, `original_filename`, `content_type`, `size_bytes`, `storage_backend` (`local_disk` | `s3`), `storage_key`, `sha256` (integrity; not currently used for content-based dedup — see Section 3), `thumbnail_storage_key`, `captured_at`, plus sync mixin. Blob bytes never travel through the row-sync JSON payload — only metadata syncs there; bytes sync via a separate transfer (Section 3). Immutable blobs mean there is no conflict case for blob bytes, ever. Links to its parent entity via one of three join tables (`RecordAttachment` / `FuelLogAttachment` / `TripLogAttachment`) or, for an asset's profile photo, a direct 1:1 FK (`Asset.photo_attachment_id`) — never a column on `Attachment` itself, since one blob can only ever belong to one parent today.
 
 ### SyncDevice
 `id`, `household_id`, `user_id`, `platform` (`ios`/`android`/`web`), `device_name`, `last_sync_at`, `last_sync_cursor`, `conflict_resolution_mode` (`last_write_wins` | `manual`), `revoked_at` (remote deauth of a lost device).

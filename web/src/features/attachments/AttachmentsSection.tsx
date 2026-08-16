@@ -1,26 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  deleteAttachment,
-  fetchAttachmentBlob,
-  listAttachmentsForRecord,
-  uploadAttachment,
-} from "../../api/attachments";
+import { deleteAttachment, fetchAttachmentBlob, listAttachments, uploadAttachment } from "../../api/attachments";
+import type { AttachmentEntityType } from "../../api/attachments";
 
-export function AttachmentsSection({ recordId }: { recordId: string }) {
+export function AttachmentsSection({
+  entityType,
+  entityId,
+}: {
+  entityType: AttachmentEntityType;
+  entityId: string;
+}) {
   const queryClient = useQueryClient();
+  const queryKey = ["attachments", entityType, entityId];
   const { data: attachments, isLoading } = useQuery({
-    queryKey: ["attachments", recordId],
-    queryFn: () => listAttachmentsForRecord(recordId),
+    queryKey,
+    queryFn: () => listAttachments(entityType, entityId),
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadAttachment(recordId, file),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["attachments", recordId] }),
+    mutationFn: (file: File) => uploadAttachment(entityType, entityId, file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteAttachment(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["attachments", recordId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
 
   async function handleView(id: string) {

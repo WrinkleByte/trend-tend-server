@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFuelLog, deleteFuelLog, listFuelLogs } from "../../api/fuelLogs";
+import { AttachmentsSection } from "../attachments/AttachmentsSection";
 
 // Keeps the inline form to the fields people actually fill in at the pump —
 // octane/cetane/gas_brand/location/additive/mpg all exist on the backend
@@ -14,6 +15,7 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
     queryFn: () => listFuelLogs(assetId),
   });
 
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [performedAt, setPerformedAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [odometerReading, setOdometerReading] = useState("");
   const [gallons, setGallons] = useState("");
@@ -97,11 +99,15 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
               </span>
               <span className="record-cost">{log.total_cost != null ? `$${log.total_cost}` : ""}</span>
               <div className="record-actions">
+                <button type="button" onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}>
+                  {expandedId === log.id ? "Hide receipts" : "Receipts"}
+                </button>
                 <button type="button" className="danger" onClick={() => deleteMutation.mutate(log.id)}>
                   Delete
                 </button>
               </div>
             </div>
+            {expandedId === log.id && <AttachmentsSection entityType="fuel_log" entityId={log.id} />}
           </li>
         ))}
       </ul>

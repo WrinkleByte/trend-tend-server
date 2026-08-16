@@ -33,3 +33,18 @@ class FuelLog(SyncedEntityMixin, Base):
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     additive: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class FuelLogAttachment(Base):
+    """Join table linking a FuelLog to N Attachments — mirrors
+    RecordAttachment (app/models/maintenance_record.py)."""
+
+    __tablename__ = "fuel_log_attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    fuel_log_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("fuel_logs.id"), nullable=False, index=True
+    )
+    attachment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("attachments.id"), nullable=False, index=True
+    )
