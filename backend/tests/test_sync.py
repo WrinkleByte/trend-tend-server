@@ -428,3 +428,70 @@ async def test_trip_log_syncs_via_push_and_pull(client, auth_headers):
     changes_as_b = {c["id"]: c for c in pull_as_b.json()["changes"]}
     assert changes_as_b[trip_log_id]["entity_type"] == "trip_log"
     assert changes_as_b[trip_log_id]["data"]["distance"] == "42.0"
+
+
+# --- Revoking a lost or stolen paired device (Vikunja #36) ---
+#
+# SyncDevice.revoked_at and its enforcement in _get_active_device already
+# existed; nothing could SET it, so the check could never fire.
+
+
+async def test_list_devices_returns_household_devices(client, auth_headers):
+    first = await client.post(
+        "/api/v1/sync/devices", headers=auth_headers, json={"platform": "ios", "device_name": "Phone"}
+    )
+    await client.post(
+        "/api/v1/sync/devices", headers=auth_headers, json={"platform": "web", "device_name": "Laptop"}
+    )
+    listing = await client.get("/api/v1/sync/devices", headers=auth_headers)
+    assert listing.status_code == 200
+    names = [d["device_name"] for d in listing.json()]
+    assert "Phone" in names and "Laptop" in names
+    assert all(d["revoked_at"] is None for d in listing.json())
+    assert first.json()["id"] in [d["id"] for d in listing.json()]
+
+
+async def test_revoked_device_can_no_longer_sync(client, auth_headers):
+    device = await client.post(
+        "/api/v1/sync/devices", headers=auth_headers, json={"platform": "ios", "device_name": "Stolen Phone"}
+    )
+    device_id = device.json()["id"]
+
+    # Works before revocation.
+    before = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"device_id": device_id}
+    )
+    assert before.status_code == 200
+
+    revoke = await client.delete(f"/api/v1/sync/devices/{device_id}", headers=auth_headers)
+    assert revoke.status_code == 204
+
+    # Both directions must stop working, not just one.
+    after_pull = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"device_id": device_id}
+    )
+    assert after_pull.status_code == 403
+
+    after_push = await client.post(
+        "/api/v1/sync/push", headers=auth_headers, json={"device_id": device_id, "changes": []}
+    )
+    assert after_push.status_code == 403
+
+
+async def test_revoking_is_idempotent_and_device_stays_listed(client, auth_headers):
+    device = await client.post(
+        "/api/v1/sync/devices", headers=auth_headers, json={"platform": "android", "device_name": "Tablet"}
+    )
+    device_id = device.json()["id"]
+
+    assert (await client.delete(f"/api/v1/sync/devices/{device_id}", headers=auth_headers)).status_code == 204
+    # Second revoke is a no-op, not an error -- the caller's intent is met.
+    assert (await client.delete(f"/api/v1/sync/devices/{device_id}", headers=auth_headers)).status_code == 204
+
+    # Still listed, with a revoked_at -- "revoked on the 3rd" is the useful
+    # answer after losing a device, and hiding it invites doubt that the
+    # revoke worked.
+    listing = await client.get("/api/v1/sync/devices", headers=auth_headers)
+    revoked = [d for d in listing.json() if d["id"] == device_id]
+    assert len(revoked) == 1
+    assert revoked[0]["revoked_at"] is not None

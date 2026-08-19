@@ -53,3 +53,37 @@ async def test_cannot_revoke_another_users_api_token(client, auth_headers):
 
     response = await client.delete(f"/api/v1/api-tokens/{token_id}", headers=other_headers)
     assert response.status_code == 404
+
+
+# --- Deleting a revoked token (Vikunja #26) ---
+
+
+async def test_revoked_token_can_be_deleted_permanently(client, auth_headers):
+    created = await client.post(
+        "/api/v1/api-tokens", headers=auth_headers, json={"name": "Old laptop"}
+    )
+    token_id = created.json()["id"]
+
+    assert (await client.delete(f"/api/v1/api-tokens/{token_id}", headers=auth_headers)).status_code == 204
+    assert (
+        await client.delete(f"/api/v1/api-tokens/{token_id}/permanently", headers=auth_headers)
+    ).status_code == 204
+
+    listing = await client.get("/api/v1/api-tokens", headers=auth_headers)
+    assert token_id not in [t["id"] for t in listing.json()]
+
+
+async def test_a_live_token_cannot_be_deleted_without_revoking_first(client, auth_headers):
+    # Deleting a live token in one step would destroy the audit trail of a
+    # credential still in use, and skip the moment someone might notice they
+    # picked the wrong one.
+    created = await client.post(
+        "/api/v1/api-tokens", headers=auth_headers, json={"name": "Still in use"}
+    )
+    token_id = created.json()["id"]
+
+    response = await client.delete(f"/api/v1/api-tokens/{token_id}/permanently", headers=auth_headers)
+    assert response.status_code == 409
+
+    listing = await client.get("/api/v1/api-tokens", headers=auth_headers)
+    assert token_id in [t["id"] for t in listing.json()]

@@ -35,12 +35,31 @@ def create_access_token(*, user_id: uuid.UUID, household_id: uuid.UUID, device_i
         "device_id": str(device_id) if device_id else None,
         "type": "access",
         "iat": now,
+        # Sub-second issue time. `iat` is whole-second by spec, which leaves
+        # a one-second window where a token cannot be ordered against a
+        # password reset -- see reject_if_token_predates_invalidation.
+        "iat_us": now.timestamp(),
         "exp": now + timedelta(minutes=settings.jwt_access_token_ttl_minutes),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(*, user_id: uuid.UUID, household_id: uuid.UUID, device_id: uuid.UUID | None = None) -> str:
+def create_refresh_token(
+    *,
+    user_id: uuid.UUID,
+    household_id: uuid.UUID,
+    device_id: uuid.UUID | None = None,
+    jti: uuid.UUID | None = None,
+    family_id: uuid.UUID | None = None,
+) -> str:
+    """Mint a refresh token.
+
+    `jti` and `family_id` back rotation with reuse detection (see
+    models/refresh_token.py). They're optional so this stays usable in
+    tests and any caller that doesn't need rotation, but the auth
+    endpoints always pass them -- a token minted without a jti cannot be
+    rotated or revoked, only left to expire.
+    """
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": str(user_id),
@@ -48,8 +67,13 @@ def create_refresh_token(*, user_id: uuid.UUID, household_id: uuid.UUID, device_
         "device_id": str(device_id) if device_id else None,
         "type": "refresh",
         "iat": now,
+        "iat_us": now.timestamp(),
         "exp": now + timedelta(days=settings.jwt_refresh_token_ttl_days),
     }
+    if jti is not None:
+        payload["jti"] = str(jti)
+    if family_id is not None:
+        payload["family_id"] = str(family_id)
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

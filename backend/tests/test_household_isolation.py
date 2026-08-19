@@ -370,3 +370,28 @@ async def test_sync_push_does_not_reveal_another_households_row_id(client):
     # distinguishable answer -- the point is that it's a *clean* rejection
     # carrying no schema detail, not a 500 with a constraint name in it.
     assert never_seen["status"] == "accepted"
+
+
+async def test_cannot_revoke_another_households_sync_device(client):
+    owner = await _register_and_login(client, "owner-device@example.com", "House Owner Device")
+    attacker = await _register_and_login(client, "attacker-device@example.com", "House Attacker Device")
+    owner_headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    attacker_headers = {"Authorization": f"Bearer {attacker['access_token']}"}
+
+    device = await client.post(
+        "/api/v1/sync/devices", headers=owner_headers, json={"platform": "ios", "device_name": "Victim Phone"}
+    )
+    device_id = device.json()["id"]
+
+    # Revoking someone else's device would be a denial-of-service on their
+    # sync, so the new endpoint must be household-scoped like everything else.
+    attack = await client.delete(f"/api/v1/sync/devices/{device_id}", headers=attacker_headers)
+    assert attack.status_code == 404
+
+    # ...and it must still work for its real owner.
+    assert (await client.post("/api/v1/sync/pull", headers=owner_headers,
+                              json={"device_id": device_id})).status_code == 200
+
+    # The attacker must not be able to see it in their own listing either.
+    listing = await client.get("/api/v1/sync/devices", headers=attacker_headers)
+    assert device_id not in [d["id"] for d in listing.json()]

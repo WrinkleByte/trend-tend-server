@@ -59,17 +59,21 @@ async def reject_if_token_predates_invalidation(
     if cutoff is None:
         return
 
-    issued_at = payload.get("iat")
+    # Prefer the sub-second claim. `iat` is whole-second by spec, which
+    # leaves a one-second window in which a token cannot be ordered against
+    # the cutoff at all -- and either way of resolving that window is wrong:
+    # round one way and a token stolen in the same second as the reset
+    # survives it; round the other and the user's own fresh login right
+    # after the reset gets rejected. iat_us removes the ambiguity instead of
+    # picking which failure to accept.
+    issued_at = payload.get("iat_us") or payload.get("iat")
     if issued_at is None:
-        # Pre-dates the claim being set, so it cannot be proven to post-date
-        # the invalidation -- refuse rather than assume in the token's favour.
+        # Cannot be proven to post-date the invalidation -- refuse rather
+        # than assume in the token's favour.
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session is no longer valid")
 
     issued = datetime.fromtimestamp(issued_at, tz=UTC)
-    # `iat` has whole-second resolution while the cutoff is microsecond-
-    # precise, so a token minted in the same second as the reset would
-    # otherwise survive it. Compare on that boundary rather than exactly.
-    if issued < cutoff.replace(microsecond=0):
+    if issued < cutoff:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session is no longer valid")
 
 

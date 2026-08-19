@@ -30,6 +30,7 @@ from app.models.household import (
 )
 from app.models.mixins import utcnow
 from app.models.password_reset_token import PasswordResetToken
+from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.schemas.auth import (
     ForgotPasswordRequest,
@@ -78,6 +79,22 @@ _refresh_limiter = RateLimiter(times=30, seconds=60)
 DUMMY_PASSWORD_HASH = hash_password("timing-equalisation-only-never-a-real-password")
 
 
+def smtp_can_deliver(instance_settings) -> bool:
+    """Whether email will actually go out, which decides if a reset token has
+    to be written to the log instead (review P1).
+
+    Mirrors the same four conditions core/email.py's send_email checks before
+    it gives up -- kept as its own function so the log decision is testable
+    without standing up SMTP or mutating the instance-settings singleton.
+    """
+    return bool(
+        instance_settings
+        and instance_settings.smtp_enabled
+        and instance_settings.smtp_host
+        and instance_settings.smtp_from_address
+    )
+
+
 async def _consume_pending_invite(db: AsyncSession, token: str, email: str) -> HouseholdInvite:
     result = await db.execute(select(HouseholdInvite).where(HouseholdInvite.token == token))
     invite = result.scalar_one_or_none()
@@ -88,6 +105,52 @@ async def _consume_pending_invite(db: AsyncSession, token: str, email: str) -> H
     if invite.invited_email.lower() != email.lower():
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This invite was sent to a different email address")
     return invite
+
+
+async def _issue_refresh_token(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    household_id: uuid.UUID,
+    family_id: uuid.UUID | None = None,
+) -> str:
+    """Record and mint a refresh token, starting a new family unless given one.
+
+    The row stores only the token's id (its `jti`), never the token string --
+    so this table leaking grants nobody a session.
+    """
+    jti = uuid.uuid4()
+    family = family_id or uuid.uuid4()
+    db.add(
+        RefreshToken(
+            id=jti,
+            family_id=family,
+            user_id=user_id,
+            household_id=household_id,
+            expires_at=utcnow() + timedelta(days=get_settings().jwt_refresh_token_ttl_days),
+        )
+    )
+    return create_refresh_token(
+        user_id=user_id, household_id=household_id, jti=jti, family_id=family
+    )
+
+
+async def _revoke_family(db: AsyncSession, family_id: uuid.UUID) -> None:
+    """Kill every token descended from one login.
+
+    Called when a token is replayed. We cannot tell whether the replay came
+    from an attacker or from the real user (a racing client, a restored
+    backup), and it does not matter: in both readings the family is no longer
+    trustworthy, so everyone holding one has to authenticate again.
+    """
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.family_id == family_id, RefreshToken.revoked_at.is_(None)
+        )
+    )
+    now = utcnow()
+    for token in result.scalars():
+        token.revoked_at = now
 
 
 @router.get("/setup-status", response_model=SetupStatusResponse)
@@ -157,11 +220,12 @@ async def register(
             )
         )
 
+    refresh_token = await _issue_refresh_token(db, user_id=user.id, household_id=household_id)
     await db.commit()
 
     return TokenResponse(
         access_token=create_access_token(user_id=user.id, household_id=household_id),
-        refresh_token=create_refresh_token(user_id=user.id, household_id=household_id),
+        refresh_token=refresh_token,
     )
 
 
@@ -202,9 +266,14 @@ async def login(
     else:
         selected = memberships[0]
 
+    refresh_token = await _issue_refresh_token(
+        db, user_id=user.id, household_id=selected.household_id
+    )
+    await db.commit()
+
     return TokenResponse(
         access_token=create_access_token(user_id=user.id, household_id=selected.household_id),
-        refresh_token=create_refresh_token(user_id=user.id, household_id=selected.household_id),
+        refresh_token=refresh_token,
     )
 
 
@@ -230,9 +299,57 @@ async def refresh(
     # only the short-lived half of a compromised session (review S5/S6).
     await reject_if_token_predates_invalidation(db, user_id, claims)
 
+    # --- Rotation with reuse detection (review S6) ---
+    jti_claim = claims.get("jti")
+    if jti_claim is None:
+        # Minted before rotation existed. Honoured once and upgraded to a
+        # tracked token rather than rejected, so deploying this doesn't log
+        # everyone out mid-session. Remove this branch once refresh TTL
+        # (30 days) has elapsed since the release that added rotation --
+        # after that, any token without a jti is necessarily forged or
+        # ancient.
+        rotated = await _issue_refresh_token(db, user_id=user_id, household_id=household_id)
+        await db.commit()
+        return TokenResponse(
+            access_token=create_access_token(user_id=user_id, household_id=household_id),
+            refresh_token=rotated,
+        )
+
+    stored = (
+        await db.execute(select(RefreshToken).where(RefreshToken.id == uuid.UUID(jti_claim)))
+    ).scalar_one_or_none()
+
+    if stored is None or stored.revoked_at is not None:
+        # Unknown id with a valid signature means the row is gone (family
+        # revoked and pruned, or the DB was restored) -- either way it is not
+        # a token we are still willing to honour.
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token")
+
+    if stored.used_at is not None:
+        # Replay. Whether this is the thief or the real user re-sending an
+        # already-spent token, the family can no longer be trusted -- burn it
+        # and make everyone re-authenticate.
+        logger.warning(
+            "Refresh token reuse detected for user %s (family %s) -- revoking the family",
+            user_id,
+            stored.family_id,
+        )
+        await _revoke_family(db, stored.family_id)
+        await db.commit()
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "This session has been ended for security reasons. Please sign in again.",
+        )
+
+    stored.used_at = utcnow()
+    rotated = await _issue_refresh_token(
+        db, user_id=user_id, household_id=household_id, family_id=stored.family_id
+    )
+    await db.commit()
+
     return TokenResponse(
         access_token=create_access_token(user_id=user_id, household_id=household_id),
-        refresh_token=create_refresh_token(user_id=user_id, household_id=household_id),
+        refresh_token=rotated,
     )
 
 
@@ -258,15 +375,30 @@ async def forgot_password(
         db.add(reset_token)
         await db.commit()
 
-        # The token by itself isn't something a user can do anything with —
-        # it's a URL query param for ResetPasswordPage.tsx, not a password.
-        # Logged unconditionally (not just on send failure) so an admin can
-        # still hand someone this link manually from the logs, e.g. before
-        # SMTP is configured on a fresh install.
         reset_link = f"{get_settings().frontend_url.rstrip('/')}/reset-password?token={reset_token.token}"
-        logger.info("Password reset requested for %s: %s", user.email, reset_link)
-
         instance_settings = await get_or_create_instance_settings(db)
+
+        # The full link -- token included -- is logged ONLY when SMTP can't
+        # deliver it (review P1). That was the original reason for logging it
+        # at all: on a fresh install with no relay configured, the log is the
+        # only way an admin can get a user their reset link.
+        #
+        # It used to be logged unconditionally, which meant anyone with log
+        # read access could take over any account, indefinitely, on a fully
+        # working instance. Logs are also the artifact most likely to be
+        # shipped to an aggregator or pasted into a bug report. Once email
+        # works, the email IS the delivery channel and the log doesn't need
+        # the token.
+        if smtp_can_deliver(instance_settings):
+            logger.info("Password reset requested for %s; reset link emailed.", user.email)
+        else:
+            logger.warning(
+                "Password reset requested for %s, but SMTP is not configured. "
+                "Hand this link to the user directly, then configure SMTP so tokens "
+                "stop being written to logs: %s",
+                user.email,
+                reset_link,
+            )
         # smtplib is blocking — offload so this request (and the shared
         # event loop) doesn't stall on a slow/unreachable SMTP relay.
         await asyncio.to_thread(

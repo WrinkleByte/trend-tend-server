@@ -39,6 +39,50 @@ async def engine():
 
 
 @pytest.fixture(autouse=True)
+def _neutralise_smtp_env():
+    """Stop the host's SMTP_* environment leaking into tests.
+
+    get_settings() is lru_cache'd, so there is one Settings object shared by
+    the whole session, seeded from the real environment. On a machine whose
+    .env configures SMTP (the docker-compose dev stack does), a
+    freshly-created instance_settings row comes up with smtp_enabled=True --
+    and with SMTP_FORCE_ENV set, gets re-seeded on every read, overwriting
+    whatever a test just wrote.
+
+    That made test_instance_admin_can_read_and_write_smtp_settings fail on
+    this machine while passing on one without SMTP configured: a test
+    outcome that depended on the developer's environment rather than the
+    code. Pinning the SMTP-related settings to their defaults for the
+    duration of each test removes that dependency.
+    """
+    settings = get_settings()
+    saved = {
+        field: getattr(settings, field)
+        for field in (
+            "smtp_enabled",
+            "smtp_host",
+            "smtp_port",
+            "smtp_username",
+            "smtp_password",
+            "smtp_use_tls",
+            "smtp_from_address",
+            "smtp_force_env",
+        )
+    }
+    settings.smtp_enabled = False
+    settings.smtp_host = ""
+    settings.smtp_port = None
+    settings.smtp_username = ""
+    settings.smtp_password = ""
+    settings.smtp_use_tls = True
+    settings.smtp_from_address = ""
+    settings.smtp_force_env = False
+    yield
+    for field, value in saved.items():
+        setattr(settings, field, value)
+
+
+@pytest.fixture(autouse=True)
 def _reset_rate_limiters():
     # The `app` instance (and therefore every RateLimiter's in-memory hit
     # dict) is shared across the whole test session, and httpx's

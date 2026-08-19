@@ -152,6 +152,58 @@ async def register_device(
     return device
 
 
+@router.get("/devices", response_model=list[SyncDeviceResponse])
+async def list_devices(
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> list[SyncDevice]:
+    """Every device paired to this household, revoked ones included.
+
+    Revoked devices are deliberately still listed rather than hidden: "this
+    phone was revoked on the 3rd" is the useful answer after losing one, and
+    hiding it just makes a user wonder whether the revoke worked.
+    """
+    result = await db.execute(
+        select(SyncDevice)
+        .where(SyncDevice.household_id == principal.household_id)
+        .order_by(SyncDevice.created_at)
+    )
+    return list(result.scalars().all())
+
+
+@router.delete("/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_device(
+    device_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Revoke a lost or stolen paired device (Vikunja #36).
+
+    SyncDevice.revoked_at and its enforcement in _get_active_device already
+    existed -- what was missing was any way to *set* it, so the check could
+    never actually fire. A device is revoked, never deleted: every synced row
+    carries updated_by_device_id referencing it, so removing the row would
+    orphan that history (and sync pull's own "not my writes" filter depends
+    on those ids remaining resolvable).
+
+    Idempotent: revoking an already-revoked device is a no-op rather than an
+    error, since the caller's intent is already satisfied.
+    """
+    result = await db.execute(
+        select(SyncDevice).where(
+            SyncDevice.id == device_id,
+            SyncDevice.household_id == principal.household_id,
+        )
+    )
+    device = result.scalar_one_or_none()
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sync device not found")
+
+    if device.revoked_at is None:
+        device.revoked_at = utcnow()
+        await db.commit()
+
+
 @router.post("/pull", response_model=SyncPullResponse)
 async def pull(
     payload: SyncPullRequest,

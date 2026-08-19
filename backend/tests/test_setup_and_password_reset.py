@@ -386,3 +386,193 @@ async def test_login_does_not_apply_the_length_policy(client):
     # and the login schema must not advertise the policy's bounds.
     response = await client.post("/api/v1/auth/login", json={"email": "nobody@example.com", "password": "x"})
     assert response.status_code == 401
+
+
+# --- Refresh-token rotation with reuse detection (review S6) ---
+
+
+async def _register(client, email: str, household: str) -> dict:
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "a very good password",
+            "display_name": "Rotate",
+            "household_name": household,
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+async def test_refresh_rotates_the_token(client):
+    tokens = await _register(client, "rotate-1@example.com", "Rotate House 1")
+    first = tokens["refresh_token"]
+
+    refreshed = await client.post("/api/v1/auth/refresh", json={"refresh_token": first})
+    assert refreshed.status_code == 200
+    second = refreshed.json()["refresh_token"]
+    assert second != first, "refresh must issue a NEW token, not hand back the same one"
+
+    # The new one works.
+    assert (await client.post("/api/v1/auth/refresh", json={"refresh_token": second})).status_code == 200
+
+
+async def test_reusing_a_spent_refresh_token_is_rejected(client):
+    tokens = await _register(client, "rotate-2@example.com", "Rotate House 2")
+    first = tokens["refresh_token"]
+
+    await client.post("/api/v1/auth/refresh", json={"refresh_token": first})
+
+    # Replaying the now-spent token must fail -- this is the theft signal.
+    replay = await client.post("/api/v1/auth/refresh", json={"refresh_token": first})
+    assert replay.status_code == 401
+
+
+async def test_reuse_revokes_the_whole_family(client):
+    """The point of reuse detection: the attacker's *current* token dies too.
+
+    Detecting the replay but leaving the freshly-rotated token alive would
+    be useless -- whoever replayed already holds the newer one.
+    """
+    tokens = await _register(client, "rotate-3@example.com", "Rotate House 3")
+    stolen = tokens["refresh_token"]
+
+    rotated = (await client.post("/api/v1/auth/refresh", json={"refresh_token": stolen})).json()[
+        "refresh_token"
+    ]
+    assert (await client.post("/api/v1/auth/refresh", json={"refresh_token": rotated})).status_code == 200
+
+    # Now the attacker replays the original, spent token.
+    latest = (await client.post("/api/v1/auth/refresh", json={"refresh_token": rotated})).status_code
+    assert latest == 401  # rotated was itself spent by the call above
+
+    replay = await client.post("/api/v1/auth/refresh", json={"refresh_token": stolen})
+    assert replay.status_code == 401
+
+    # Every token in the family is now dead, including the most recent one.
+    for token in (stolen, rotated):
+        assert (await client.post("/api/v1/auth/refresh", json={"refresh_token": token})).status_code == 401
+
+
+async def test_a_separate_login_is_its_own_family(client):
+    # Revoking one compromised session must not sign the user out everywhere
+    # else -- families are per-login for exactly this reason.
+    await _register(client, "rotate-4@example.com", "Rotate House 4")
+
+    session_a = (
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": "rotate-4@example.com", "password": "a very good password"},
+        )
+    ).json()["refresh_token"]
+    session_b = (
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": "rotate-4@example.com", "password": "a very good password"},
+        )
+    ).json()["refresh_token"]
+
+    # Burn session A by replaying it.
+    await client.post("/api/v1/auth/refresh", json={"refresh_token": session_a})
+    await client.post("/api/v1/auth/refresh", json={"refresh_token": session_a})
+    assert (await client.post("/api/v1/auth/refresh", json={"refresh_token": session_a})).status_code == 401
+
+    # Session B is untouched.
+    assert (await client.post("/api/v1/auth/refresh", json={"refresh_token": session_b})).status_code == 200
+
+
+async def test_legacy_token_without_jti_is_honoured_once_and_upgraded(client):
+    """Deploying rotation must not log existing users out mid-session."""
+    from app.core.security import create_refresh_token
+
+    tokens = await _register(client, "rotate-5@example.com", "Rotate House 5")
+    claims = __import__("jwt").decode(
+        tokens["refresh_token"], options={"verify_signature": False}
+    )
+    legacy = create_refresh_token(
+        user_id=__import__("uuid").UUID(claims["sub"]),
+        household_id=__import__("uuid").UUID(claims["household_id"]),
+    )
+
+    upgraded = await client.post("/api/v1/auth/refresh", json={"refresh_token": legacy})
+    assert upgraded.status_code == 200
+    # ...and what comes back IS tracked, so it rotates from here on.
+    new_token = upgraded.json()["refresh_token"]
+    assert (await client.post("/api/v1/auth/refresh", json={"refresh_token": new_token})).status_code == 200
+    assert (await client.post("/api/v1/auth/refresh", json={"refresh_token": new_token})).status_code == 401
+
+# --- Reset tokens must not sit in logs on a working instance (review P1) ---
+#
+# Tested against the decision function rather than end-to-end: the
+# instance-settings singleton is instance-wide mutable state seeded from env
+# (and re-applied on every read when SMTP_FORCE_ENV is set), so a test that
+# mutates it leaks into every other test in the session. That's the same
+# isolation problem behind the pre-existing
+# test_instance_admin_can_read_and_write_smtp_settings failure -- worth not
+# adding two more instances of it.
+
+
+class _Settings:
+    def __init__(self, **kw):
+        self.smtp_enabled = kw.get("smtp_enabled", True)
+        self.smtp_host = kw.get("smtp_host", "smtp.example.com")
+        self.smtp_from_address = kw.get("smtp_from_address", "noreply@example.com")
+
+
+def test_smtp_can_deliver_requires_every_field():
+    from app.api.v1.auth import smtp_can_deliver
+
+    assert smtp_can_deliver(_Settings()) is True
+
+    # Any one missing means email won't go out, so the link must fall back
+    # to the log rather than vanishing entirely.
+    assert smtp_can_deliver(None) is False
+    assert smtp_can_deliver(_Settings(smtp_enabled=False)) is False
+    assert smtp_can_deliver(_Settings(smtp_host="")) is False
+    assert smtp_can_deliver(_Settings(smtp_from_address="")) is False
+
+
+def test_smtp_can_deliver_matches_send_email_preconditions():
+    """If these two ever drift, tokens either leak or go undeliverable."""
+    import inspect
+
+    from app.core.email import send_email
+
+    source = inspect.getsource(send_email)
+    for field in ("smtp_enabled", "smtp_host", "smtp_from_address"):
+        assert field in source, (
+            f"send_email no longer checks {field}; auth.smtp_can_deliver must be updated to match"
+        )
+
+
+async def test_reset_evicts_a_token_issued_in_the_same_second(client, db_session):
+    """Regression: the whole flow completing inside one second must still evict.
+
+    The first implementation compared a whole-second `iat` against a
+    microsecond-precise cutoff and truncated the cutoff to match, which meant
+    a token issued in the same second as the reset survived it. Easy to miss,
+    because it only shows up when the reset happens fast -- which is exactly
+    what an attacker's tooling would do, and what this test does.
+    """
+    email = "same-second@example.com"
+    register = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "a very good password",
+            "display_name": "Same Second",
+            "household_name": "Same Second House",
+        },
+    )
+    stolen_headers = {"Authorization": f"Bearer {register.json()['access_token']}"}
+
+    await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    token = await _reset_token_for(db_session, email)
+    reset = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "new_password": "a completely new password"},
+    )
+    assert reset.status_code == 200
+
+    assert (await client.get("/api/v1/assets", headers=stolen_headers)).status_code == 401

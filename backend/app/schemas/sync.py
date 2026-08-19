@@ -24,6 +24,10 @@ class SyncDeviceResponse(BaseModel):
     conflict_resolution_mode: ConflictResolutionMode
     last_sync_at: datetime | None
     created_at: datetime
+    # Exposed so a client can show which of a household's devices are still
+    # live -- you cannot sensibly decide what to revoke without seeing it
+    # (Vikunja #36).
+    revoked_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
