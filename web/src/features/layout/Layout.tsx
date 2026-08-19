@@ -13,6 +13,9 @@ export function Layout() {
 
   return (
     <div className="app-shell">
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
       <header className="app-nav">
         <Link to="/" className="brand">
           <img src="/icon-192.png" alt="" />
@@ -40,7 +43,7 @@ export function Layout() {
           </button>
         </nav>
       </header>
-      <main className="app-content">
+      <main className="app-content" id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
     </div>

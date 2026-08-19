@@ -6,6 +6,7 @@ import {
   promoteUserToInstanceAdmin,
 } from "../../api/admin";
 import { ApiError } from "../../api/client";
+import { StatusMessage } from "../../components/StatusMessage";
 
 function formatCounts(counts: {
   assets: number;
@@ -72,7 +73,7 @@ export function AdminHouseholdsSection() {
         gives them this same instance-wide access, including SMTP config and this household list.
       </p>
       {error && (
-        <p className="form-error">{error instanceof ApiError ? error.message : "Something went wrong."}</p>
+        <StatusMessage>{error instanceof ApiError ? error.message : "Something went wrong."}</StatusMessage>
       )}
 
       <ul className="admin-household-list">

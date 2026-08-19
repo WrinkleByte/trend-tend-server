@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { resetPassword } from "../../api/auth";
 import { ApiError } from "../../api/client";
+import { StatusMessage } from "../../components/StatusMessage";
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -47,9 +48,9 @@ export function ResetPasswordPage() {
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1>Choose a new password</h1>
         {error && (
-          <p className="form-error">
+          <StatusMessage>
             {error} <Link to="/forgot-password">Request a new link</Link>
-          </p>
+          </StatusMessage>
         )}
         <label>
           New password

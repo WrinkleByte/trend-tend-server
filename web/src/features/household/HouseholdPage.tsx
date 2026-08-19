@@ -13,6 +13,7 @@ import {
 } from "../../api/households";
 import type { HouseholdRole } from "../../api/types";
 import { useAuthStore } from "../../auth/authStore";
+import { StatusMessage } from "../../components/StatusMessage";
 
 function inviteLink(token: string): string {
   return `${window.location.origin}/join?token=${encodeURIComponent(token)}`;
@@ -204,7 +205,7 @@ export function HouseholdPage() {
                 I understand every asset and record will be permanently deleted and this cannot be undone
               </label>
               {wipeHouseholdMutation.isError && (
-                <p className="form-error">Something went wrong — no data was wiped.</p>
+                <StatusMessage>Something went wrong — no data was wiped.</StatusMessage>
               )}
               <div className="form-actions" style={{ marginTop: "12px" }}>
                 <button
@@ -249,7 +250,7 @@ export function HouseholdPage() {
                 <input value={confirmDeleteText} onChange={(e) => setConfirmDeleteText(e.target.value)} />
               </label>
               {deleteHouseholdMutation.isError && (
-                <p className="form-error">Something went wrong — the household was not deleted.</p>
+                <StatusMessage>Something went wrong — the household was not deleted.</StatusMessage>
               )}
               <div className="form-actions" style={{ marginTop: "12px" }}>
                 <button

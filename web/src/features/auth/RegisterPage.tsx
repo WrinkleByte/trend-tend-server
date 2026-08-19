@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { register } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { useAuthStore } from "../../auth/authStore";
+import { StatusMessage } from "../../components/StatusMessage";
 
 export function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -38,7 +39,7 @@ export function RegisterPage() {
     <div className="auth-page">
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1>Create your household</h1>
-        {error && <p className="form-error">{error}</p>}
+        {error && <StatusMessage>{error}</StatusMessage>}
         <label>
           Your name
           <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />

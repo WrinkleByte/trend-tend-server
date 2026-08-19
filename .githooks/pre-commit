@@ -5,6 +5,19 @@
 # require a Python venv and vice versa. Installed via
 # scripts/setup-git-hooks.sh — see that file and README.md's "Local CI"
 # section for why this lives here instead of GitHub Actions.
+#
+# Missing tooling is a FAILURE, not a warning (2026-08-19 review, D1).
+# These hooks are the only enforcement this project has, and .venv /
+# node_modules are explicitly not portable across the Mac/Linux split it
+# syncs over — so the machine most likely to be missing tooling was exactly
+# the machine where checks silently did nothing and the commit sailed
+# through. Each check now falls back to the docker-compose stack (the
+# documented way to run this project) before giving up, and refuses to pass
+# if it could not actually run.
+#
+# Genuine escape hatch, for when you know the tooling is unavailable:
+#   SKIP_HOOK_TOOLING=1 git commit ...
+# or bypass hooks entirely with --no-verify.
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -13,30 +26,63 @@ cd "$REPO_ROOT"
 changed_files="$(git diff --cached --name-only --diff-filter=ACMR)"
 status=0
 
+# Is the named compose service up and usable for running a check?
+compose_service_running() {
+    docker compose ps --status running --services 2>/dev/null | grep -qx "$1"
+}
+
+# The running container is PREFERRED over local tooling, not a fallback.
+# .venv/node_modules are per-machine and explicitly not portable across the
+# Mac/Linux split this repo syncs over -- and on the NAS mount they can be
+# present but broken (npm's node_modules/.bin symlinks land as SMB "XSym"
+# stubs that Linux cannot exec, so a directory-exists check passes while
+# every binary fails). The container is the documented way to run this
+# project and is the same on every machine, so it wins when available.
+
+unavailable() {
+    local what="$1" remedy="$2"
+    if [[ "${SKIP_HOOK_TOOLING:-0}" == "1" ]]; then
+        echo "[pre-commit] SKIPPING $what — SKIP_HOOK_TOOLING=1 was set." >&2
+        return 0
+    fi
+    echo "[pre-commit] ERROR: cannot run $what — no local tooling and no running container." >&2
+    echo "[pre-commit]        $remedy" >&2
+    echo "[pre-commit]        Or re-run with SKIP_HOOK_TOOLING=1 if you accept the risk." >&2
+    return 1
+}
+
 if grep -q '^backend/' <<<"$changed_files"; then
     echo "[pre-commit] backend changed — running ruff..."
-    if [[ -x backend/.venv/bin/ruff ]]; then
+    if compose_service_running backend; then
+        docker compose exec -T backend ruff check app tests || status=1
+    elif [[ -x backend/.venv/bin/ruff ]]; then
         (cd backend && .venv/bin/ruff check app tests) || status=1
     elif command -v ruff >/dev/null 2>&1; then
         (cd backend && ruff check app tests) || status=1
     else
-        echo "[pre-commit] WARNING: ruff not found (no backend/.venv, not on PATH) — skipping backend lint." >&2
-        echo "[pre-commit]          See backend/README.md to set up the venv." >&2
+        unavailable "backend lint" \
+            "Set up backend/.venv (see backend/README.md), or start the stack: docker compose up -d backend" \
+            || status=1
     fi
 fi
 
 if grep -q '^web/' <<<"$changed_files"; then
     echo "[pre-commit] web changed — running oxlint + tsc..."
-    if [[ -d web/node_modules ]]; then
+    if compose_service_running web; then
+        docker compose exec -T web npm run lint || status=1
+        docker compose exec -T web npx tsc -b || status=1
+    elif [[ -d web/node_modules ]]; then
         (cd web && npm run lint) || status=1
         (cd web && npx tsc -b) || status=1
     else
-        echo "[pre-commit] WARNING: web/node_modules not found — skipping web lint. Run 'npm install' in web/." >&2
+        unavailable "web lint" \
+            "Run 'npm install' in web/, or start the stack: docker compose up -d web" \
+            || status=1
     fi
 fi
 
 if [[ $status -ne 0 ]]; then
-    echo "[pre-commit] Lint failed — fix the issues above, or bypass with 'git commit --no-verify' (not recommended)." >&2
+    echo "[pre-commit] Checks failed — fix the issues above, or bypass with 'git commit --no-verify' (not recommended)." >&2
     exit 1
 fi
 

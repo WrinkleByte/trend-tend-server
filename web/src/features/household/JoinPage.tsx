@@ -5,6 +5,7 @@ import { register } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { acceptInvite, previewInvite } from "../../api/households";
 import { isAuthenticated, useAuthStore } from "../../auth/authStore";
+import { StatusMessage } from "../../components/StatusMessage";
 
 const STATUS_MESSAGES: Record<string, string> = {
   accepted: "This invite has already been used.",
@@ -98,7 +99,7 @@ export function JoinPage() {
           You&rsquo;ve been invited to join as a <strong>{preview.role}</strong>, using{" "}
           <strong>{preview.invited_email}</strong>.
         </p>
-        {error && <p className="form-error">{error}</p>}
+        {error && <StatusMessage>{error}</StatusMessage>}
 
         {isAuthenticated() ? (
           <button type="button" disabled={acceptMutation.isPending} onClick={() => acceptMutation.mutate()}>

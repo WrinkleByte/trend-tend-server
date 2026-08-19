@@ -165,6 +165,28 @@
   font-size: 14px;
 }
 
+.form-success {
+  color: #15803d;
+  font-size: 14px;
+}
+
+/* Keyboard-only shortcut past the nav, which otherwise has to be tabbed
+   through on every page. Visually hidden until focused. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 10px 16px;
+  background: var(--navy-bottom, #0f1b2d);
+  color: #fff;
+  border-radius: 0 0 8px 0;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
 /* Generic form controls */
 label {
   display: flex;

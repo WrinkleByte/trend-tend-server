@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { login } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { useAuthStore } from "../../auth/authStore";
+import { StatusMessage } from "../../components/StatusMessage";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -33,7 +34,7 @@ export function LoginPage() {
     <div className="auth-page">
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1>Log in</h1>
-        {error && <p className="form-error">{error}</p>}
+        {error && <StatusMessage>{error}</StatusMessage>}
         <label>
           Email
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />

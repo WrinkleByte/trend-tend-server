@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { restoreBackup, type RestoreConflict, type RestoreSummary } from '../../api/restore';
+import { StatusMessage } from "../../components/StatusMessage";
 
 interface RestoreState {
   status: 'idle' | 'restoring' | 'conflict' | 'success' | 'error';
@@ -132,7 +133,7 @@ export function RestoreBackup({ onRestored }: RestoreBackupProps) {
         </div>
       )}
 
-      {state.status === 'error' && <p className="form-error" style={{ marginTop: '12px' }}>{state.errorMessage}</p>}
+      {state.status === 'error' && <StatusMessage style={{ marginTop: '12px' }}>{state.errorMessage}</StatusMessage>}
     </section>
   );
 }

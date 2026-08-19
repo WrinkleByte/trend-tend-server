@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { register } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { useAuthStore } from "../../auth/authStore";
+import { StatusMessage } from "../../components/StatusMessage";
 
 /**
  * Shown instead of the normal login/register flow when GET /auth/setup-status
@@ -46,7 +47,7 @@ export function SetupPage() {
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1>Welcome to WrinkleByte Maintenance Tracker</h1>
         <p>This looks like a fresh install — set up the first account to get started.</p>
-        {error && <p className="form-error">{error}</p>}
+        {error && <StatusMessage>{error}</StatusMessage>}
         <label>
           Your name
           <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />

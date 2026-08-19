@@ -4,6 +4,7 @@ import { createFuelLogsBulk } from '../../api/fuelLogs';
 import { createMaintenanceRecordsBulk } from '../../api/maintenanceRecords';
 import type { Asset, AssetType, CreateFuelLogRequest, MaintenanceRecordCreateInput } from '../../api/types';
 import { ASSET_TYPES } from '../assets/assetTypes';
+import { StatusMessage } from "../../components/StatusMessage";
 
 // Fuelly's "Vehicle" column is really just "thing this entry was for" —
 // Fuelly is used for small engines (mowers, generators) as much as cars, so
@@ -461,10 +462,10 @@ export function FuellyImport({ assets, onAssetsCreated }: { assets: Asset[]; onA
           {mode === 'specific' && (
             <div>
               {importableAssets.length === 0 ? (
-                <p className="form-error">
+                <StatusMessage>
                   You don't have any assets yet. Add one on the Assets page, or use "Import everything" above to
                   create them automatically from this file.
-                </p>
+                </StatusMessage>
               ) : (
                 <>
                   <label style={{ display: 'block', marginBottom: '4px' }}>CSV entry</label>

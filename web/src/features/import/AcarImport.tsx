@@ -5,6 +5,7 @@ import { createFuelLogsBulk } from '../../api/fuelLogs';
 import { createMaintenanceRecordsBulk } from '../../api/maintenanceRecords';
 import type { Asset, AssetType, CreateFuelLogRequest, MaintenanceRecordCreateInput } from '../../api/types';
 import { ASSET_TYPES } from '../assets/assetTypes';
+import { StatusMessage } from "../../components/StatusMessage";
 
 // aCar was a product later acquired by Fuelly (Vikunja #8) -- this mirrors
 // FuellyImport.tsx's overall shape (parse -> group by vehicle -> per-group
@@ -408,7 +409,7 @@ export function AcarImport({ assets, onAssetsCreated }: { assets: Asset[]; onAss
           style={{ marginBottom: '10px' }}
         />
         {file && <p>✓ File selected: {file.name}</p>}
-        {error && <p className="form-error">{error}</p>}
+        {error && <StatusMessage>{error}</StatusMessage>}
       </div>
 
       {parseResult && parseResult.vehicleGroups.length > 0 && (
