@@ -1,7 +1,19 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The literal shipped as jwt_secret's default. Named so the startup guard
+# below can recognise it: this value is in a public repo, so any instance
+# still running it has a forgeable auth system — anyone can mint a token
+# for any user in any household. Must never be the effective secret
+# outside an explicitly dev-mode instance.
+INSECURE_DEFAULT_JWT_SECRET = "dev-secret-change-me"
+
+# HS256 keys shorter than the hash output add no security beyond their own
+# length; PyJWT warns about this at runtime (InsecureKeyLengthWarning).
+MIN_JWT_SECRET_BYTES = 32
 
 
 class Settings(BaseSettings):
@@ -9,7 +21,14 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://wrinklebyte:wrinklebyte@localhost:5432/wrinklebyte"
 
-    jwt_secret: str = "dev-secret-change-me"
+    # Opt-in escape hatch for the startup guard in _reject_insecure_defaults
+    # below. Set DEV_MODE=true for local dev / CI / the docker-compose stack;
+    # never in a real deployment. Deliberately defaults to False so that
+    # forgetting it fails loudly rather than silently running insecurely —
+    # the safe state is the default, and the unsafe one takes an explicit act.
+    dev_mode: bool = False
+
+    jwt_secret: str = INSECURE_DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     jwt_access_token_ttl_minutes: int = 15
     jwt_refresh_token_ttl_days: int = 30
@@ -45,6 +64,42 @@ class Settings(BaseSettings):
     # UI — for deployments that want .env to be the sole SMTP source of
     # truth rather than a one-time default.
     smtp_force_env: bool = False
+
+    @model_validator(mode="after")
+    def _reject_insecure_defaults(self) -> "Settings":
+        """Refuse to start an instance whose auth could be trivially forged.
+
+        This project is open-source and self-hosted by design, so the default
+        jwt_secret below isn't merely weak — it's public knowledge. An
+        instance running it lets anyone mint an access token for any
+        household, with no exploit required. That's a silent failure with no
+        symptom until someone notices, which is exactly the kind of mistake a
+        self-hoster shouldn't be able to make by omission, so it's fatal at
+        boot rather than a logged warning.
+        """
+        if self.dev_mode:
+            return self
+
+        problems = []
+        if self.jwt_secret == INSECURE_DEFAULT_JWT_SECRET:
+            problems.append(
+                "JWT_SECRET is still the built-in default, which is published in this "
+                "project's source — anyone could forge tokens for any account."
+            )
+        elif len(self.jwt_secret.encode("utf-8")) < MIN_JWT_SECRET_BYTES:
+            problems.append(
+                f"JWT_SECRET is shorter than {MIN_JWT_SECRET_BYTES} bytes, which weakens HS256 signing."
+            )
+
+        if problems:
+            raise ValueError(
+                "Refusing to start with an insecure configuration:\n"
+                + "\n".join(f"  - {p}" for p in problems)
+                + "\n\nGenerate one with:  python -c \"import secrets; print(secrets.token_urlsafe(48))\"\n"
+                "then set JWT_SECRET in your environment or .env file.\n"
+                "For local development only, set DEV_MODE=true to bypass this check."
+            )
+        return self
 
 
 @lru_cache

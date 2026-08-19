@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import reject_if_token_predates_invalidation
 from app.config import get_settings
 from app.core.email import send_email
 from app.core.instance_settings import get_or_create_instance_settings
@@ -63,6 +64,18 @@ _login_limiter = RateLimiter(times=10, seconds=60)
 _register_limiter = RateLimiter(times=10, seconds=60)
 _forgot_password_limiter = RateLimiter(times=5, seconds=300)
 _reset_password_limiter = RateLimiter(times=5, seconds=300)
+# Refresh was the one unauthenticated auth endpoint with no limiter at all
+# (review S12), despite accepting a long-lived credential. Looser than
+# login: legitimate clients refresh on a timer, so the ceiling only needs
+# to stop bulk token-grinding, not normal use.
+_refresh_limiter = RateLimiter(times=30, seconds=60)
+
+# Verified against when no user matches, purely so the timing of a failed
+# login doesn't reveal whether the account exists (review S10). Computed once
+# at import rather than per-request -- hashing here would itself cost a full
+# Argon2 round on every miss. The plaintext is irrelevant and unusable: no
+# user row carries this hash, so it can never authenticate anything.
+DUMMY_PASSWORD_HASH = hash_password("timing-equalisation-only-never-a-real-password")
 
 
 async def _consume_pending_invite(db: AsyncSession, token: str, email: str) -> HouseholdInvite:
@@ -161,7 +174,16 @@ async def login(
 ) -> TokenResponse:
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
-    if user is None or user.password_hash is None or not verify_password(payload.password, user.password_hash):
+    # Verify against a dummy hash when there's no such user, so both paths pay
+    # the same Argon2 cost (review S10). Argon2 is deliberately slow, so
+    # skipping it for unknown emails made "no such account" measurably faster
+    # than "wrong password" -- a clean timing oracle for which addresses are
+    # registered, which undercuts the care forgot_password takes below to
+    # avoid leaking exactly that.
+    if user is None or user.password_hash is None:
+        verify_password(payload.password, DUMMY_PASSWORD_HASH)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
+    if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
 
     memberships_result = await db.execute(
@@ -187,7 +209,11 @@ async def login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(payload: RefreshRequest) -> TokenResponse:
+async def refresh(
+    payload: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(_refresh_limiter),
+) -> TokenResponse:
     try:
         claims = decode_token(payload.refresh_token)
     except Exception as exc:
@@ -197,6 +223,13 @@ async def refresh(payload: RefreshRequest) -> TokenResponse:
 
     user_id = uuid.UUID(claims["sub"])
     household_id = uuid.UUID(claims["household_id"])
+
+    # A refresh token outlives an access token by 30 days to 15 minutes, so
+    # it's the credential worth stealing -- it must respect the same
+    # invalidation cutoff a password reset sets, or resetting would evict
+    # only the short-lived half of a compromised session (review S5/S6).
+    await reject_if_token_predates_invalidation(db, user_id, claims)
+
     return TokenResponse(
         access_token=create_access_token(user_id=user_id, household_id=household_id),
         refresh_token=create_refresh_token(user_id=user_id, household_id=household_id),
@@ -267,8 +300,27 @@ async def reset_password(
     if user is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired reset token")
 
+    now = utcnow()
     user.password_hash = hash_password(payload.new_password)
-    reset_token.used_at = utcnow()
+    reset_token.used_at = now
+    # Evict every existing session (2026-08-19 review, S5). Without this, a
+    # reset changed the password but left previously-issued tokens working --
+    # refresh tokens for up to 30 days. Since the usual reason to reset is a
+    # suspected compromise, the one action a user takes to lock an attacker
+    # out did not actually do so.
+    user.tokens_valid_after = now
+
+    # Any other outstanding reset tokens for this user are burned too --
+    # otherwise an older reset email remains a live path to the account.
+    other_tokens = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+        )
+    )
+    for token in other_tokens.scalars():
+        token.used_at = now
+
     await db.commit()
 
     return {"detail": "Password reset successfully."}

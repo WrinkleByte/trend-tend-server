@@ -1,11 +1,35 @@
 import uuid
+from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, model_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator
+
+# Password policy (2026-08-19 review, S4). Previously `password: str` with no
+# constraint at all -- "a" was a valid password on both register and reset.
+#
+# Length-only, deliberately: NIST SP 800-63B advises *against* forced
+# composition rules (mixed case / digits / symbols), which push people toward
+# predictable mutations like "Password1!" without adding real entropy. Length
+# is what actually helps, so that's what we require.
+#
+# The maximum is a denial-of-service bound rather than a security limit --
+# Argon2 is intentionally slow, so accepting an unbounded password means
+# accepting unbounded server-side work per login attempt.
+MIN_PASSWORD_LENGTH = 12
+MAX_PASSWORD_LENGTH = 128
+
+Password = Annotated[
+    str,
+    Field(
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_PASSWORD_LENGTH,
+        description=f"At least {MIN_PASSWORD_LENGTH} characters.",
+    ),
+]
 
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: Password
     display_name: str
     household_name: str | None = None
     # When set, registration joins the invite's existing household (with its
@@ -21,6 +45,11 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    # Deliberately NOT the constrained Password type. Login must accept any
+    # string and simply fail verification: accounts created before the policy
+    # existed still have short passwords and must remain able to log in (and
+    # then change it), and rejecting at the schema would tell an attacker the
+    # policy's exact bounds for free.
     email: EmailStr
     password: str
 
@@ -57,4 +86,4 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str
+    new_password: Password

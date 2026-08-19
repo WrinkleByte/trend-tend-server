@@ -323,3 +323,85 @@ async def test_list_attachments_requires_exactly_one_entity_id(client, auth_head
         params={"record_id": record_id, "fuel_log_id": fuel_log_id},
     )
     assert both_params.status_code == 400
+
+
+# --- Blob serving must not let an upload execute on our origin (review S3) ---
+#
+# content_type is whatever the uploading client claimed; it is never sniffed
+# or validated on the way in. Echoing it back unchecked turned "can upload a
+# file" into stored XSS on the API's own origin -- which the web app shares,
+# while keeping its tokens in localStorage.
+
+
+async def test_html_attachment_is_not_served_as_renderable_html(client, auth_headers):
+    record_id = await _create_record(client, auth_headers)
+    upload = await client.post(
+        f"/api/v1/attachments?record_id={record_id}",
+        headers=auth_headers,
+        files={"file": ("payload.html", b"<script>alert(1)</script>", "text/html")},
+    )
+    assert upload.status_code == 201
+
+    blob = await client.get(f"/api/v1/attachments/{upload.json()['id']}/blob", headers=auth_headers)
+    assert blob.status_code == 200
+    # The bytes are still returned intact -- this is about how they're typed.
+    assert blob.content == b"<script>alert(1)</script>"
+    assert blob.headers["content-type"].startswith("application/octet-stream")
+    assert blob.headers["content-disposition"].startswith("attachment")
+    assert blob.headers["x-content-type-options"] == "nosniff"
+
+
+async def test_svg_attachment_is_not_served_inline(client, auth_headers):
+    # SVG is an image by extension but an XML document that can carry
+    # <script>, so it must be treated as a download, not an image.
+    record_id = await _create_record(client, auth_headers)
+    upload = await client.post(
+        f"/api/v1/attachments?record_id={record_id}",
+        headers=auth_headers,
+        files={"file": ("x.svg", b"<svg xmlns='http://www.w3.org/2000/svg'/>", "image/svg+xml")},
+    )
+    blob = await client.get(f"/api/v1/attachments/{upload.json()['id']}/blob", headers=auth_headers)
+    assert blob.headers["content-type"].startswith("application/octet-stream")
+    assert blob.headers["content-disposition"].startswith("attachment")
+
+
+async def test_real_photo_still_renders_inline(client, auth_headers):
+    # The mitigation must not break the actual use case: receipt and
+    # odometer photos are shown in-app, not downloaded.
+    record_id = await _create_record(client, auth_headers)
+    upload = await client.post(
+        f"/api/v1/attachments?record_id={record_id}",
+        headers=auth_headers,
+        files={"file": ("receipt.jpg", b"\xff\xd8\xff\xe0 not really a jpeg", "image/jpeg")},
+    )
+    blob = await client.get(f"/api/v1/attachments/{upload.json()['id']}/blob", headers=auth_headers)
+    assert blob.headers["content-type"].startswith("image/jpeg")
+    assert blob.headers["content-disposition"].startswith("inline")
+
+
+async def test_filename_cannot_inject_content_disposition_directives(client, auth_headers):
+    record_id = await _create_record(client, auth_headers)
+    upload = await client.post(
+        f"/api/v1/attachments?record_id={record_id}",
+        headers=auth_headers,
+        files={"file": ('ev"il.txt', b"data", "text/plain")},
+    )
+    blob = await client.get(f"/api/v1/attachments/{upload.json()['id']}/blob", headers=auth_headers)
+    disposition = blob.headers["content-disposition"]
+    assert disposition.count('"') == 2, disposition
+
+
+# --- Upload size cap (review S8) ---
+
+
+async def test_oversized_upload_is_rejected(client, auth_headers):
+    from app.api.v1.attachments import MAX_ATTACHMENT_BYTES
+
+    record_id = await _create_record(client, auth_headers)
+    too_big = b"x" * (MAX_ATTACHMENT_BYTES + 1024)
+    response = await client.post(
+        f"/api/v1/attachments?record_id={record_id}",
+        headers=auth_headers,
+        files={"file": ("huge.bin", too_big, "application/octet-stream")},
+    )
+    assert response.status_code == 413

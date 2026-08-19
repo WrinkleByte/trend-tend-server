@@ -30,6 +30,11 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+asyncpg://wrinklebyte:wrinklebyte@postgres:5432/wrinklebyte
+      # This compose file is the LOCAL DEV stack. DEV_MODE bypasses the
+      # startup guard in app/config.py that otherwise refuses to boot with
+      # the published default secret below. A real deployment must set a
+      # generated JWT_SECRET and leave DEV_MODE unset — see .env.example.
+      DEV_MODE: "true"
       JWT_SECRET: dev-secret-change-me
       STORAGE_BACKEND: local_disk
       STORAGE_LOCAL_ROOT: /data/attachments

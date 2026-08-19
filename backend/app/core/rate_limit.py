@@ -24,20 +24,40 @@ class RateLimiter:
 
     _all_instances: ClassVar[list["RateLimiter"]] = []
 
+    # How many requests may pass before sweeping expired keys. Stale entries
+    # were previously pruned only when that same IP was seen again, so an
+    # attacker rotating source addresses -- trivial across an IPv6 /64 --
+    # grew _hits without bound, a slow memory exhaustion against the single
+    # worker this whole design assumes (review S11). Amortised: the sweep is
+    # O(keys) but runs once per this many calls, not per call.
+    _SWEEP_EVERY_N_CALLS = 1000
+
     def __init__(self, times: int, seconds: int) -> None:
         self.times = times
         self.window_seconds = seconds
         self._hits: dict[str, list[float]] = {}
+        self._calls_since_sweep = 0
         RateLimiter._all_instances.append(self)
+
+    def _sweep(self, cutoff: float) -> None:
+        """Drop every key whose hits have all aged out of the window."""
+        for key in [k for k, hits in self._hits.items() if not hits or hits[-1] < cutoff]:
+            del self._hits[key]
 
     def reset(self) -> None:
         """Test-only hook -- see conftest.py's autouse reset fixture."""
         self._hits.clear()
+        self._calls_since_sweep = 0
 
     async def __call__(self, request: Request) -> None:
         key = request.client.host if request.client else "unknown"
         now = time.monotonic()
         cutoff = now - self.window_seconds
+
+        self._calls_since_sweep += 1
+        if self._calls_since_sweep >= self._SWEEP_EVERY_N_CALLS:
+            self._calls_since_sweep = 0
+            self._sweep(cutoff)
 
         hits = self._hits.get(key)
         if hits is not None:

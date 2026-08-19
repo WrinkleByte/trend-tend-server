@@ -1,4 +1,5 @@
 import base64
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -39,6 +40,12 @@ from app.schemas.sync import (
 )
 
 router = APIRouter(prefix="/sync", tags=["sync"])
+logger = logging.getLogger("app.sync")
+
+# Raw SQLAlchemy error text names tables, columns and constraints. That is
+# useful in a server log and nobody else's business over the wire, so the
+# client gets a fixed string and the detail goes to the log (review S9).
+_GENERIC_DB_ERROR_DETAIL = "Could not apply this change."
 
 PAGE_SIZE = 200
 
@@ -248,6 +255,27 @@ async def _apply_change(
     )
     existing = result.scalar_one_or_none()
 
+    if existing is None:
+        # The lookup above is household-scoped, so an id belonging to ANOTHER
+        # household also lands here as "not found" -- and the create path
+        # below would then attempt an insert on an id that already exists,
+        # producing a primary-key violation whose response differs from a
+        # clean accept. That difference is a working oracle for "does this
+        # UUID exist on this instance", and it used to leak the constraint
+        # name along with the answer (review S9).
+        #
+        # Check globally and reject identically to any other rejected change.
+        # attachments.py's upload handler already does exactly this for the
+        # same reason; this mirrors it.
+        collision = await db.execute(select(config.model.id).where(config.model.id == change.id))
+        if collision.scalar_one_or_none() is not None:
+            return SyncPushResult(
+                id=change.id,
+                status="rejected",
+                reason="id_conflict",
+                detail="This id is already in use.",
+            )
+
     if existing is not None and existing.version != change.base_version:
         return SyncPushResult(
             id=change.id,
@@ -275,12 +303,13 @@ async def _apply_change(
                 existing.version += 1
                 existing.updated_at = utcnow()
                 await db.flush()
-        except SQLAlchemyError as exc:
+        except SQLAlchemyError:
+            logger.exception("sync push failed for %s %s", change.entity_type, change.id)
             return SyncPushResult(
                 id=change.id,
                 status="rejected",
                 reason="database_error",
-                detail=str(exc),
+                detail=_GENERIC_DB_ERROR_DETAIL,
             )
         return SyncPushResult(
             id=change.id,
@@ -339,9 +368,10 @@ async def _apply_change(
                 existing.updated_at = utcnow()
                 await db.flush()
                 new_version, server_updated_at = existing.version, existing.updated_at
-    except SQLAlchemyError as exc:
+    except SQLAlchemyError:
+        logger.exception("sync push failed for %s %s", change.entity_type, change.id)
         return SyncPushResult(
-            id=change.id, status="rejected", reason="database_error", detail=str(exc)
+            id=change.id, status="rejected", reason="database_error", detail=_GENERIC_DB_ERROR_DETAIL
         )
 
     return SyncPushResult(

@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import jwt as pyjwt
 from fastapi import Depends, HTTPException, status
@@ -42,6 +43,34 @@ async def _get_membership(
     if membership is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not a member of this household")
     return membership
+
+
+async def reject_if_token_predates_invalidation(
+    db: AsyncSession, user_id: uuid.UUID, payload: dict
+) -> None:
+    """Enforce User.tokens_valid_after against a JWT's issued-at claim.
+
+    Password reset bumps that column, which is what makes every token issued
+    before the reset stop working -- see the field's comment in models/user.py.
+    Applies to JWTs only; API keys carry their own explicit revoked_at.
+    """
+    result = await db.execute(select(User.tokens_valid_after).where(User.id == user_id))
+    cutoff = result.scalar_one_or_none()
+    if cutoff is None:
+        return
+
+    issued_at = payload.get("iat")
+    if issued_at is None:
+        # Pre-dates the claim being set, so it cannot be proven to post-date
+        # the invalidation -- refuse rather than assume in the token's favour.
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session is no longer valid")
+
+    issued = datetime.fromtimestamp(issued_at, tz=UTC)
+    # `iat` has whole-second resolution while the cutoff is microsecond-
+    # precise, so a token minted in the same second as the reset would
+    # otherwise survive it. Compare on that boundary rather than exactly.
+    if issued < cutoff.replace(microsecond=0):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session is no longer valid")
 
 
 async def get_current_principal(
@@ -87,6 +116,7 @@ async def get_current_principal(
     user_id = uuid.UUID(payload["sub"])
     household_id = uuid.UUID(payload["household_id"])
     device_id = uuid.UUID(payload["device_id"]) if payload.get("device_id") else None
+    await reject_if_token_predates_invalidation(db, user_id, payload)
     membership = await _get_membership(db, user_id, household_id)
     return Principal(
         user_id=user_id,

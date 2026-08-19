@@ -1,3 +1,6 @@
+import uuid
+
+
 async def _register_and_login(client, email: str, household_name: str) -> dict:
     response = await client.post(
         "/api/v1/auth/register",
@@ -262,3 +265,108 @@ async def test_sync_push_cannot_reassign_an_owned_fuel_log_to_another_households
     result = reassign.json()["results"][0]
     assert result["status"] == "rejected"
     assert result["reason"] == "invalid_reference"
+
+
+# --- Cross-household unlink of an attachment (2026-08-19 review, S1) ---
+#
+# unlink_attachment ran a raw delete filtered only on the two path UUIDs,
+# with no household scoping at all, while its sibling link_attachment
+# checked both sides. Anyone who knew (or brute-forced) an
+# attachment_id/record_id pair could sever another household's link. Same
+# shape as the #32 findings above; missed by that sweep because #32 targeted
+# create/update paths and this is a delete.
+
+
+async def test_cannot_unlink_another_households_attachment(client):
+    owner = await _register_and_login(client, "owner-unlink@example.com", "House Owner Unlink")
+    attacker = await _register_and_login(client, "attacker-unlink@example.com", "House Attacker Unlink")
+    owner_headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    attacker_headers = {"Authorization": f"Bearer {attacker['access_token']}"}
+
+    asset = await client.post(
+        "/api/v1/assets", headers=owner_headers, json={"asset_type": "vehicle", "name": "Victim Car"}
+    )
+    record = await client.post(
+        "/api/v1/maintenance-records",
+        headers=owner_headers,
+        json={"asset_id": asset.json()["id"], "performed_at": "2026-01-01", "category": "oil_change"},
+    )
+    record_id = record.json()["id"]
+
+    upload = await client.post(
+        f"/api/v1/attachments?record_id={record_id}",
+        headers=owner_headers,
+        files={"file": ("receipt.txt", b"receipt bytes", "text/plain")},
+    )
+    assert upload.status_code == 201
+    attachment_id = upload.json()["id"]
+
+    attack = await client.delete(
+        f"/api/v1/attachments/{attachment_id}/link/{record_id}", headers=attacker_headers
+    )
+    assert attack.status_code == 404
+
+    # The link must still be intact for its actual owner.
+    still_linked = await client.get(f"/api/v1/attachments?record_id={record_id}", headers=owner_headers)
+    assert [a["id"] for a in still_linked.json()] == [attachment_id]
+
+    # ...and the legitimate owner can still unlink it.
+    ok = await client.delete(
+        f"/api/v1/attachments/{attachment_id}/link/{record_id}", headers=owner_headers
+    )
+    assert ok.status_code == 204
+
+
+# --- Sync push must not confirm the existence of another household's id (S9) ---
+
+
+async def test_sync_push_does_not_reveal_another_households_row_id(client):
+    owner = await _register_and_login(client, "owner-probe@example.com", "House Owner Probe")
+    attacker = await _register_and_login(client, "attacker-probe@example.com", "House Attacker Probe")
+    owner_headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    attacker_headers = {"Authorization": f"Bearer {attacker['access_token']}"}
+
+    victim_asset_id = (
+        await client.post(
+            "/api/v1/assets", headers=owner_headers, json={"asset_type": "vehicle", "name": "Victim"}
+        )
+    ).json()["id"]
+
+    device = await client.post(
+        "/api/v1/sync/devices", headers=attacker_headers, json={"platform": "ios", "device_name": "probe"}
+    )
+    device_id = device.json()["id"]
+
+    async def push(asset_id: str) -> dict:
+        response = await client.post(
+            "/api/v1/sync/push",
+            headers=attacker_headers,
+            json={
+                "device_id": device_id,
+                "changes": [
+                    {
+                        "entity_type": "asset",
+                        "id": asset_id,
+                        "base_version": 0,
+                        "client_updated_at": "2026-01-01T00:00:00Z",
+                        "data": {"asset_type": "vehicle", "name": "probe"},
+                    }
+                ],
+            },
+        )
+        return response.json()["results"][0]
+
+    existing_elsewhere = await push(victim_asset_id)
+    never_seen = await push(str(uuid.uuid4()))
+
+    # Probing an id that exists in another household must be rejected...
+    assert existing_elsewhere["status"] == "rejected"
+    assert existing_elsewhere["reason"] == "id_conflict"
+    # ...without ever leaking schema internals in the detail.
+    assert "household" not in (existing_elsewhere.get("detail") or "").lower()
+    assert "constraint" not in (existing_elsewhere.get("detail") or "").lower()
+
+    # An unused id is genuinely accepted, which is what makes the above a
+    # distinguishable answer -- the point is that it's a *clean* rejection
+    # carrying no schema detail, not a 500 with a constraint name in it.
+    assert never_seen["status"] == "accepted"

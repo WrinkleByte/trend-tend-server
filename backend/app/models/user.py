@@ -26,4 +26,18 @@ class User(Base):
     # can host multiple independent households but has exactly one set of
     # instance settings (SMTP, etc. — see InstanceSettings) to administer.
     is_instance_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Every access/refresh token issued before this instant is treated as
+    # invalid (2026-08-19 review, S5). Bumped on password reset, which
+    # previously left existing sessions fully usable -- so a user who reset
+    # their password *because* they believed they were compromised did not
+    # actually evict the attacker, whose refresh token stayed good for up to
+    # 30 days.
+    #
+    # A single timestamp rather than a token denylist: revocation here is
+    # always all-or-nothing per user, so there's nothing to gain from
+    # tracking individual tokens, and this needs no cleanup job. Compared
+    # against the token's `iat` in deps.get_current_principal.
+    tokens_valid_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

@@ -135,14 +135,14 @@ async def test_reset_password_expired_token_rejected(client, db_session):
     await db_session.commit()
 
     response = await client.post(
-        "/api/v1/auth/reset-password", json={"token": token.token, "new_password": "irrelevant"}
+        "/api/v1/auth/reset-password", json={"token": token.token, "new_password": "irrelevant but long enough"}
     )
     assert response.status_code == 400
 
 
 async def test_reset_password_garbage_token_rejected(client):
     response = await client.post(
-        "/api/v1/auth/reset-password", json={"token": "not-a-real-token", "new_password": "irrelevant"}
+        "/api/v1/auth/reset-password", json={"token": "not-a-real-token", "new_password": "irrelevant but long enough"}
     )
     assert response.status_code == 400
 
@@ -238,3 +238,151 @@ async def test_get_or_create_instance_settings_is_a_true_singleton(client, auth_
     result = await db_session.execute(select(InstanceSettings))
     rows = result.scalars().all()
     assert len(rows) == 1
+
+
+# --- Password reset must evict existing sessions (review S5/S6) ---
+#
+# Reset previously changed the password but left every already-issued token
+# working -- refresh tokens for up to 30 days. Since the usual reason to
+# reset is a suspected compromise, the one action a user takes to lock an
+# attacker out did not actually do so.
+
+
+async def _reset_token_for(db_session, user_email: str) -> str:
+    from sqlalchemy import select
+
+    from app.models.password_reset_token import PasswordResetToken
+    from app.models.user import User
+
+    user = (await db_session.execute(select(User).where(User.email == user_email))).scalar_one()
+    token = (
+        await db_session.execute(
+            select(PasswordResetToken)
+            .where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
+            .order_by(PasswordResetToken.expires_at.desc())
+        )
+    ).scalars().first()
+    return token.token
+
+
+async def test_password_reset_invalidates_existing_access_token(client, db_session):
+    email = "evict-access@example.com"
+    register = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "the original password",
+            "display_name": "Evict",
+            "household_name": "Evict House",
+        },
+    )
+    stolen_headers = {"Authorization": f"Bearer {register.json()['access_token']}"}
+
+    # The stolen token works before the reset.
+    assert (await client.get("/api/v1/assets", headers=stolen_headers)).status_code == 200
+
+    await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    token = await _reset_token_for(db_session, email)
+    reset = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "new_password": "a completely new password"},
+    )
+    assert reset.status_code == 200
+
+    # ...and must not afterwards.
+    assert (await client.get("/api/v1/assets", headers=stolen_headers)).status_code == 401
+
+
+async def test_password_reset_invalidates_existing_refresh_token(client, db_session):
+    email = "evict-refresh@example.com"
+    register = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "the original password",
+            "display_name": "Evict",
+            "household_name": "Evict House 2",
+        },
+    )
+    stolen_refresh = register.json()["refresh_token"]
+
+    await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    token = await _reset_token_for(db_session, email)
+    await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "new_password": "a completely new password"},
+    )
+
+    # The refresh token is the credential worth stealing -- 30 days vs 15
+    # minutes -- so it must not survive the reset either.
+    refreshed = await client.post("/api/v1/auth/refresh", json={"refresh_token": stolen_refresh})
+    assert refreshed.status_code == 401
+
+
+async def test_login_after_reset_still_works(client, db_session):
+    # The eviction must not lock out the legitimate user.
+    email = "evict-login@example.com"
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "the original password",
+            "display_name": "Evict",
+            "household_name": "Evict House 3",
+        },
+    )
+    await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    token = await _reset_token_for(db_session, email)
+    await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "new_password": "a completely new password"},
+    )
+
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": email, "password": "a completely new password"}
+    )
+    assert login.status_code == 200
+    fresh_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert (await client.get("/api/v1/assets", headers=fresh_headers)).status_code == 200
+
+
+# --- Password policy (review S4) ---
+
+
+async def test_register_rejects_a_short_password(client):
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "short@example.com",
+            "password": "short",
+            "display_name": "Short",
+            "household_name": "Short House",
+        },
+    )
+    assert response.status_code == 422
+
+
+async def test_reset_rejects_a_short_password(client, db_session):
+    email = "short-reset@example.com"
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "the original password",
+            "display_name": "Short",
+            "household_name": "Short House 2",
+        },
+    )
+    await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    token = await _reset_token_for(db_session, email)
+    response = await client.post(
+        "/api/v1/auth/reset-password", json={"token": token, "new_password": "short"}
+    )
+    assert response.status_code == 422
+
+
+async def test_login_does_not_apply_the_length_policy(client):
+    # Pre-policy accounts must still be able to log in (and then change it),
+    # and the login schema must not advertise the policy's bounds.
+    response = await client.post("/api/v1/auth/login", json={"email": "nobody@example.com", "password": "x"})
+    assert response.status_code == 401
