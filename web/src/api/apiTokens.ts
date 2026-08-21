@@ -12,3 +12,10 @@ export function createApiToken(name: string): Promise<ApiTokenCreated> {
 export function revokeApiToken(id: string): Promise<void> {
   return apiFetch(`/api-tokens/${id}`, { method: "DELETE" });
 }
+
+// Only valid once a token is already revoked (backend enforces revoke-first,
+// see api_tokens.py's delete_api_token doc comment) -- removes the row
+// entirely rather than just marking it inactive.
+export function deleteApiToken(id: string): Promise<void> {
+  return apiFetch(`/api-tokens/${id}/permanently`, { method: "DELETE" });
+}

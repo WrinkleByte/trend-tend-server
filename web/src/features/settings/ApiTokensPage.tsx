@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
-import { createApiToken, listApiTokens, revokeApiToken } from "../../api/apiTokens";
+import { createApiToken, deleteApiToken, listApiTokens, revokeApiToken } from "../../api/apiTokens";
 import { AdminHouseholdsSection } from "./AdminHouseholdsSection";
 import { useAssetPhotosEnabled } from "./assetPhotosSetting";
 import { InstanceSettingsSection } from "./InstanceSettingsSection";
@@ -30,6 +30,11 @@ export function ApiTokensPage() {
 
   const revokeMutation = useMutation({
     mutationFn: (id: string) => revokeApiToken(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["api-tokens"] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteApiToken(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["api-tokens"] }),
   });
 
@@ -106,6 +111,11 @@ export function ApiTokensPage() {
               {!token.revoked_at && (
                 <button type="button" className="danger" onClick={() => revokeMutation.mutate(token.id)}>
                   Revoke
+                </button>
+              )}
+              {token.revoked_at && (
+                <button type="button" className="danger" onClick={() => deleteMutation.mutate(token.id)}>
+                  Delete
                 </button>
               )}
             </li>
