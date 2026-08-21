@@ -107,6 +107,7 @@ class MaintenanceScheduleSyncData(BaseModel):
     anchor_date: date | None = None
     anchor_usage_value: int | None = None
     active: bool = True
+    dismissed_at: datetime | None = None
 
 
 class AttachmentSyncData(BaseModel):

@@ -1,8 +1,8 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,3 +36,10 @@ class MaintenanceSchedule(SyncedEntityMixin, Base):
         UUID(as_uuid=True), ForeignKey("maintenance_records.id"), nullable=True
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Set when a user taps "Ignore" on a due/overdue alert on any device;
+    # cleared when the schedule is next marked performed. Mirrors the mobile
+    # shared module's maintenanceSchedule.dismissedAt column 1:1 so the
+    # generic sync protocol (MaintenanceScheduleSyncData) can propagate a
+    # dismissal across every paired device in the household, not just the
+    # one it was dismissed on (Vikunja #42).
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
