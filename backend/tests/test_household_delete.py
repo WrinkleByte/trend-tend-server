@@ -1,11 +1,11 @@
 from sqlalchemy import select
 
 from app.models.asset import Asset, VehicleDetails
-from app.models.fuel_log import FuelLog
+from app.models.fuel_log import FuelLog, FuelLogAttachment
 from app.models.household import Household, HouseholdMembership
 from app.models.maintenance_record import MaintenanceRecord, RecordAttachment
 from app.models.maintenance_schedule import MaintenanceSchedule
-from app.models.trip_log import TripLog
+from app.models.trip_log import TripLog, TripLogAttachment
 from app.models.user import User
 
 
@@ -37,12 +37,13 @@ async def _populate_household(client, headers: dict) -> str:
     )
     asset_id = asset_response.json()["id"]
 
-    await client.post(
+    fuel_log_response = await client.post(
         "/api/v1/fuel-logs",
         headers=headers,
         json={"asset_id": asset_id, "performed_at": "2026-01-15", "odometer_reading": 41800, "gallons": "12.5"},
     )
-    await client.post(
+    fuel_log_id = fuel_log_response.json()["id"]
+    trip_log_response = await client.post(
         "/api/v1/trip-logs",
         headers=headers,
         json={
@@ -53,6 +54,22 @@ async def _populate_household(client, headers: dict) -> str:
             "end_odometer": "41550.0",
             "distance": "50.0",
         },
+    )
+    trip_log_id = trip_log_response.json()["id"]
+    # Regression coverage for Vikunja #89: a fuel/trip log with a photo
+    # attachment used to make deletion hit a real FK violation
+    # (fuel_log_attachments/trip_log_attachments were never cleaned up).
+    await client.post(
+        "/api/v1/attachments",
+        headers=headers,
+        params={"fuel_log_id": fuel_log_id},
+        files={"file": ("pump.jpg", b"fake-jpeg-bytes", "image/jpeg")},
+    )
+    await client.post(
+        "/api/v1/attachments",
+        headers=headers,
+        params={"trip_log_id": trip_log_id},
+        files={"file": ("odometer.jpg", b"fake-jpeg-bytes", "image/jpeg")},
     )
     schedule_response = await client.post(
         "/api/v1/maintenance-schedules",
@@ -127,6 +144,12 @@ async def test_delete_household_wipes_everything(client, db_session):
     ).scalar_one_or_none() is None
     assert (
         await db_session.execute(select(RecordAttachment))
+    ).scalar_one_or_none() is None
+    assert (
+        await db_session.execute(select(FuelLogAttachment))
+    ).scalar_one_or_none() is None
+    assert (
+        await db_session.execute(select(TripLogAttachment))
     ).scalar_one_or_none() is None
 
     # The user account itself survives — only their membership/data is gone.

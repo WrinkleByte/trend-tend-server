@@ -6,13 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.api_token import ApiToken
 from app.models.asset import Asset, EquipmentDetails, PropertyDetails, VehicleDetails
 from app.models.attachment import Attachment
-from app.models.fuel_log import FuelLog
+from app.models.fuel_log import FuelLog, FuelLogAttachment
 from app.models.household import Household, HouseholdInvite, HouseholdMembership
 from app.models.maintenance_record import MaintenanceRecord, RecordAttachment
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.mixins import utcnow
 from app.models.sync_device import SyncDevice
-from app.models.trip_log import TripLog
+from app.models.trip_log import TripLog, TripLogAttachment
 
 # Every SyncedEntityMixin table a household can hold. Adding a new entity
 # type (mirroring fuel_log, per the root CLAUDE.md invariant) means adding
@@ -22,14 +22,22 @@ _SYNCED_ENTITY_MODELS = (MaintenanceRecord, MaintenanceSchedule, FuelLog, TripLo
 
 async def _delete_non_synced_children(db: AsyncSession, household_id: uuid.UUID) -> None:
     """Hard-deletes join/detail rows that aren't independently synced —
-    RecordAttachment and the per-asset-type detail tables are always
-    read/written alongside their parent row, never synced on their own, so
-    it's safe to remove them immediately regardless of whether the parent
-    ends up soft-deleted (wipe) or hard-deleted (full household delete)."""
+    RecordAttachment/FuelLogAttachment/TripLogAttachment and the per-asset-
+    type detail tables are always read/written alongside their parent row,
+    never synced on their own, so it's safe to remove them immediately
+    regardless of whether the parent ends up soft-deleted (wipe) or hard-
+    deleted (full household delete). Without this, deleting/wiping a
+    household with any fuel/trip log that has a photo attachment hit a real
+    FK violation (Vikunja #89) — FuelLogAttachment/TripLogAttachment were
+    missing here even though RecordAttachment was already handled."""
     record_ids = select(MaintenanceRecord.id).where(MaintenanceRecord.household_id == household_id)
+    fuel_log_ids = select(FuelLog.id).where(FuelLog.household_id == household_id)
+    trip_log_ids = select(TripLog.id).where(TripLog.household_id == household_id)
     asset_ids = select(Asset.id).where(Asset.household_id == household_id)
 
     await db.execute(delete(RecordAttachment).where(RecordAttachment.record_id.in_(record_ids)))
+    await db.execute(delete(FuelLogAttachment).where(FuelLogAttachment.fuel_log_id.in_(fuel_log_ids)))
+    await db.execute(delete(TripLogAttachment).where(TripLogAttachment.trip_log_id.in_(trip_log_ids)))
     await db.execute(delete(VehicleDetails).where(VehicleDetails.asset_id.in_(asset_ids)))
     await db.execute(delete(EquipmentDetails).where(EquipmentDetails.asset_id.in_(asset_ids)))
     await db.execute(delete(PropertyDetails).where(PropertyDetails.asset_id.in_(asset_ids)))
