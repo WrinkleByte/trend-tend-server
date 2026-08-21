@@ -84,7 +84,7 @@ async def test_non_owner_cannot_create_or_list_or_revoke_invites(client, auth_he
     assert listing.status_code == 403
 
 
-async def test_revoke_invite(client, auth_headers):
+async def test_revoke_invite(client, auth_headers, db_session):
     invite = (
         await client.post(
             "/api/v1/households/invites", headers=auth_headers, json={"invited_email": "revoke-me@example.com"}
@@ -94,9 +94,16 @@ async def test_revoke_invite(client, auth_headers):
     revoke = await client.delete(f"/api/v1/households/invites/{invite['id']}", headers=auth_headers)
     assert revoke.status_code == 204
 
+    # The row itself really is revoked...
+    revoked_row = (
+        await db_session.execute(select(HouseholdInvite).where(HouseholdInvite.id == invite["id"]))
+    ).scalar_one()
+    assert revoked_row.status == "revoked"
+
+    # ...but a revoked invite has nothing left to do, so it doesn't linger in
+    # the owner's list (Vikunja #88).
     listing = await client.get("/api/v1/households/invites", headers=auth_headers)
-    revoked = next(i for i in listing.json() if i["id"] == invite["id"])
-    assert revoked["status"] == "revoked"
+    assert invite["id"] not in {i["id"] for i in listing.json()}
 
     # A revoked invite can't be revoked again.
     revoke_again = await client.delete(f"/api/v1/households/invites/{invite['id']}", headers=auth_headers)

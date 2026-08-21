@@ -155,11 +155,17 @@ async def create_invite(
 async def list_invites(
     principal: Principal = Depends(get_current_principal), db: AsyncSession = Depends(get_db)
 ) -> list[HouseholdInvite]:
+    """A revoked invite is never actionable again (revoke_invite below
+    refuses to revoke anything already revoked, and its token can't be
+    un-revoked) — excluded here so it doesn't linger in the owner's list
+    forever (Vikunja #88). Pending/accepted/expired all still show: pending
+    because it's actionable, accepted/expired as a useful record of what
+    happened."""
     _require_owner(principal)
 
     result = await db.execute(
         select(HouseholdInvite)
-        .where(HouseholdInvite.household_id == principal.household_id)
+        .where(HouseholdInvite.household_id == principal.household_id, HouseholdInvite.status != InviteStatus.REVOKED)
         .order_by(HouseholdInvite.created_at.desc())
     )
     return list(result.scalars().all())
