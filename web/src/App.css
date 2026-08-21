@@ -473,6 +473,17 @@ ul {
   color: #dc2626;
 }
 
+.invite-copy-fallback {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.invite-copy-fallback input {
+  font-size: 13px;
+}
+
 .record-cost {
   margin-left: auto;
   font-weight: 600;

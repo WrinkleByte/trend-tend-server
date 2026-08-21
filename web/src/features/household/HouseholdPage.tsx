@@ -42,6 +42,7 @@ export function HouseholdPage() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<HouseholdRole>("member");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [manualCopyInvite, setManualCopyInvite] = useState<{ id: string; url: string } | null>(null);
 
   const inviteMutation = useMutation({
     mutationFn: () => createInvite(email, role),
@@ -100,9 +101,25 @@ export function HouseholdPage() {
   }
 
   async function handleCopy(invite: { id: string; token: string }) {
-    await navigator.clipboard.writeText(inviteLink(invite.token));
-    setCopiedId(invite.id);
-    setTimeout(() => setCopiedId((current) => (current === invite.id ? null : current)), 2000);
+    const url = inviteLink(invite.token);
+    // The Clipboard API only exists in a secure context (HTTPS, or the
+    // special-cased "localhost") -- this app is normally self-hosted and
+    // reached over plain HTTP at a LAN address, which is NOT a secure
+    // context, so navigator.clipboard is undefined there. Previously this
+    // threw an uncaught TypeError the moment the button was clicked and did
+    // nothing else, which is exactly what "copy invite link doesn't work"
+    // looked like (Vikunja #87). Fall back to showing the link so it can be
+    // copied by hand instead of silently failing.
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard API unavailable (not a secure context)");
+      await navigator.clipboard.writeText(url);
+      setManualCopyInvite(null);
+      setCopiedId(invite.id);
+      setTimeout(() => setCopiedId((current) => (current === invite.id ? null : current)), 2000);
+    } catch {
+      setCopiedId(null);
+      setManualCopyInvite({ id: invite.id, url });
+    }
   }
 
   return (
@@ -162,6 +179,18 @@ export function HouseholdPage() {
                       Revoke
                     </button>
                   </>
+                )}
+                {manualCopyInvite?.id === invite.id && (
+                  <div className="invite-copy-fallback">
+                    <StatusMessage>Couldn&rsquo;t copy automatically — select and copy the link below.</StatusMessage>
+                    <input
+                      type="text"
+                      readOnly
+                      value={manualCopyInvite.url}
+                      onFocus={(e) => e.currentTarget.select()}
+                      ref={(el) => el?.focus()}
+                    />
+                  </div>
                 )}
               </li>
             ))}
