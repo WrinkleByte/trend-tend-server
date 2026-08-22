@@ -88,7 +88,11 @@ backend/
   tests/
 ```
 
-**Multi-tenancy** is enforced at the application layer via `household_id` row-scoping on every query, funneled through a shared `household_scoped_query()` helper so isolation is structurally hard to forget rather than a convention any single handler could skip. Postgres RLS is worth adding later as defense-in-depth once the schema stabilizes.
+**Multi-tenancy** is enforced at the application layer via `household_id` row-scoping on every query, funneled through a shared `household_scoped_query()` helper so isolation is structurally hard to forget rather than a convention any single handler could skip. Vikunja #44 adds a database-layer backstop for this — Postgres RLS policies on every `household_scoped_query()`-covered table (`assets`, `attachments`, `fuel_logs`, `maintenance_records`, `maintenance_schedules`, `trip_logs`), keyed off a per-request `app.household_id` session GUC set from the resolved `Principal` (`app/db/rls.py`), with `admin.py`'s deliberately cross-household queries opting out via a separate `app.bypass_household_rls` GUC set only by `require_instance_admin`.
+
+RLS requires the connecting role to not be a Postgres superuser (a superuser silently bypasses RLS regardless of policies) — and `wrinklebyte`, the role `docker-compose.yml`'s `POSTGRES_USER` bootstraps, is the cluster's *bootstrap* role, from which Postgres unconditionally refuses to ever strip `SUPERUSER` (discovered 2026-08-22 when the RLS migration's original `ALTER ROLE ... NOSUPERUSER` attempt crashed the backend on every startup). The fix is a **second role**: `wrinklebyte_app`, created by a follow-up migration (`95d3e5f4643e`) with plain DML grants and no superuser/bypass attributes, used only for the app's runtime queries — migrations keep running as `wrinklebyte`, since DDL isn't tenant-scoped anyway. `app/config.py`'s `runtime_database_url` (falls back to `database_url` if unset, so an instance that hasn't configured the split yet keeps booting, just with RLS dormant) points `app/db/session.py`'s engine at the new role; `alembic/env.py` is untouched and still migrates as `wrinklebyte`. The migration itself is a no-op unless `APP_DB_PASSWORD` is set in the environment — deliberately, so pulling this migration without also configuring the new role can't crash a deployment the way the first attempt did. Verified end-to-end 2026-08-22 against the live dev DB: an unscoped `SELECT * FROM assets` (no `WHERE household_id = ...` at all) as `wrinklebyte_app` returns zero rows with no GUC set and exactly one household's rows once `app.household_id` is set — real enforcement, not just policies sitting inert.
+
+Pull's wire payload for each entity (`sync.py`'s `_serialize_row`) is built from that entity's own `*SyncData` Pydantic schema — an explicit field allowlist, not a dynamic walk of every ORM column. A column added to a model for an unrelated, internal reason doesn't automatically become visible to every client (including old, not-yet-upgraded ones) the moment a migration lands; it has to be deliberately added to that entity's `*SyncData` schema first, same as push already requires.
 
 **Auth — both mechanisms as first-class, unified into one dependency.** `get_current_principal` resolves either a JWT bearer token or a prefixed API-key token (e.g. `mnt_live_...`, hashed at rest) into the same `Principal(user_id, household_id, role, device_id)` object — endpoints never know which auth mechanism was used.
 
@@ -197,12 +201,12 @@ Mobile and backend interact **only** over the versioned sync contract in Section
 - **Phase 3 — Second mobile platform**: primarily UI work, since business/sync logic already lives in the shared module.
 - **Phase 4 — Web PWA offline layer**: sequenced after the sync protocol is battle-tested against real mobile clients.
 - **Phase 5 — Household sharing/invites**: additive/late, since it isn't needed for a single-tenant-per-household sync model to work.
-- **Phase 6 — Ongoing hardening**: S3-compatible storage, Postgres RLS, device/token management UI, backup/export tooling.
+- **Phase 6 — Ongoing hardening**: S3-compatible storage, device/token management UI, backup/export tooling. Postgres RLS shipped as of Vikunja #44, with real enforcement via a dedicated non-superuser runtime role — see the Multi-tenancy paragraph above.
 
 ## Verification
 
 - **Backend**: pytest against a real (dockerized) Postgres — CRUD, both auth mechanisms, household isolation, sync pull/push round-trips including forced conflicts.
 - **Recurrence parity**: a shared JSON test-vector fixture run against both the Python and Kotlin recurrence engines to prove they stay behaviorally identical.
 - **Mobile**: KMP shared-module unit tests (`commonTest`); manual smoke tests in the iOS Simulator / Android emulator.
-- **Sync end-to-end**: manual two-device tests — offline edits on both, reconnect, verify LWW and manual-mode behavior without data loss.
+- **Sync end-to-end**: manual two-device tests — offline edits on both, reconnect, verify last-write-wins conflict resolution without data loss. (A separate manual-resolution mode was designed and built but never reachable through any real UI on either mobile platform, and was removed entirely rather than exposed — see tendfida-mobile's Vikunja #43/#46.)
 - **PWA offline**: install to iOS Safari home screen, airplane mode, CRUD, reconnect, verify reconciliation and that storage isn't evicted once actually installed.

@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from app.models.mixins import utcnow
 from app.models.sync_device import SyncDevice
+from app.schemas.sync import AssetSyncData
 
 
 async def _register_device(client, auth_headers, name="Test Device") -> str:
@@ -14,6 +15,34 @@ async def _register_device(client, auth_headers, name="Test Device") -> str:
     )
     assert response.status_code == 201
     return response.json()["id"]
+
+
+async def test_pull_data_is_an_explicit_allowlist_not_every_column(client, auth_headers):
+    """Vikunja #44's design-review fix: pull's data payload for each entity
+    is built from that entity's own *SyncData schema (the exact same one
+    push validates incoming changes against), not a dynamic walk of every
+    ORM column. Proves the allowlist is real by asserting pull's data keys
+    are *exactly* AssetSyncData's declared fields -- nothing extra, nothing
+    from the sync envelope (id/version/updated_at/deleted_at/household_id
+    all live as SyncChangeOut's own top-level fields, deliberately not
+    duplicated inside data). If a future migration adds a mapped column to
+    Asset without also adding it to AssetSyncData, this assertion is what
+    keeps that column from silently becoming part of the wire protocol the
+    moment the column exists, the same way the old dynamic-walk version
+    would have let it."""
+    asset_response = await client.post(
+        "/api/v1/assets", headers=auth_headers, json={"asset_type": "vehicle", "name": "Allowlist Test Truck"}
+    )
+    asset_id = asset_response.json()["id"]
+
+    device_id = await _register_device(client, auth_headers)
+    pull = await client.post("/api/v1/sync/pull", headers=auth_headers, json={"device_id": device_id})
+    assert pull.status_code == 200
+    change = next(c for c in pull.json()["changes"] if c["id"] == asset_id)
+
+    assert set(change["data"].keys()) == set(AssetSyncData.model_fields.keys())
+    for envelope_field in ("id", "household_id", "version", "updated_at", "deleted_at"):
+        assert envelope_field not in change["data"]
 
 
 async def test_push_creates_new_entity(client, auth_headers):

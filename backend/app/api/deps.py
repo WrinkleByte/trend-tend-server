@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_token, hash_api_token, is_api_token
+from app.db.rls import set_rls_context
 from app.db.session import get_db
 from app.models.api_token import ApiToken
 from app.models.household import HouseholdMembership
@@ -101,6 +102,7 @@ async def get_current_principal(
         membership = await _get_membership(
             db, api_token.user_id, api_token.household_id
         )
+        await set_rls_context(db, api_token.household_id)
         return Principal(
             user_id=api_token.user_id,
             household_id=api_token.household_id,
@@ -122,6 +124,7 @@ async def get_current_principal(
     device_id = uuid.UUID(payload["device_id"]) if payload.get("device_id") else None
     await reject_if_token_predates_invalidation(db, user_id, payload)
     membership = await _get_membership(db, user_id, household_id)
+    await set_rls_context(db, household_id)
     return Principal(
         user_id=user_id,
         household_id=household_id,
@@ -137,13 +140,21 @@ async def require_instance_admin(
     """Gates instance-wide settings (SMTP, etc.) — deliberately a separate
     dependency rather than a field on Principal, since checking
     is_instance_admin needs a User-table lookup that every other endpoint
-    (the overwhelming majority of requests) has no reason to pay for."""
+    (the overwhelming majority of requests) has no reason to pay for.
+
+    Also the one place that flips the RLS bypass GUC (see app/db/rls.py) —
+    admin.py's endpoints are deliberately cross-household (listing every
+    household's data, deleting any household on the instance), which the
+    per-household RLS policies would otherwise block outright. Only ever
+    reached after a real is_instance_admin check just above, so this isn't
+    a client-controllable escape hatch."""
     result = await db.execute(
         select(User.is_instance_admin).where(User.id == principal.user_id)
     )
     is_admin = result.scalar_one_or_none()
     if not is_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Instance admin access required")
+    await set_rls_context(db, principal.household_id, bypass=True)
     return principal
 
 

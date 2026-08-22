@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.config import get_settings
 from app.core.rate_limit import reset_all_rate_limiters
 from app.db.base import Base
+from app.db.rls import set_rls_context
 from app.db.session import get_db
 from app.main import app
 
@@ -111,6 +112,14 @@ async def _clean_tables(engine):
 async def db_session(engine) -> AsyncSession:
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
+        # This fixture is for direct test assertions/setup across whatever
+        # households a test happens to have created, not a stand-in for a
+        # real request -- same rationale as admin.py's legitimate
+        # cross-household bypass (see app/db/rls.py). Without this, every
+        # existing test reading rows back via db_session would silently see
+        # nothing once RLS is enabled, since no Principal (and therefore no
+        # household_id GUC) is ever involved here.
+        await set_rls_context(session, household_id=None, bypass=True)
         yield session
 
 

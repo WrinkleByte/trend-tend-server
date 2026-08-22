@@ -21,6 +21,17 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://wrinklebyte:wrinklebyte@localhost:5432/wrinklebyte"
 
+    # Optional second connection for the app's own runtime queries, as a
+    # non-superuser role RLS can actually restrict (see Vikunja #44 /
+    # docs/architecture.md's Multi-tenancy section). database_url's role
+    # can never lose SUPERUSER -- it's the Postgres cluster's bootstrap
+    # role -- so a Postgres superuser always silently bypasses RLS on that
+    # connection regardless of policy. Falls back to database_url when
+    # unset so an instance that hasn't configured the separate role yet
+    # (e.g. mid-upgrade) keeps booting exactly as before, just with RLS
+    # still dormant rather than failing to start.
+    runtime_database_url: str | None = None
+
     # Opt-in escape hatch for the startup guard in _reject_insecure_defaults
     # below. Set DEV_MODE=true for local dev / CI / the docker-compose stack;
     # never in a real deployment. Deliberately defaults to False so that

@@ -2,8 +2,7 @@ import base64
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ValidationError
@@ -87,18 +86,17 @@ _REFERENCE_FIELDS: dict[str, tuple[type, str]] = {
 }
 
 
-def _serialize_row(obj) -> dict:
-    row: dict = {}
-    for column in obj.__table__.columns:
-        value = getattr(obj, column.name)
-        if isinstance(value, uuid.UUID):
-            value = str(value)
-        elif isinstance(value, (datetime, date)):
-            value = value.isoformat()
-        elif isinstance(value, Decimal):
-            value = str(value)
-        row[column.name] = value
-    return row
+def _serialize_row(entity_type: str, obj) -> dict:
+    """Explicit field allowlist, not a dynamic walk of every ORM column
+    (Vikunja #44's design review) -- reuses each entity's own *SyncData
+    schema (the same one push validates incoming changes against) as the
+    single source of truth for what this entity's wire shape is, in both
+    directions. A column added to a model for some unrelated, internal
+    reason no longer automatically becomes visible to every client the
+    moment a migration lands; it has to be deliberately added to that
+    entity's *SyncData schema first, same as it already does for push."""
+    data_model = SYNC_REGISTRY[entity_type].data_model
+    return data_model.model_validate(obj, from_attributes=True).model_dump(mode="json")
 
 
 def _encode_cursor(updated_at: datetime, entity_id: uuid.UUID) -> str:
@@ -270,7 +268,7 @@ async def pull(
             version=row.version,
             updated_at=row.updated_at,
             deleted=row.deleted_at is not None,
-            data=_serialize_row(full_rows[(row.entity_type, row.id)]),
+            data=_serialize_row(row.entity_type, full_rows[(row.entity_type, row.id)]),
         )
         for row in page
     ]
@@ -333,7 +331,7 @@ async def _apply_change(
             id=change.id,
             status="conflict",
             server_version=existing.version,
-            server_data=_serialize_row(existing),
+            server_data=_serialize_row(change.entity_type, existing),
             client_data=change.data,
         )
 

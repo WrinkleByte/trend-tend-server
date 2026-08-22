@@ -30,6 +30,17 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+asyncpg://wrinklebyte:wrinklebyte@postgres:5432/wrinklebyte
+      # A second, non-superuser role for the app's own runtime queries --
+      # `wrinklebyte` above is the Postgres cluster's bootstrap role
+      # (POSTGRES_USER on the postgres service) and can never lose
+      # SUPERUSER, so RLS policies can't actually restrict its queries
+      # (see docs/architecture.md's Multi-tenancy section / Vikunja #44).
+      # APP_DB_PASSWORD is read directly by the
+      # 95d3e5f4643e_add_non_superuser_runtime_role_for_rls migration,
+      # which creates `wrinklebyte_app` with this password on `alembic
+      # upgrade` -- keep the two in sync if you change this value.
+      APP_DB_PASSWORD: wrinklebyte-app-runtime
+      RUNTIME_DATABASE_URL: postgresql+asyncpg://wrinklebyte_app:wrinklebyte-app-runtime@postgres:5432/wrinklebyte
       # This compose file is the LOCAL DEV stack. DEV_MODE bypasses the
       # startup guard in app/config.py that otherwise refuses to boot with
       # the published default secret below. A real deployment must set a
