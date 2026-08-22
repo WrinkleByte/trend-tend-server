@@ -405,3 +405,80 @@ async def test_oversized_upload_is_rejected(client, auth_headers):
         files={"file": ("huge.bin", too_big, "application/octet-stream")},
     )
     assert response.status_code == 413
+
+
+async def test_link_and_unlink_attachment(client, auth_headers):
+    record_id = await _create_record(client, auth_headers)
+    upload = await client.post(
+        "/api/v1/attachments",
+        headers=auth_headers,
+        files={"file": ("receipt.jpg", b"bytes", "image/jpeg")},
+    )
+    attachment_id = upload.json()["id"]
+
+    link = await client.post(f"/api/v1/attachments/{attachment_id}/link/{record_id}", headers=auth_headers)
+    assert link.status_code == 204
+    linked = await client.get("/api/v1/attachments", headers=auth_headers, params={"record_id": record_id})
+    assert [a["id"] for a in linked.json()] == [attachment_id]
+
+    unlink = await client.delete(
+        f"/api/v1/attachments/{attachment_id}/link/{record_id}", headers=auth_headers
+    )
+    assert unlink.status_code == 204
+    unlinked = await client.get("/api/v1/attachments", headers=auth_headers, params={"record_id": record_id})
+    assert unlinked.json() == []
+
+
+async def test_cannot_link_another_households_attachment_or_record(client, auth_headers):
+    record_id = await _create_record(client, auth_headers)
+    upload = await client.post(
+        "/api/v1/attachments",
+        headers=auth_headers,
+        files={"file": ("receipt.jpg", b"bytes", "image/jpeg")},
+    )
+    attachment_id = upload.json()["id"]
+
+    other_user = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "other-link@example.com",
+            "password": "a very good password",
+            "display_name": "Other",
+            "household_name": "Other House",
+        },
+    )
+    other_headers = {"Authorization": f"Bearer {other_user.json()['access_token']}"}
+    other_record_id = await _create_record(client, other_headers)
+    other_upload = await client.post(
+        "/api/v1/attachments",
+        headers=other_headers,
+        files={"file": ("other-receipt.jpg", b"other-bytes", "image/jpeg")},
+    )
+    other_attachment_id = other_upload.json()["id"]
+
+    # Every cross-household pairing of {attachment, record} x {link, unlink}
+    # must 404, whichever side of the pair belongs to the caller's own
+    # household -- a real attacker only needs to guess/know one id from
+    # their own household and one from a target household.
+    assert (
+        await client.post(f"/api/v1/attachments/{attachment_id}/link/{other_record_id}", headers=auth_headers)
+    ).status_code == 404
+    assert (
+        await client.post(f"/api/v1/attachments/{other_attachment_id}/link/{record_id}", headers=auth_headers)
+    ).status_code == 404
+
+    # Attach it for real in household A, then confirm household B can't sever
+    # that link either -- this is the exact bug #207 reported: unlink_attachment
+    # ran the delete filtered only on the two path UUIDs, with no household
+    # check, so anyone who knew (or brute-forced) this pair could sever
+    # another household's attachment link.
+    link = await client.post(f"/api/v1/attachments/{attachment_id}/link/{record_id}", headers=auth_headers)
+    assert link.status_code == 204
+
+    assert (
+        await client.delete(f"/api/v1/attachments/{attachment_id}/link/{record_id}", headers=other_headers)
+    ).status_code == 404
+    still_linked = await client.get(
+        "/api/v1/attachments", headers=auth_headers, params={"record_id": record_id}
+    )
+    assert [a["id"] for a in still_linked.json()] == [attachment_id]

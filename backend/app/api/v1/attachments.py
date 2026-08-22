@@ -346,10 +346,24 @@ async def unlink_attachment(
     # only on the two path UUIDs -- nothing scopes it to the caller's
     # household -- so anyone who knew (or brute-forced) a pair of ids could
     # sever another household's attachment link. Same bug class as the
-    # cross-household FK injection in Vikunja #32; missed by that sweep
-    # because #32 targeted create/update paths and this is a delete.
+    # cross-household FK injection in Vikunja #32; was a real gap, fixed as
+    # of Vikunja #207 (regression coverage: test_attachments.py's
+    # test_cannot_link_another_households_attachment_or_record).
     await _get_owned_attachment(db, principal, attachment_id)
     await _get_owned_record(db, principal, record_id)
+    # Deliberately a hard delete, not a tombstone: RecordAttachment isn't a
+    # SyncedEntityMixin table and has no household_id/version/deleted_at
+    # columns to begin with -- it's plain server-side join-table bookkeeping,
+    # not part of the sync wire protocol (not in sync.py's SYNC_REGISTRY).
+    # Neither the web app nor the mobile shared module currently calls this
+    # endpoint at all (confirmed via repo-wide grep) -- clients read
+    # attachment-record links live via GET /attachments?record_id=..., not
+    # from a locally-cached, sync-propagated copy of this join table, so
+    # there's no stale-cache/tombstone-propagation concern for this specific
+    # table the way there is for the tables root CLAUDE.md's soft-delete
+    # invariant actually targets. If a client ever starts calling this
+    # (e.g. an "unlink photo from record" UI), revisit whether that
+    # assumption still holds before relying on it.
     await db.execute(
         RecordAttachment.__table__.delete().where(
             RecordAttachment.attachment_id == attachment_id, RecordAttachment.record_id == record_id
