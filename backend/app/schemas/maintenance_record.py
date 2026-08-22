@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -16,6 +17,20 @@ class MaintenanceRecordCreate(BaseModel):
     currency: str = "USD"
     odometer_reading: int | None = None
     schedule_id: uuid.UUID | None = None
+
+
+class MaintenanceRecordBulkCreate(BaseModel):
+    # Deliberately raw dicts, not list[MaintenanceRecordCreate] -- see
+    # FuelLogBulkCreate's doc comment for why (Pydantic validates a nested
+    # model list atomically, which would 422 the whole batch on one bad row).
+    items: list[dict]
+
+
+class MaintenanceRecordBulkResult(BaseModel):
+    index: int
+    status: Literal["created", "error"]
+    id: uuid.UUID | None = None
+    error: str | None = None
 
 
 class MaintenanceRecordUpdate(BaseModel):

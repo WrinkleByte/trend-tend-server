@@ -115,3 +115,106 @@ async def test_fuel_log_household_isolation(client, auth_headers):
 
     response = await client.get("/api/v1/fuel-logs", headers=other_headers)
     assert response.json() == []
+
+
+async def test_bulk_create_fuel_logs(client, auth_headers):
+    asset_id = await _create_vehicle(client, auth_headers)
+
+    response = await client.post(
+        "/api/v1/fuel-logs/bulk",
+        headers=auth_headers,
+        json={
+            "items": [
+                {"asset_id": asset_id, "performed_at": "2026-01-01", "gallons": "10"},
+                {"asset_id": asset_id, "performed_at": "2026-01-08", "gallons": "11"},
+                {"asset_id": asset_id, "performed_at": "2026-01-15", "gallons": "12"},
+            ]
+        },
+    )
+    assert response.status_code == 207
+    results = response.json()
+    assert len(results) == 3
+    assert all(r["status"] == "created" and r["id"] is not None for r in results)
+    assert [r["index"] for r in results] == [0, 1, 2]
+
+    listing = await client.get("/api/v1/fuel-logs", headers=auth_headers, params={"asset_id": asset_id})
+    assert len(listing.json()) == 3
+
+
+async def test_bulk_create_fuel_logs_reports_bad_row_without_losing_good_ones(client, auth_headers):
+    asset_id = await _create_vehicle(client, auth_headers)
+    bogus_asset_id = "00000000-0000-0000-0000-000000000000"
+
+    response = await client.post(
+        "/api/v1/fuel-logs/bulk",
+        headers=auth_headers,
+        json={
+            "items": [
+                {"asset_id": asset_id, "performed_at": "2026-01-01", "gallons": "10"},
+                {"asset_id": bogus_asset_id, "performed_at": "2026-01-08", "gallons": "11"},
+                {"asset_id": asset_id, "performed_at": "2026-01-15", "gallons": "12"},
+            ]
+        },
+    )
+    assert response.status_code == 207
+    results = response.json()
+    assert results[0]["status"] == "created"
+    assert results[1]["status"] == "error"
+    assert results[1]["id"] is None
+    assert results[1]["error"]
+    assert results[2]["status"] == "created"
+
+    # The good rows on either side of the bad one weren't rolled back by it.
+    listing = await client.get("/api/v1/fuel-logs", headers=auth_headers, params={"asset_id": asset_id})
+    assert len(listing.json()) == 2
+
+
+async def test_bulk_create_fuel_logs_malformed_row_does_not_422_the_whole_batch(client, auth_headers):
+    # Regression: items is list[dict], not list[FuelLogCreate], specifically
+    # so a row with garbage data (unparseable date, non-numeric decimal)
+    # becomes one "error" result instead of a top-level 422 that would
+    # silently drop every valid row in the same request too.
+    asset_id = await _create_vehicle(client, auth_headers)
+
+    response = await client.post(
+        "/api/v1/fuel-logs/bulk",
+        headers=auth_headers,
+        json={
+            "items": [
+                {"asset_id": asset_id, "performed_at": "2026-01-01", "gallons": "10"},
+                {"asset_id": asset_id, "performed_at": "not-a-date", "gallons": "not-a-number"},
+                {"asset_id": asset_id, "performed_at": "2026-01-15", "gallons": "12"},
+            ]
+        },
+    )
+    assert response.status_code == 207
+    results = response.json()
+    assert results[0]["status"] == "created"
+    assert results[1]["status"] == "error"
+    assert results[2]["status"] == "created"
+
+    listing = await client.get("/api/v1/fuel-logs", headers=auth_headers, params={"asset_id": asset_id})
+    assert len(listing.json()) == 2
+
+
+async def test_bulk_create_fuel_logs_rejects_another_households_asset(client, auth_headers):
+    other_owner = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "bulkfuel-other@example.com",
+            "password": "a very good password",
+            "display_name": "Other",
+            "household_name": "Other House",
+        },
+    )
+    other_headers = {"Authorization": f"Bearer {other_owner.json()['access_token']}"}
+    other_asset_id = await _create_vehicle(client, other_headers)
+
+    response = await client.post(
+        "/api/v1/fuel-logs/bulk",
+        headers=auth_headers,
+        json={"items": [{"asset_id": other_asset_id, "performed_at": "2026-01-01", "gallons": "10"}]},
+    )
+    assert response.status_code == 207
+    results = response.json()
+    assert results[0]["status"] == "error"

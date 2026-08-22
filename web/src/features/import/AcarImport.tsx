@@ -112,6 +112,7 @@ interface ImportSummary {
   maintenanceErrors: number;
   vehiclesCreated: string[];
   vehiclesMatched: string[];
+  errorDetails: string[];
 }
 
 function childText(el: Element | null | undefined, tag: string): string | null {
@@ -310,6 +311,7 @@ const emptySummary = (): ImportSummary => ({
   maintenanceErrors: 0,
   vehiclesCreated: [],
   vehiclesMatched: [],
+  errorDetails: [],
 });
 
 export function AcarImport({ assets, onAssetsCreated }: { assets: Asset[]; onAssetsCreated?: () => void }) {
@@ -365,12 +367,14 @@ export function AcarImport({ assets, onAssetsCreated }: { assets: Asset[]; onAss
         const fuelResult = await createFuelLogsBulk(group.fuelLogs.map(log => toFuelLogRequest(asset.id, log)));
         summary.fuelImported += fuelResult.imported;
         summary.fuelErrors += fuelResult.errors;
+        summary.errorDetails.push(...fuelResult.errorDetails);
 
         const maintenanceResult = await createMaintenanceRecordsBulk(
           group.maintenanceRecords.map(record => toMaintenanceRequest(asset.id, record)),
         );
         summary.maintenanceImported += maintenanceResult.imported;
         summary.maintenanceErrors += maintenanceResult.errors;
+        summary.errorDetails.push(...maintenanceResult.errorDetails);
       }
 
       setResult(summary);
@@ -474,6 +478,16 @@ export function AcarImport({ assets, onAssetsCreated }: { assets: Asset[]; onAss
           {result.maintenanceErrors > 0 && <p>✗ Service/expense record errors: {result.maintenanceErrors}</p>}
           {result.vehiclesCreated.length > 0 && <p>+ Created assets: {result.vehiclesCreated.join(', ')}</p>}
           {result.vehiclesMatched.length > 0 && <p>Matched existing assets: {result.vehiclesMatched.join(', ')}</p>}
+          {result.errorDetails.length > 0 && (
+            <>
+              <p>Rows that failed to import:</p>
+              <ul>
+                {result.errorDetails.map((detail, i) => (
+                  <li key={i}>{detail}</li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </section>

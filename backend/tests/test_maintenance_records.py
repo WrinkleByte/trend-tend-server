@@ -165,3 +165,104 @@ async def test_record_requires_an_asset_that_exists(client, auth_headers):
         },
     )
     assert response.status_code == 404
+
+
+async def test_bulk_create_records(client, auth_headers):
+    asset_id = await _asset(client, auth_headers)
+
+    response = await client.post(
+        "/api/v1/maintenance-records/bulk",
+        headers=auth_headers,
+        json={
+            "items": [
+                {"asset_id": asset_id, "performed_at": "2026-01-01", "category": "oil_change"},
+                {"asset_id": asset_id, "performed_at": "2026-02-01", "category": "tires"},
+            ]
+        },
+    )
+    assert response.status_code == 207
+    results = response.json()
+    assert len(results) == 2
+    assert all(r["status"] == "created" and r["id"] is not None for r in results)
+
+    listing = await client.get("/api/v1/maintenance-records", headers=auth_headers, params={"asset_id": asset_id})
+    assert len(listing.json()) == 2
+
+
+async def test_bulk_create_records_reports_bad_row_without_losing_good_ones(client, auth_headers):
+    asset_id = await _asset(client, auth_headers)
+
+    response = await client.post(
+        "/api/v1/maintenance-records/bulk",
+        headers=auth_headers,
+        json={
+            "items": [
+                {"asset_id": asset_id, "performed_at": "2026-01-01", "category": "oil_change"},
+                {"asset_id": str(uuid.uuid4()), "performed_at": "2026-01-08", "category": "tires"},
+                {"asset_id": asset_id, "performed_at": "2026-01-15", "category": "filter"},
+            ]
+        },
+    )
+    assert response.status_code == 207
+    results = response.json()
+    assert results[0]["status"] == "created"
+    assert results[1]["status"] == "error"
+    assert results[1]["id"] is None
+    assert results[2]["status"] == "created"
+
+    listing = await client.get("/api/v1/maintenance-records", headers=auth_headers, params={"asset_id": asset_id})
+    assert len(listing.json()) == 2
+
+
+async def test_bulk_create_records_malformed_row_does_not_422_the_whole_batch(client, auth_headers):
+    asset_id = await _asset(client, auth_headers)
+
+    response = await client.post(
+        "/api/v1/maintenance-records/bulk",
+        headers=auth_headers,
+        json={
+            "items": [
+                {"asset_id": asset_id, "performed_at": "2026-01-01", "category": "oil_change"},
+                {"asset_id": asset_id, "performed_at": "not-a-date", "category": "tires"},
+                {"asset_id": asset_id, "performed_at": "2026-01-15", "category": "filter"},
+            ]
+        },
+    )
+    assert response.status_code == 207
+    results = response.json()
+    assert results[0]["status"] == "created"
+    assert results[1]["status"] == "error"
+    assert results[2]["status"] == "created"
+
+    listing = await client.get("/api/v1/maintenance-records", headers=auth_headers, params={"asset_id": asset_id})
+    assert len(listing.json()) == 2
+
+
+async def test_bulk_create_records_validates_schedule_reference_too(client, auth_headers):
+    asset_id = await _asset(client, auth_headers)
+    schedule_id = await _schedule(client, auth_headers, asset_id)
+
+    response = await client.post(
+        "/api/v1/maintenance-records/bulk",
+        headers=auth_headers,
+        json={
+            "items": [
+                {
+                    "asset_id": asset_id,
+                    "performed_at": "2026-01-01",
+                    "category": "oil_change",
+                    "schedule_id": schedule_id,
+                },
+                {
+                    "asset_id": asset_id,
+                    "performed_at": "2026-01-08",
+                    "category": "oil_change",
+                    "schedule_id": str(uuid.uuid4()),
+                },
+            ]
+        },
+    )
+    assert response.status_code == 207
+    results = response.json()
+    assert results[0]["status"] == "created"
+    assert results[1]["status"] == "error"

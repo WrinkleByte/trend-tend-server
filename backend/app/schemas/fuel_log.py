@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -21,6 +22,23 @@ class FuelLogCreate(BaseModel):
     location: str | None = None
     notes: str | None = None
     additive: str | None = None
+
+
+class FuelLogBulkCreate(BaseModel):
+    # Deliberately raw dicts, not list[FuelLogCreate] -- Pydantic validates a
+    # nested model list atomically, so one malformed row (bad date format, a
+    # non-numeric decimal) would 422 the whole request before the endpoint
+    # ever runs, silently dropping every valid row too. Each item is
+    # validated individually inside the endpoint instead, so a bad row
+    # becomes one "error" result rather than killing the batch.
+    items: list[dict]
+
+
+class FuelLogBulkResult(BaseModel):
+    index: int
+    status: Literal["created", "error"]
+    id: uuid.UUID | None = None
+    error: str | None = None
 
 
 class FuelLogUpdate(BaseModel):

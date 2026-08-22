@@ -1,3 +1,4 @@
+import type { BulkImportResult } from "./fuelLogs";
 import { apiFetch } from "./client";
 import type { MaintenanceRecord, MaintenanceRecordCreateInput } from "./types";
 
@@ -16,19 +17,15 @@ export function deleteMaintenanceRecord(id: string): Promise<void> {
 
 export async function createMaintenanceRecordsBulk(
   records: MaintenanceRecordCreateInput[],
-): Promise<{ imported: number; errors: number }> {
-  let imported = 0;
-  let errors = 0;
-
-  for (const record of records) {
-    try {
-      await createMaintenanceRecord(record);
-      imported++;
-    } catch (error) {
-      errors++;
-      console.error("Failed to import maintenance record:", error);
-    }
-  }
-
-  return { imported, errors };
+): Promise<BulkImportResult> {
+  if (records.length === 0) return { imported: 0, errors: 0, errorDetails: [] };
+  // One request for the whole batch instead of N sequential POSTs (Vikunja
+  // #39) -- each row gets its own server-side SAVEPOINT, so one bad row
+  // doesn't roll back the rest.
+  const results = await apiFetch<Array<{ index: number; status: "created" | "error"; error?: string }>>(
+    "/maintenance-records/bulk",
+    { method: "POST", body: JSON.stringify({ items: records }) },
+  );
+  const errorDetails = results.filter((r) => r.status === "error").map((r) => r.error ?? "Unknown error");
+  return { imported: results.length - errorDetails.length, errors: errorDetails.length, errorDetails };
 }

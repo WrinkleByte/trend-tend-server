@@ -22,21 +22,23 @@ export function deleteFuelLog(id: string): Promise<void> {
   return apiFetch(`/fuel-logs/${id}`, { method: "DELETE" });
 }
 
-export async function createFuelLogsBulk(
-  logs: CreateFuelLogRequest[],
-): Promise<{ imported: number; errors: number }> {
-  let imported = 0;
-  let errors = 0;
+export interface BulkImportResult {
+  imported: number;
+  errors: number;
+  // One entry per failed row, in the same order the rows were submitted --
+  // lets the UI say *which* rows need fixing, not just how many failed.
+  errorDetails: string[];
+}
 
-  for (const log of logs) {
-    try {
-      await createFuelLog(log);
-      imported++;
-    } catch (error) {
-      errors++;
-      console.error("Failed to import fuel log:", error);
-    }
-  }
-
-  return { imported, errors };
+export async function createFuelLogsBulk(logs: CreateFuelLogRequest[]): Promise<BulkImportResult> {
+  if (logs.length === 0) return { imported: 0, errors: 0, errorDetails: [] };
+  // One request for the whole batch instead of N sequential POSTs (Vikunja
+  // #39) -- each row gets its own server-side SAVEPOINT, so one bad row
+  // doesn't roll back the rest.
+  const results = await apiFetch<Array<{ index: number; status: "created" | "error"; error?: string }>>(
+    "/fuel-logs/bulk",
+    { method: "POST", body: JSON.stringify({ items: logs }) },
+  );
+  const errorDetails = results.filter((r) => r.status === "error").map((r) => r.error ?? "Unknown error");
+  return { imported: results.length - errorDetails.length, errors: errorDetails.length, errorDetails };
 }

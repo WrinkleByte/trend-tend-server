@@ -1,6 +1,9 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -15,12 +18,15 @@ from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.mixins import utcnow
 from app.schemas.maintenance_record import (
+    MaintenanceRecordBulkCreate,
+    MaintenanceRecordBulkResult,
     MaintenanceRecordCreate,
     MaintenanceRecordResponse,
     MaintenanceRecordUpdate,
 )
 
 router = APIRouter(prefix="/maintenance-records", tags=["maintenance-records"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=list[MaintenanceRecordResponse])
@@ -63,6 +69,58 @@ async def create_record(
     await db.commit()
     await db.refresh(record)
     return record
+
+
+@router.post(
+    "/bulk", response_model=list[MaintenanceRecordBulkResult], status_code=status.HTTP_207_MULTI_STATUS
+)
+async def create_records_bulk(
+    payload: MaintenanceRecordBulkCreate,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> list[MaintenanceRecordBulkResult]:
+    """One round trip for an entire CSV/Fuelly import instead of N sequential
+    POSTs (Vikunja #39). Each row gets its own SAVEPOINT, same pattern as
+    sync.py's push handler and fuel_logs.py's bulk endpoint -- a bad row
+    rolls back only its own work and is reported individually, the rest of
+    the batch still commits."""
+    results: list[MaintenanceRecordBulkResult] = []
+    for index, raw_item in enumerate(payload.items):
+        try:
+            item = MaintenanceRecordCreate.model_validate(raw_item)
+        except ValidationError as e:
+            results.append(MaintenanceRecordBulkResult(index=index, status="error", error=e.errors()[0]["msg"]))
+            continue
+
+        try:
+            await verify_owned_reference(db, principal, Asset, item.asset_id, "Asset")
+            if item.schedule_id is not None:
+                await verify_owned_reference(
+                    db, principal, MaintenanceSchedule, item.schedule_id, "Maintenance schedule"
+                )
+        except HTTPException as e:
+            results.append(MaintenanceRecordBulkResult(index=index, status="error", error=str(e.detail)))
+            continue
+
+        try:
+            async with db.begin_nested():
+                record = MaintenanceRecord(
+                    id=uuid.uuid4(),
+                    household_id=principal.household_id,
+                    updated_by_device_id=principal.device_id,
+                    **item.model_dump(),
+                )
+                db.add(record)
+                await db.flush()
+            results.append(MaintenanceRecordBulkResult(index=index, status="created", id=record.id))
+        except SQLAlchemyError:
+            logger.exception("bulk maintenance record create failed at index %d", index)
+            results.append(
+                MaintenanceRecordBulkResult(index=index, status="error", error="Could not create this record.")
+            )
+
+    await db.commit()
+    return results
 
 
 async def _get_owned_record(

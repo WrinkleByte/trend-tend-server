@@ -1,6 +1,9 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -13,9 +16,16 @@ from app.db.session import get_db
 from app.models.asset import Asset
 from app.models.fuel_log import FuelLog
 from app.models.mixins import utcnow
-from app.schemas.fuel_log import FuelLogCreate, FuelLogResponse, FuelLogUpdate
+from app.schemas.fuel_log import (
+    FuelLogBulkCreate,
+    FuelLogBulkResult,
+    FuelLogCreate,
+    FuelLogResponse,
+    FuelLogUpdate,
+)
 
 router = APIRouter(prefix="/fuel-logs", tags=["fuel-logs"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=list[FuelLogResponse])
@@ -48,6 +58,49 @@ async def create_fuel_log(
     await db.commit()
     await db.refresh(fuel_log)
     return fuel_log
+
+
+@router.post("/bulk", response_model=list[FuelLogBulkResult], status_code=status.HTTP_207_MULTI_STATUS)
+async def create_fuel_logs_bulk(
+    payload: FuelLogBulkCreate,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> list[FuelLogBulkResult]:
+    """One round trip for an entire CSV/Fuelly import instead of N sequential
+    POSTs (Vikunja #39). Each row gets its own SAVEPOINT, same pattern as
+    sync.py's push handler -- a bad row rolls back only its own work and is
+    reported individually, the rest of the batch still commits."""
+    results: list[FuelLogBulkResult] = []
+    for index, raw_item in enumerate(payload.items):
+        try:
+            item = FuelLogCreate.model_validate(raw_item)
+        except ValidationError as e:
+            results.append(FuelLogBulkResult(index=index, status="error", error=e.errors()[0]["msg"]))
+            continue
+
+        try:
+            await verify_owned_reference(db, principal, Asset, item.asset_id, "Asset")
+        except HTTPException as e:
+            results.append(FuelLogBulkResult(index=index, status="error", error=str(e.detail)))
+            continue
+
+        try:
+            async with db.begin_nested():
+                fuel_log = FuelLog(
+                    id=uuid.uuid4(),
+                    household_id=principal.household_id,
+                    updated_by_device_id=principal.device_id,
+                    **item.model_dump(),
+                )
+                db.add(fuel_log)
+                await db.flush()
+            results.append(FuelLogBulkResult(index=index, status="created", id=fuel_log.id))
+        except SQLAlchemyError:
+            logger.exception("bulk fuel log create failed at index %d", index)
+            results.append(FuelLogBulkResult(index=index, status="error", error="Could not create this fuel log."))
+
+    await db.commit()
+    return results
 
 
 async def _get_owned_fuel_log(
