@@ -102,6 +102,23 @@ async def test_forgot_password_rate_limited_after_too_many_attempts(client, regi
     assert "Retry-After" in response.headers
 
 
+async def test_refresh_rate_limited_after_too_many_attempts(client):
+    # _refresh_limiter allows 30 per 60s (auth.py) -- higher than the others
+    # since a legitimate client refreshes routinely, but still bounded: it's
+    # unauthenticated and accepts a long-lived credential, so it needed its
+    # own limiter rather than relying on the ones covering the other
+    # auth endpoints (Vikunja #217).
+    for _ in range(30):
+        response = await client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": "not-a-real-token"}
+        )
+        assert response.status_code == 401
+
+    response = await client.post("/api/v1/auth/refresh", json={"refresh_token": "not-a-real-token"})
+    assert response.status_code == 429
+    assert "Retry-After" in response.headers
+
+
 async def test_reset_password_rate_limited_after_too_many_attempts(client):
     for _ in range(5):
         response = await client.post(
