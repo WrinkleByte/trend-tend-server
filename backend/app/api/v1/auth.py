@@ -378,10 +378,11 @@ async def forgot_password(
         reset_link = f"{get_settings().frontend_url.rstrip('/')}/reset-password?token={reset_token.token}"
         instance_settings = await get_or_create_instance_settings(db)
 
-        # The full link -- token included -- is logged ONLY when SMTP can't
-        # deliver it (review P1). That was the original reason for logging it
-        # at all: on a fresh install with no relay configured, the log is the
-        # only way an admin can get a user their reset link.
+        # The full link -- token included -- is logged ONLY when the email
+        # doesn't actually go out (review P1). That was the original reason
+        # for logging it at all: on a fresh install with no relay
+        # configured, the log is the only way an admin can get a user their
+        # reset link.
         #
         # It used to be logged unconditionally, which meant anyone with log
         # read access could take over any account, indefinitely, on a fully
@@ -389,19 +390,21 @@ async def forgot_password(
         # shipped to an aggregator or pasted into a bug report. Once email
         # works, the email IS the delivery channel and the log doesn't need
         # the token.
-        if smtp_can_deliver(instance_settings):
-            logger.info("Password reset requested for %s; reset link emailed.", user.email)
-        else:
-            logger.warning(
-                "Password reset requested for %s, but SMTP is not configured. "
-                "Hand this link to the user directly, then configure SMTP so tokens "
-                "stop being written to logs: %s",
-                user.email,
-                reset_link,
-            )
+        #
+        # This used to decide whether to log based only on smtp_can_deliver()
+        # -- whether SMTP LOOKS configured -- checked before ever attempting
+        # the send. That left a real gap: fully-configured-but-broken SMTP
+        # (wrong password, a relay that silently rejects the connection,
+        # etc.) meant send_email's actual failure was swallowed with no
+        # fallback at all -- no email, and no logged link either, leaving
+        # the user with no way to complete a reset. Now the log decision is
+        # keyed off send_email's own return value, so any real delivery
+        # failure still falls back to the log regardless of how the
+        # pre-flight config check looked.
+        #
         # smtplib is blocking — offload so this request (and the shared
         # event loop) doesn't stall on a slow/unreachable SMTP relay.
-        await asyncio.to_thread(
+        delivered = await asyncio.to_thread(
             send_email,
             instance_settings,
             to=user.email,
@@ -412,6 +415,16 @@ async def forgot_password(
                 f"This link expires in 1 hour. If you didn't request this, ignore this email."
             ),
         )
+        if delivered:
+            logger.info("Password reset requested for %s; reset link emailed.", user.email)
+        else:
+            logger.warning(
+                "Password reset requested for %s, but the email could not be delivered "
+                "(SMTP not configured, or the send itself failed -- check the preceding log "
+                "line/traceback). Hand this link to the user directly: %s",
+                user.email,
+                reset_link,
+            )
 
     return {"detail": "If that email is registered, a reset link has been sent."}
 

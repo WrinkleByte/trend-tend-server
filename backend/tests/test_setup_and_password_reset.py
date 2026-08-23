@@ -77,6 +77,34 @@ async def test_forgot_password_known_email_creates_reset_token(client, db_sessio
     assert token.expires_at > utcnow()
 
 
+async def test_forgot_password_falls_back_to_logging_the_link_when_send_actually_fails(
+    client, db_session, monkeypatch, caplog
+):
+    """Regression for Vikunja #101: a user with fully-configured-looking SMTP
+    (host/port/credentials all present) whose actual send fails -- a bad
+    password, a relay rejecting the connection, etc. -- must still get a
+    logged fallback link. Previously the log decision was made from
+    smtp_can_deliver() (config presence only, checked before ever attempting
+    the send), so a real send failure here was swallowed silently: no email,
+    and no logged link either, leaving the user with no way to complete a
+    reset at all."""
+    await _register(client, "alice@example.com", "Alice's House")
+
+    monkeypatch.setattr("app.api.v1.auth.send_email", lambda *args, **kwargs: False)
+
+    with caplog.at_level("WARNING"):
+        response = await client.post("/api/v1/auth/forgot-password", json={"email": "alice@example.com"})
+    assert response.status_code == 200
+
+    user_result = await db_session.execute(select(User).where(User.email == "alice@example.com"))
+    user = user_result.scalar_one()
+    token_result = await db_session.execute(select(PasswordResetToken).where(PasswordResetToken.user_id == user.id))
+    token = token_result.scalar_one()
+
+    warning_messages = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert any(token.token in message for message in warning_messages)
+
+
 async def test_reset_password_with_valid_token_changes_password(client, db_session):
     await _register(client, "alice@example.com", "Alice's House")
     await client.post("/api/v1/auth/forgot-password", json={"email": "alice@example.com"})
