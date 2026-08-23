@@ -72,6 +72,7 @@ async def test_oil_change_structured_fields_round_trip(client, auth_headers):
             "oil_formulation": "full_synthetic",
             "oil_meets_dexos": True,
             "filter_part_number": "PF-63",
+            "capacity": "5 qt",
         },
     )
     assert created.status_code == 201, created.text
@@ -80,20 +81,23 @@ async def test_oil_change_structured_fields_round_trip(client, auth_headers):
     assert body["oil_formulation"] == "full_synthetic"
     assert body["oil_meets_dexos"] is True
     assert body["filter_part_number"] == "PF-63"
+    assert body["capacity"] == "5 qt"
     assert body["fluid_type"] is None
 
 
 async def test_new_category_slugs_are_accepted_unconstrained(client, auth_headers):
     # category has no server-side enum/CHECK constraint -- any string is
     # accepted, including the new Vikunja #92 slugs. filter_part_number is
-    # reused here for the air filter (vs. oil filter on oil_change).
+    # reused here for the air filter (vs. oil filter on oil_change) and,
+    # for transmission_fluid, the transmission filter (Vikunja #92 follow-up,
+    # alongside capacity).
     asset_id = await _asset(client, auth_headers)
     for category, extra in [
         ("air_filter", {"filter_part_number": "AF-112"}),
-        ("transmission_fluid", {"fluid_type": "Dexron VI"}),
+        ("transmission_fluid", {"fluid_type": "Dexron VI", "filter_part_number": "TF-45", "capacity": "9 qt"}),
         ("coolant", {"fluid_type": "Dex-Cool"}),
-        ("differential_front", {"fluid_type": "75W-90"}),
-        ("differential_rear", {"fluid_type": "75W-140 LSD"}),
+        ("differential_front", {"fluid_type": "75W-90", "capacity": "1.5 qt"}),
+        ("differential_rear", {"fluid_type": "75W-140 LSD", "capacity": "2 qt"}),
     ]:
         response = await client.post(
             "/api/v1/maintenance-records",

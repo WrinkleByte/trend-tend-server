@@ -38,6 +38,11 @@ async def test_vehicle_service_defaults_round_trip(client, auth_headers):
                 "default_coolant_type": "Honda Type 2",
                 "default_differential_front_fluid_type": "75W-90",
                 "default_differential_rear_fluid_type": "75W-90",
+                "default_oil_capacity": "5 qt",
+                "default_transmission_filter_part_number": "TF-45",
+                "default_transmission_fluid_capacity": "9 qt",
+                "default_differential_front_capacity": "1.5 qt",
+                "default_differential_rear_capacity": "2 qt",
             },
         },
     )
@@ -52,6 +57,11 @@ async def test_vehicle_service_defaults_round_trip(client, auth_headers):
     assert details["default_coolant_type"] == "Honda Type 2"
     assert details["default_differential_front_fluid_type"] == "75W-90"
     assert details["default_differential_rear_fluid_type"] == "75W-90"
+    assert details["default_oil_capacity"] == "5 qt"
+    assert details["default_transmission_filter_part_number"] == "TF-45"
+    assert details["default_transmission_fluid_capacity"] == "9 qt"
+    assert details["default_differential_front_capacity"] == "1.5 qt"
+    assert details["default_differential_rear_capacity"] == "2 qt"
 
 
 async def test_create_equipment_asset(client, auth_headers):

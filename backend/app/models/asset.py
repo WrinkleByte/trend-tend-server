@@ -88,6 +88,15 @@ class VehicleDetails(Base):
     default_coolant_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     default_differential_front_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     default_differential_rear_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Follow-up to the above: capacities, plus the transmission filter part #
+    # (reuses default_oil_filter_part_number's sibling concept, its own
+    # column since a vehicle needs to remember all three filter part #s at
+    # once, unlike a single MaintenanceRecord which only ever needs one).
+    default_oil_capacity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    default_transmission_filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_transmission_fluid_capacity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    default_differential_front_capacity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    default_differential_rear_capacity: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
 
 class EquipmentDetails(Base):

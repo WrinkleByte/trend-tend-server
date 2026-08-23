@@ -22,6 +22,7 @@ class MaintenanceRecordCreate(BaseModel):
     oil_meets_dexos: bool | None = None
     filter_part_number: str | None = None
     fluid_type: str | None = None
+    capacity: str | None = None
 
 
 class MaintenanceRecordBulkCreate(BaseModel):
@@ -52,6 +53,7 @@ class MaintenanceRecordUpdate(BaseModel):
     oil_meets_dexos: bool | None = None
     filter_part_number: str | None = None
     fluid_type: str | None = None
+    capacity: str | None = None
 
 
 class MaintenanceRecordResponse(BaseModel):
@@ -72,6 +74,7 @@ class MaintenanceRecordResponse(BaseModel):
     oil_meets_dexos: bool | None
     filter_part_number: str | None
     fluid_type: str | None
+    capacity: str | None
     version: int
     created_at: datetime
     updated_at: datetime

@@ -28,6 +28,11 @@ class VehicleDetailsIn(BaseModel):
     default_coolant_type: str | None = None
     default_differential_front_fluid_type: str | None = None
     default_differential_rear_fluid_type: str | None = None
+    default_oil_capacity: str | None = None
+    default_transmission_filter_part_number: str | None = None
+    default_transmission_fluid_capacity: str | None = None
+    default_differential_front_capacity: str | None = None
+    default_differential_rear_capacity: str | None = None
 
 
 class EquipmentDetailsIn(BaseModel):
