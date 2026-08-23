@@ -3,16 +3,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { createApiToken, deleteApiToken, listApiTokens, revokeApiToken } from "../../api/apiTokens";
 import { getInstanceSettings } from "../../api/instanceSettings";
-import { AdminHouseholdsSection } from "./AdminHouseholdsSection";
-import { useAssetPhotosEnabled } from "./assetPhotosSetting";
-import { InstanceSettingsSection } from "./InstanceSettingsSection";
 import { PairingUrlSection } from "./PairingUrlSection";
-import { useThemePreference, type ThemePreference } from "./themeSetting";
 
 function buildPairingPayload(server: string, token: string): string {
   return JSON.stringify({ v: 1, server, token });
 }
 
+/** The "API Tokens" settings category — pairing-URL config plus token
+ * generate/list/revoke/delete. Was the whole /settings page before the
+ * left-sidebar category split; PairingUrlSection stays paired with this
+ * (not Households) since it only ever affects the QR code generated here. */
 export function ApiTokensPage() {
   const queryClient = useQueryClient();
   const { data: tokens, isLoading } = useQuery({ queryKey: ["api-tokens"], queryFn: listApiTokens });
@@ -27,8 +27,6 @@ export function ApiTokensPage() {
   });
   const [name, setName] = useState("");
   const [justCreated, setJustCreated] = useState<string | null>(null);
-  const [assetPhotosEnabled, setAssetPhotosEnabled] = useAssetPhotosEnabled();
-  const [theme, setTheme] = useThemePreference();
 
   const createMutation = useMutation({
     mutationFn: () => createApiToken(name),
@@ -56,31 +54,7 @@ export function ApiTokensPage() {
 
   return (
     <div>
-      <h1>Settings</h1>
-
-      <InstanceSettingsSection />
       <PairingUrlSection />
-      <AdminHouseholdsSection />
-
-      <section className="panel">
-        <h2>Preferences</h2>
-        <label style={{ maxWidth: "200px", marginBottom: "16px" }}>
-          Theme
-          <select value={theme} onChange={(e) => setTheme(e.target.value as ThemePreference)}>
-            <option value="system">Match system</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
-        <label className="check-label" style={{ marginBottom: 0 }}>
-          <input
-            type="checkbox"
-            checked={assetPhotosEnabled}
-            onChange={(e) => setAssetPhotosEnabled(e.target.checked)}
-          />
-          Show asset profile photos
-        </label>
-      </section>
 
       <section className="panel">
         <h2>API tokens</h2>

@@ -12,7 +12,7 @@ import { JoinPage } from "./features/household/JoinPage";
 import { ImportPage } from "./features/import/ImportPage";
 import { Layout } from "./features/layout/Layout";
 import { ProtectedRoute } from "./features/layout/ProtectedRoute";
-import { ApiTokensPage } from "./features/settings/ApiTokensPage";
+import { SettingsPage } from "./features/settings/SettingsPage";
 import "./App.css";
 
 function App() {
@@ -37,7 +37,7 @@ function App() {
           <Route path="/household" element={<HouseholdPage />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/export" element={<ExportPage />} />
-          <Route path="/settings" element={<ApiTokensPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

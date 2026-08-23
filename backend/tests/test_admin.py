@@ -1,5 +1,6 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
+from app.models.household import HouseholdMembership
 from app.models.user import User
 
 
@@ -187,3 +188,140 @@ async def test_demote_unknown_user_404s(client):
         "/api/v1/admin/users/00000000-0000-0000-0000-000000000000/demote", headers=_headers(alice)
     )
     assert response.status_code == 404
+
+
+async def test_list_users_requires_instance_admin(client):
+    await _register(client, "alice@example.com", "Alice's House")
+    bob = await _register(client, "bob@example.com", "Bob's House")
+
+    response = await client.get("/api/v1/admin/users", headers=_headers(bob))
+    assert response.status_code == 403
+
+
+async def test_list_users_includes_orphaned_users_with_no_memberships(client, db_session):
+    alice = await _register(client, "alice@example.com", "Alice's House")
+    await _register(client, "bob@example.com", "Bob's House")
+    bob_id = (await db_session.execute(select(User.id).where(User.email == "bob@example.com"))).scalar_one()
+    # Orphan bob directly at the DB layer -- the same state a stuck
+    # accept-invite flow leaves a real account in (Vikunja #101), without
+    # needing to reproduce that broken flow itself here.
+    await db_session.execute(delete(HouseholdMembership).where(HouseholdMembership.user_id == bob_id))
+    await db_session.commit()
+
+    response = await client.get("/api/v1/admin/users", headers=_headers(alice))
+    assert response.status_code == 200
+    users_by_email = {u["email"]: u for u in response.json()}
+    assert users_by_email["bob@example.com"]["memberships"] == []
+    assert len(users_by_email["alice@example.com"]["memberships"]) == 1
+
+
+async def _invite_and_join(client, owner_tokens: dict, invited_email: str, invited_password: str = "a very good password") -> dict:
+    """Registers `invited_email` as a plain MEMBER of the owner's household
+    via the real invite+register flow, distinct from _register (which
+    always creates a brand-new household the caller OWNS) -- needed
+    wherever a test wants a non-owner member to exercise purge/remove-
+    membership's owner-safety checks against."""
+    invite = await client.post(
+        "/api/v1/households/invites", headers=_headers(owner_tokens), json={"invited_email": invited_email, "role": "member"}
+    )
+    assert invite.status_code == 201
+    token = invite.json()["token"]
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": invited_email,
+            "password": invited_password,
+            "display_name": invited_email.split("@")[0],
+            "invite_token": token,
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+async def test_admin_can_purge_a_user(client, db_session):
+    alice = await _register(client, "alice@example.com", "Alice's House")
+    await _invite_and_join(client, alice, "bob@example.com")
+    bob_id = (await db_session.execute(select(User.id).where(User.email == "bob@example.com"))).scalar_one()
+
+    response = await client.delete(f"/api/v1/admin/users/{bob_id}", headers=_headers(alice))
+    assert response.status_code == 204
+
+    remaining = (await db_session.execute(select(User).where(User.id == bob_id))).scalar_one_or_none()
+    assert remaining is None
+
+
+async def test_purge_refuses_to_delete_yourself(client, db_session):
+    alice = await _register(client, "alice@example.com", "Alice's House")
+    alice_id = (await db_session.execute(select(User.id).where(User.email == "alice@example.com"))).scalar_one()
+
+    response = await client.delete(f"/api/v1/admin/users/{alice_id}", headers=_headers(alice))
+    assert response.status_code == 400
+
+
+async def test_purge_refuses_a_household_owner(client, db_session):
+    alice = await _register(client, "alice@example.com", "Alice's House")
+    await _register(client, "carol@example.com", "Carol's House")
+    carol_id = (await db_session.execute(select(User.id).where(User.email == "carol@example.com"))).scalar_one()
+
+    # carol owns her own household, so alice (a different instance admin)
+    # purging carol would leave that household's owner_user_id dangling --
+    # refused with a clear reason instead.
+    response = await client.delete(f"/api/v1/admin/users/{carol_id}", headers=_headers(alice))
+    assert response.status_code == 409
+    assert "Carol's House" in response.json()["detail"]
+
+
+async def test_admin_can_reset_an_orphaned_user_by_adding_a_membership(client, db_session):
+    alice = await _register(client, "alice@example.com", "Alice's House")
+    await _register(client, "bob@example.com", "Bob's House")
+    bob_id = (await db_session.execute(select(User.id).where(User.email == "bob@example.com"))).scalar_one()
+    await db_session.execute(delete(HouseholdMembership).where(HouseholdMembership.user_id == bob_id))
+    await db_session.commit()
+
+    households = (await client.get("/api/v1/admin/households", headers=_headers(alice))).json()
+    alice_household_id = next(h["id"] for h in households if h["name"] == "Alice's House")
+
+    response = await client.post(
+        f"/api/v1/admin/users/{bob_id}/memberships",
+        headers=_headers(alice),
+        json={"household_id": alice_household_id, "role": "member"},
+    )
+    assert response.status_code == 200
+    assert response.json()["memberships"] == [
+        {"household_id": alice_household_id, "household_name": "Alice's House", "role": "member"}
+    ]
+
+    # bob can log in again now that he has somewhere to go.
+    login = await client.post("/api/v1/auth/login", json={"email": "bob@example.com", "password": "a very good password"})
+    assert login.status_code == 200
+
+
+async def test_admin_can_remove_a_membership(client, db_session):
+    alice = await _register(client, "alice@example.com", "Alice's House")
+    await _invite_and_join(client, alice, "bob@example.com")
+    bob_id = (await db_session.execute(select(User.id).where(User.email == "bob@example.com"))).scalar_one()
+
+    households = (await client.get("/api/v1/admin/households", headers=_headers(alice))).json()
+    alice_household_id = next(h["id"] for h in households if h["name"] == "Alice's House")
+
+    response = await client.delete(
+        f"/api/v1/admin/users/{bob_id}/memberships/{alice_household_id}", headers=_headers(alice)
+    )
+    assert response.status_code == 204
+
+    login = await client.post("/api/v1/auth/login", json={"email": "bob@example.com", "password": "a very good password"})
+    assert login.status_code == 403  # no memberships left
+
+
+async def test_remove_membership_refuses_to_strip_a_households_last_owner(client, db_session):
+    alice = await _register(client, "alice@example.com", "Alice's House")
+    alice_id = (await db_session.execute(select(User.id).where(User.email == "alice@example.com"))).scalar_one()
+
+    households = (await client.get("/api/v1/admin/households", headers=_headers(alice))).json()
+    alice_household_id = households[0]["id"]
+
+    response = await client.delete(
+        f"/api/v1/admin/users/{alice_id}/memberships/{alice_household_id}", headers=_headers(alice)
+    )
+    assert response.status_code == 400

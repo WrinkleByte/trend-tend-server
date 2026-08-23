@@ -46,3 +46,43 @@ export function demoteUserFromInstanceAdmin(userId: string): Promise<PromoteUser
 export function deleteHouseholdAsAdmin(householdId: string): Promise<void> {
   return apiFetch(`/admin/households/${householdId}`, { method: "DELETE" });
 }
+
+export interface AdminUserMembership {
+  household_id: string;
+  household_name: string;
+  role: "owner" | "member";
+}
+
+export interface AdminUserSummary {
+  id: string;
+  email: string;
+  display_name: string;
+  is_instance_admin: boolean;
+  created_at: string;
+  // Empty means orphaned — a real account with nowhere to log into. See
+  // this list's "Add to household" action for the fix.
+  memberships: AdminUserMembership[];
+}
+
+export function listAllUsers(): Promise<AdminUserSummary[]> {
+  return apiFetch("/admin/users");
+}
+
+export function purgeUser(userId: string): Promise<void> {
+  return apiFetch(`/admin/users/${userId}`, { method: "DELETE" });
+}
+
+export function addUserMembership(
+  userId: string,
+  householdId: string,
+  role: "owner" | "member"
+): Promise<AdminUserSummary> {
+  return apiFetch(`/admin/users/${userId}/memberships`, {
+    method: "POST",
+    body: JSON.stringify({ household_id: householdId, role }),
+  });
+}
+
+export function removeUserMembership(userId: string, householdId: string): Promise<void> {
+  return apiFetch(`/admin/users/${userId}/memberships/${householdId}`, { method: "DELETE" });
+}
