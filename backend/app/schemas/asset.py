@@ -16,6 +16,9 @@ class VehicleDetailsIn(BaseModel):
     current_mileage: int | None = None
     mileage_unit: str = "mi"
     fuel_type: str | None = None
+    car_display_theme: str | None = None
+    stylized_plate_enabled: bool | None = None
+    unit_system_override: str | None = None
 
 
 class EquipmentDetailsIn(BaseModel):
@@ -23,6 +26,8 @@ class EquipmentDetailsIn(BaseModel):
     model_number: str | None = None
     serial_number: str | None = None
     warranty_expiration: date | None = None
+    car_display_theme: str | None = None
+    unit_system_override: str | None = None
 
 
 class PropertyDetailsIn(BaseModel):

@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_principal, verify_owned_reference
 from app.db.session import get_db
-from app.models.asset import Asset
+from app.models.asset import (
+    Asset,
+    AssetType,
+    EquipmentDetails,
+    PropertyDetails,
+    VehicleDetails,
+)
 from app.models.attachment import Attachment
 from app.models.fuel_log import FuelLog
 from app.models.maintenance_record import MaintenanceRecord
@@ -23,9 +29,11 @@ from app.models.trip_log import TripLog
 from app.schemas.sync import (
     AssetSyncData,
     AttachmentSyncData,
+    EquipmentDetailsSyncData,
     FuelLogSyncData,
     MaintenanceRecordSyncData,
     MaintenanceScheduleSyncData,
+    PropertyDetailsSyncData,
     SyncChangeIn,
     SyncChangeOut,
     SyncDeviceRegister,
@@ -36,7 +44,19 @@ from app.schemas.sync import (
     SyncPushResponse,
     SyncPushResult,
     TripLogSyncData,
+    VehicleDetailsSyncData,
 )
+
+# entity_type=="asset" 1:1 detail-table lookup, keyed by AssetType -- used by
+# both _serialize_row (pull) and _apply_change/_upsert_asset_details (push)
+# so the "which side table matches this asset_type" decision lives in one
+# place rather than being re-derived at each call site.
+_ASSET_DETAIL_MODELS: dict[AssetType, type] = {
+    AssetType.VEHICLE: VehicleDetails,
+    AssetType.EQUIPMENT: EquipmentDetails,
+    AssetType.PROPERTY: PropertyDetails,
+    AssetType.HOME_SYSTEM: PropertyDetails,
+}
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 logger = logging.getLogger("app.sync")
@@ -86,7 +106,7 @@ _REFERENCE_FIELDS: dict[str, tuple[type, str]] = {
 }
 
 
-def _serialize_row(entity_type: str, obj) -> dict:
+def _serialize_row(entity_type: str, obj, detail: object | None = None) -> dict:
     """Explicit field allowlist, not a dynamic walk of every ORM column
     (Vikunja #44's design review) -- reuses each entity's own *SyncData
     schema (the same one push validates incoming changes against) as the
@@ -94,9 +114,72 @@ def _serialize_row(entity_type: str, obj) -> dict:
     directions. A column added to a model for some unrelated, internal
     reason no longer automatically becomes visible to every client the
     moment a migration lands; it has to be deliberately added to that
-    entity's *SyncData schema first, same as it already does for push."""
+    entity's *SyncData schema first, same as it already does for push.
+
+    [detail] is entity_type=="asset"'s already-fetched 1:1
+    VehicleDetails/EquipmentDetails/PropertyDetails row (or None if that
+    asset has none yet) -- callers fetch it themselves (batched across a
+    whole pull page in pull() below, or singly in _apply_change's conflict
+    path) rather than this function querying per-row, since Asset itself
+    has no ORM relationship() to these tables to load it automatically."""
     data_model = SYNC_REGISTRY[entity_type].data_model
-    return data_model.model_validate(obj, from_attributes=True).model_dump(mode="json")
+    base = data_model.model_validate(obj, from_attributes=True).model_dump(mode="json")
+    if entity_type == "asset":
+        base["vehicle_details"] = None
+        base["equipment_details"] = None
+        base["property_details"] = None
+        if detail is not None:
+            if isinstance(detail, VehicleDetails):
+                base["vehicle_details"] = VehicleDetailsSyncData.model_validate(
+                    detail, from_attributes=True
+                ).model_dump(mode="json")
+            elif isinstance(detail, EquipmentDetails):
+                base["equipment_details"] = EquipmentDetailsSyncData.model_validate(
+                    detail, from_attributes=True
+                ).model_dump(mode="json")
+            elif isinstance(detail, PropertyDetails):
+                base["property_details"] = PropertyDetailsSyncData.model_validate(
+                    detail, from_attributes=True
+                ).model_dump(mode="json")
+    return base
+
+
+async def _fetch_asset_detail(db: AsyncSession, asset: Asset) -> object | None:
+    """Single-row counterpart to pull()'s batched detail fetch, for
+    _apply_change's conflict-response path where only one asset's detail is
+    ever needed."""
+    model = _ASSET_DETAIL_MODELS.get(asset.asset_type)
+    if model is None:
+        return None
+    result = await db.execute(select(model).where(model.asset_id == asset.id))
+    return result.scalar_one_or_none()
+
+
+async def _upsert_asset_details(
+    db: AsyncSession, asset_id: uuid.UUID, asset_type: AssetType, parsed: AssetSyncData
+) -> None:
+    """Applies whichever of parsed's nested detail payloads matches
+    asset_type onto the 1:1 side table, insert-or-update by asset_id. A
+    payload with no matching nested details (e.g. an old client that never
+    learns about this feature) is a no-op, not a wipe -- there's nothing
+    here to distinguish "client didn't send details" from "client wants to
+    clear details" since these tables carry no version of their own, so
+    absence just leaves whatever's already there untouched."""
+    if asset_type == AssetType.VEHICLE and parsed.vehicle_details is not None:
+        model, data = VehicleDetails, parsed.vehicle_details.model_dump()
+    elif asset_type == AssetType.EQUIPMENT and parsed.equipment_details is not None:
+        model, data = EquipmentDetails, parsed.equipment_details.model_dump()
+    elif asset_type in (AssetType.PROPERTY, AssetType.HOME_SYSTEM) and parsed.property_details is not None:
+        model, data = PropertyDetails, parsed.property_details.model_dump()
+    else:
+        return
+
+    existing_detail = (await db.execute(select(model).where(model.asset_id == asset_id))).scalar_one_or_none()
+    if existing_detail is None:
+        db.add(model(asset_id=asset_id, **data))
+    else:
+        for field, value in data.items():
+            setattr(existing_detail, field, value)
 
 
 def _encode_cursor(updated_at: datetime, entity_id: uuid.UUID) -> str:
@@ -261,6 +344,18 @@ async def pull(
         for obj in result.scalars().all():
             full_rows[(entity_type, obj.id)] = obj
 
+    # Batched (not per-row) fetch of the 1:1 detail rows for every "asset"
+    # in this page, keyed by asset_id -- mirrors full_rows' own batching
+    # shape just above rather than querying per-row inside _serialize_row,
+    # which would turn a page of 200 assets into 200 extra round trips.
+    asset_details_by_id: dict[uuid.UUID, object] = {}
+    asset_ids = ids_by_type.get("asset", [])
+    if asset_ids:
+        for detail_model in (VehicleDetails, EquipmentDetails, PropertyDetails):
+            result = await db.execute(select(detail_model).where(detail_model.asset_id.in_(asset_ids)))
+            for detail in result.scalars().all():
+                asset_details_by_id[detail.asset_id] = detail
+
     changes = [
         SyncChangeOut(
             entity_type=row.entity_type,
@@ -268,7 +363,11 @@ async def pull(
             version=row.version,
             updated_at=row.updated_at,
             deleted=row.deleted_at is not None,
-            data=_serialize_row(row.entity_type, full_rows[(row.entity_type, row.id)]),
+            data=_serialize_row(
+                row.entity_type,
+                full_rows[(row.entity_type, row.id)],
+                detail=asset_details_by_id.get(row.id) if row.entity_type == "asset" else None,
+            ),
         )
         for row in page
     ]
@@ -327,11 +426,12 @@ async def _apply_change(
             )
 
     if existing is not None and existing.version != change.base_version:
+        conflict_detail = await _fetch_asset_detail(db, existing) if change.entity_type == "asset" else None
         return SyncPushResult(
             id=change.id,
             status="conflict",
             server_version=existing.version,
-            server_data=_serialize_row(change.entity_type, existing),
+            server_data=_serialize_row(change.entity_type, existing, detail=conflict_detail),
             client_data=change.data,
         )
 
@@ -389,6 +489,28 @@ async def _apply_change(
                 detail=f"{label} not found",
             )
 
+    # property_details.parent_asset_id is a client-supplied foreign key
+    # nested inside AssetSyncData rather than a top-level field, so it isn't
+    # covered by the _REFERENCE_FIELDS loop above -- same cross-tenant risk
+    # as asset_id/schedule_id (Vikunja #32) needs the same explicit check.
+    if (
+        change.entity_type == "asset"
+        and isinstance(parsed, AssetSyncData)
+        and parsed.property_details is not None
+        and parsed.property_details.parent_asset_id is not None
+    ):
+        try:
+            await verify_owned_reference(
+                db, principal, Asset, parsed.property_details.parent_asset_id, "Parent asset"
+            )
+        except HTTPException:
+            return SyncPushResult(
+                id=change.id,
+                status="rejected",
+                reason="invalid_reference",
+                detail="Parent asset not found",
+            )
+
     try:
         # A SAVEPOINT per row, not one giant transaction — an error on one
         # row (e.g. a bad foreign key in its data) rolls back only that
@@ -399,25 +521,38 @@ async def _apply_change(
         # catches that case; a SQLAlchemyError here is a different kind of
         # bad reference, e.g. a genuinely nonexistent id.)
         async with db.begin_nested():
+            # AssetSyncData's vehicle_details/equipment_details/
+            # property_details are handled separately below (they don't map
+            # onto Asset's own columns) -- excluded here for every entity
+            # type uniformly rather than gating on change.entity_type, since
+            # exclude=... naming fields a given model doesn't have is a
+            # harmless no-op for the other five entity types.
+            base_data = parsed.model_dump(
+                exclude={"vehicle_details", "equipment_details", "property_details"}
+            )
             if existing is None:
                 row = config.model(
                     id=change.id,
                     household_id=principal.household_id,
                     updated_by_device_id=device_id,
                     version=1,
-                    **parsed.model_dump(),
+                    **base_data,
                 )
                 db.add(row)
                 await db.flush()
                 new_version, server_updated_at = 1, row.updated_at
             else:
-                for field, value in parsed.model_dump().items():
+                for field, value in base_data.items():
                     setattr(existing, field, value)
                 existing.updated_by_device_id = device_id
                 existing.version += 1
                 existing.updated_at = utcnow()
                 await db.flush()
                 new_version, server_updated_at = existing.version, existing.updated_at
+
+            if change.entity_type == "asset" and isinstance(parsed, AssetSyncData):
+                await _upsert_asset_details(db, change.id, base_data["asset_type"], parsed)
+                await db.flush()
     except SQLAlchemyError:
         logger.exception("sync push failed for %s %s", change.entity_type, change.id)
         return SyncPushResult(

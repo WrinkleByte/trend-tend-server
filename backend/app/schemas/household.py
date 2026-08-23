@@ -24,6 +24,22 @@ class HouseholdCreate(BaseModel):
     name: str
 
 
+class HouseholdSettingsUpdate(BaseModel):
+    """Household-owner-settable defaults for the mobile apps' device-global
+    cosmetic/unit settings (see tendfida-mobile's AppSettings.swift /
+    AndroidAppSettings.kt) -- an individual device can still locally
+    override any of these. Values mirror the same CarDisplayTheme raw
+    cases / UnitFormatter.unitSystem(key) "imperial"/"metric" keys used by
+    the per-vehicle override fields on VehicleDetailsIn. Merged into (not
+    replacing) Household.settings on update, so that JSONB column stays
+    forward-compatible with unrelated future keys this schema doesn't know
+    about yet."""
+
+    car_display_theme: str | None = None
+    stylized_plate_enabled: bool | None = None
+    unit_system: str | None = None
+
+
 class MembershipResponse(BaseModel):
     id: uuid.UUID
     household_id: uuid.UUID

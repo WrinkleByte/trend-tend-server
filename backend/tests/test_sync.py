@@ -507,6 +507,124 @@ async def test_revoked_device_can_no_longer_sync(client, auth_headers):
     assert after_push.status_code == 403
 
 
+async def test_vehicle_details_sync_via_push_and_pull(client, auth_headers):
+    """vehicle_details (and equipment_details/property_details) previously
+    never reached the sync protocol at all -- only the base asset row did,
+    so VIN/plate/mileage/etc. set on one device silently never appeared on
+    another. Proves that's actually fixed now: a full vehicle_details
+    payload (existing fields plus the new per-asset cosmetic/unit-override
+    fields) pushed from one device round-trips to a second device's pull."""
+    device_a = await _register_device(client, auth_headers, "Device A")
+    device_b = await _register_device(client, auth_headers, "Device B")
+    asset_id = str(uuid.uuid4())
+
+    push = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_a,
+            "changes": [
+                {
+                    "entity_type": "asset",
+                    "id": asset_id,
+                    "base_version": 0,
+                    "client_updated_at": "2026-01-01T00:00:00Z",
+                    "data": {
+                        "asset_type": "vehicle",
+                        "name": "Ford Focus",
+                        "vehicle_details": {
+                            "vin": "1FADP3F20EL123456",
+                            "make": "Ford",
+                            "model": "Focus",
+                            "year": 2014,
+                            "license_plate": "ABC-1234",
+                            "current_mileage": 88000,
+                            "mileage_unit": "mi",
+                            "fuel_type": "gasoline",
+                            "car_display_theme": "amberRetroLCD",
+                            "stylized_plate_enabled": True,
+                            "unit_system_override": "metric",
+                        },
+                    },
+                }
+            ],
+        },
+    )
+    result = push.json()["results"][0]
+    assert result["status"] == "accepted"
+
+    pull_as_b = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_b}
+    )
+    changes_as_b = {c["id"]: c for c in pull_as_b.json()["changes"]}
+    vehicle_details = changes_as_b[asset_id]["data"]["vehicle_details"]
+    assert vehicle_details["vin"] == "1FADP3F20EL123456"
+    assert vehicle_details["license_plate"] == "ABC-1234"
+    assert vehicle_details["current_mileage"] == 88000
+    assert vehicle_details["car_display_theme"] == "amberRetroLCD"
+    assert vehicle_details["stylized_plate_enabled"] is True
+    assert vehicle_details["unit_system_override"] == "metric"
+    assert changes_as_b[asset_id]["data"]["equipment_details"] is None
+    assert changes_as_b[asset_id]["data"]["property_details"] is None
+
+    # Also reachable via the plain REST endpoint, proving the side-table
+    # upsert (not just the wire payload) actually landed in vehicle_details.
+    get_response = await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)
+    assert get_response.json()["vehicle_details"]["car_display_theme"] == "amberRetroLCD"
+
+
+async def test_vehicle_details_sync_update_preserves_fields_not_resent(client, auth_headers):
+    """A second push that omits vehicle_details entirely (e.g. an older
+    client, or an edit to just the base asset row) must not wipe details a
+    prior push already set -- _upsert_asset_details is a no-op when the
+    incoming payload's nested object is absent, not a clear."""
+    device_id = await _register_device(client, auth_headers)
+    asset_id = str(uuid.uuid4())
+
+    await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_id,
+            "changes": [
+                {
+                    "entity_type": "asset",
+                    "id": asset_id,
+                    "base_version": 0,
+                    "client_updated_at": "2026-01-01T00:00:00Z",
+                    "data": {
+                        "asset_type": "vehicle",
+                        "name": "Ford Focus",
+                        "vehicle_details": {"vin": "1FADP3F20EL123456"},
+                    },
+                }
+            ],
+        },
+    )
+
+    await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_id,
+            "changes": [
+                {
+                    "entity_type": "asset",
+                    "id": asset_id,
+                    "base_version": 1,
+                    "client_updated_at": "2026-01-02T00:00:00Z",
+                    "data": {"asset_type": "vehicle", "name": "Ford Focus (renamed)"},
+                }
+            ],
+        },
+    )
+
+    get_response = await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)
+    body = get_response.json()
+    assert body["name"] == "Ford Focus (renamed)"
+    assert body["vehicle_details"]["vin"] == "1FADP3F20EL123456"
+
+
 async def test_revoking_is_idempotent_and_device_stays_listed(client, auth_headers):
     device = await client.post(
         "/api/v1/sync/devices", headers=auth_headers, json={"platform": "android", "device_name": "Tablet"}

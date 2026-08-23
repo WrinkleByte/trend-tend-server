@@ -27,6 +27,7 @@ from app.schemas.household import (
     AcceptInviteRequest,
     HouseholdMemberResponse,
     HouseholdResponse,
+    HouseholdSettingsUpdate,
     InviteCreate,
     InvitePreviewResponse,
     InviteResponse,
@@ -48,6 +49,33 @@ async def get_current_household(
 ) -> HouseholdResponse:
     result = await db.execute(select(Household).where(Household.id == principal.household_id))
     household = result.scalar_one()
+    return HouseholdResponse.model_validate({**household.__dict__, "my_role": principal.role})
+
+
+@router.patch("/me/settings", response_model=HouseholdResponse)
+async def update_household_settings(
+    payload: HouseholdSettingsUpdate,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> HouseholdResponse:
+    """Owner-only write side of the household admin defaults an individual
+    device can locally override (see HouseholdSettingsUpdate's doc comment).
+    Only the fields the caller actually set are merged in -- an unset field
+    here means "leave whatever's already there," not "clear it," matching
+    this endpoint's PATCH (not PUT) semantics. household.settings is a
+    plain dict column (no MutableDict tracking), so the update reassigns a
+    new dict rather than mutating in place -- SQLAlchemy only picks up an
+    attribute reassignment, not an in-place dict mutation, as a change to
+    persist."""
+    _require_owner(principal)
+
+    result = await db.execute(select(Household).where(Household.id == principal.household_id))
+    household = result.scalar_one()
+
+    updates = payload.model_dump(exclude_none=True)
+    household.settings = {**household.settings, **updates}
+    await db.commit()
+    await db.refresh(household)
     return HouseholdResponse.model_validate({**household.__dict__, "my_role": principal.role})
 
 

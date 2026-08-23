@@ -61,6 +61,16 @@ class VehicleDetails(Base):
     current_mileage: Mapped[int | None] = mapped_column(nullable=True)
     mileage_unit: Mapped[str] = mapped_column(String(10), default="mi", nullable=False)
     fuel_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Per-vehicle overrides of the mobile app's device-global cosmetic/unit
+    # settings -- null means "inherit the household default, or the device's
+    # own local override of it" (see tendfida-mobile's AppSettings.swift /
+    # AndroidAppSettings.kt for the 4-tier resolution this feeds). Values
+    # mirror the mobile CarDisplayTheme raw cases and
+    # UnitFormatter.unitSystem(key)'s "imperial"/"metric" keys exactly, no
+    # new vocabulary invented server-side.
+    car_display_theme: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    stylized_plate_enabled: Mapped[bool | None] = mapped_column(nullable=True)
+    unit_system_override: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
 
 class EquipmentDetails(Base):
@@ -76,6 +86,10 @@ class EquipmentDetails(Base):
     model_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     serial_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     warranty_expiration: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # See VehicleDetails' matching fields above -- same per-asset-override
+    # concept, no stylized_plate_enabled here since equipment has no plate.
+    car_display_theme: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    unit_system_override: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
 
 class PropertyDetails(Base):

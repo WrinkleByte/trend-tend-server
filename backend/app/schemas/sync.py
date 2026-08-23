@@ -34,25 +34,61 @@ class SyncDeviceResponse(BaseModel):
 
 # --- Per-entity payload shapes for sync push/pull's opaque `data` field ---
 #
-# Deliberately cover only each entity's own SyncedEntityMixin table — not the
-# 1:1 asset detail side tables (vehicle_details/equipment_details/
-# property_details), which mirrors the mobile plan's precedent of not
-# independently syncing non-enveloped child rows. Editing those still goes
-# through the regular REST endpoints (see app/api/v1/assets.py). Extending
-# sync to cover them is a documented follow-up, not silently unsupported.
-#
 # Full-row semantics: every push replaces the entity's entire syncable field
 # set (not a partial patch) — simpler and avoids stale-field merge bugs
 # across a batch of devices with different partial views of a row.
 
 
+class VehicleDetailsSyncData(BaseModel):
+    vin: str | None = None
+    make: str | None = None
+    model: str | None = None
+    year: int | None = None
+    license_plate: str | None = None
+    current_mileage: int | None = None
+    mileage_unit: str = "mi"
+    fuel_type: str | None = None
+    car_display_theme: str | None = None
+    stylized_plate_enabled: bool | None = None
+    unit_system_override: str | None = None
+
+
+class EquipmentDetailsSyncData(BaseModel):
+    manufacturer: str | None = None
+    model_number: str | None = None
+    serial_number: str | None = None
+    warranty_expiration: date | None = None
+    car_display_theme: str | None = None
+    unit_system_override: str | None = None
+
+
+class PropertyDetailsSyncData(BaseModel):
+    address: str | None = None
+    parent_asset_id: uuid.UUID | None = None
+    install_date: date | None = None
+
+
 class AssetSyncData(BaseModel):
+    """The base `assets` row plus, nested, whichever 1:1 detail side table
+    matches asset_type — the 1:1 tables carry no sync envelope of their own
+    (see VehicleDetails' doc comment in app/models/asset.py) so they ride
+    along inside the parent asset's change instead of getting their own
+    SYNC_REGISTRY entry. sync.py's _apply_change/_serialize_row special-case
+    entity_type=="asset" to upsert/nest whichever of these three is present
+    — every other entity type ignores these fields entirely (StrEnum-typed
+    asset_type is the discriminator, mirroring the asset.assetType-based
+    discriminator the mobile client now also uses instead of "which detail
+    object is non-null", for the same correctness reason)."""
+
     asset_type: AssetType
     name: str
     notes: str | None = None
     status: AssetStatus = AssetStatus.ACTIVE
     purchase_date: date | None = None
     purchase_cost: Decimal | None = None
+    vehicle_details: VehicleDetailsSyncData | None = None
+    equipment_details: EquipmentDetailsSyncData | None = None
+    property_details: PropertyDetailsSyncData | None = None
 
 
 class MaintenanceRecordSyncData(BaseModel):
