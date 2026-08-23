@@ -27,6 +27,19 @@ class MaintenanceRecord(SyncedEntityMixin, Base):
         UUID(as_uuid=True), ForeignKey("maintenance_schedules.id"), nullable=True
     )
 
+    # Vikunja #92: structured fields, meaningful only for certain
+    # categories -- a record only ever has one `category`, so
+    # filter_part_number/fluid_type are safely reused across categories
+    # (oil filter part # on "oil_change", air filter part # on
+    # "air_filter"; fluid type on "transmission_fluid"/"coolant"/
+    # "differential_front"/"differential_rear") rather than each getting
+    # their own near-duplicate column.
+    oil_viscosity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    oil_formulation: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    oil_meets_dexos: Mapped[bool | None] = mapped_column(nullable=True)
+    filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
 
 class RecordAttachment(Base):
     """Join table linking a MaintenanceRecord to N Attachments."""

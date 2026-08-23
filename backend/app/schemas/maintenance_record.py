@@ -17,6 +17,11 @@ class MaintenanceRecordCreate(BaseModel):
     currency: str = "USD"
     odometer_reading: int | None = None
     schedule_id: uuid.UUID | None = None
+    oil_viscosity: str | None = None
+    oil_formulation: str | None = None
+    oil_meets_dexos: bool | None = None
+    filter_part_number: str | None = None
+    fluid_type: str | None = None
 
 
 class MaintenanceRecordBulkCreate(BaseModel):
@@ -42,6 +47,11 @@ class MaintenanceRecordUpdate(BaseModel):
     cost: Decimal | None = None
     currency: str | None = None
     odometer_reading: int | None = None
+    oil_viscosity: str | None = None
+    oil_formulation: str | None = None
+    oil_meets_dexos: bool | None = None
+    filter_part_number: str | None = None
+    fluid_type: str | None = None
 
 
 class MaintenanceRecordResponse(BaseModel):
@@ -57,6 +67,11 @@ class MaintenanceRecordResponse(BaseModel):
     currency: str
     odometer_reading: int | None
     schedule_id: uuid.UUID | None
+    oil_viscosity: str | None
+    oil_formulation: str | None
+    oil_meets_dexos: bool | None
+    filter_part_number: str | None
+    fluid_type: str | None
     version: int
     created_at: datetime
     updated_at: datetime

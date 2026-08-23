@@ -51,6 +51,15 @@ class VehicleDetailsSyncData(BaseModel):
     car_display_theme: str | None = None
     stylized_plate_enabled: bool | None = None
     unit_system_override: str | None = None
+    default_oil_viscosity: str | None = None
+    default_oil_formulation: str | None = None
+    default_oil_meets_dexos: bool | None = None
+    default_oil_filter_part_number: str | None = None
+    default_air_filter_part_number: str | None = None
+    default_transmission_fluid_type: str | None = None
+    default_coolant_type: str | None = None
+    default_differential_front_fluid_type: str | None = None
+    default_differential_rear_fluid_type: str | None = None
 
 
 class EquipmentDetailsSyncData(BaseModel):
@@ -102,6 +111,11 @@ class MaintenanceRecordSyncData(BaseModel):
     currency: str = "USD"
     odometer_reading: int | None = None
     schedule_id: uuid.UUID | None = None
+    oil_viscosity: str | None = None
+    oil_formulation: str | None = None
+    oil_meets_dexos: bool | None = None
+    filter_part_number: str | None = None
+    fluid_type: str | None = None
 
 
 class FuelLogSyncData(BaseModel):

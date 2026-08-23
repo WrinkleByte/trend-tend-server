@@ -71,6 +71,23 @@ class VehicleDetails(Base):
     car_display_theme: Mapped[str | None] = mapped_column(String(30), nullable=True)
     stylized_plate_enabled: Mapped[bool | None] = mapped_column(nullable=True)
     unit_system_override: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Vikunja #92: this vehicle's remembered service specs -- the mobile
+    # app prefills a new maintenance record's matching structured field
+    # (see MaintenanceRecord above) from these when the user hasn't
+    # already typed a value in for that record, editable per-record if it
+    # differs that time. Front/rear differential get separate defaults
+    # since some vehicles genuinely spec a different fluid for each, even
+    # though a single differential-service *record* only ever needs one
+    # fluid_type (its own category already says which side).
+    default_oil_viscosity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    default_oil_formulation: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    default_oil_meets_dexos: Mapped[bool | None] = mapped_column(nullable=True)
+    default_oil_filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_air_filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_transmission_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_coolant_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_differential_front_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_differential_rear_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 class EquipmentDetails(Base):

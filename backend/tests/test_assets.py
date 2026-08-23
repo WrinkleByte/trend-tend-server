@@ -19,6 +19,41 @@ async def test_create_and_get_vehicle_asset(client, auth_headers):
     assert get_response.json()["vehicle_details"]["model"] == "Odyssey"
 
 
+async def test_vehicle_service_defaults_round_trip(client, auth_headers):
+    response = await client.post(
+        "/api/v1/assets",
+        headers=auth_headers,
+        json={
+            "asset_type": "vehicle",
+            "name": "Family Minivan",
+            "vehicle_details": {
+                "make": "Honda",
+                "model": "Odyssey",
+                "default_oil_viscosity": "5W-30",
+                "default_oil_formulation": "full_synthetic",
+                "default_oil_meets_dexos": False,
+                "default_oil_filter_part_number": "PF-63",
+                "default_air_filter_part_number": "AF-112",
+                "default_transmission_fluid_type": "Honda ATF-Z1",
+                "default_coolant_type": "Honda Type 2",
+                "default_differential_front_fluid_type": "75W-90",
+                "default_differential_rear_fluid_type": "75W-90",
+            },
+        },
+    )
+    assert response.status_code == 201, response.text
+    details = response.json()["vehicle_details"]
+    assert details["default_oil_viscosity"] == "5W-30"
+    assert details["default_oil_formulation"] == "full_synthetic"
+    assert details["default_oil_meets_dexos"] is False
+    assert details["default_oil_filter_part_number"] == "PF-63"
+    assert details["default_air_filter_part_number"] == "AF-112"
+    assert details["default_transmission_fluid_type"] == "Honda ATF-Z1"
+    assert details["default_coolant_type"] == "Honda Type 2"
+    assert details["default_differential_front_fluid_type"] == "75W-90"
+    assert details["default_differential_rear_fluid_type"] == "75W-90"
+
+
 async def test_create_equipment_asset(client, auth_headers):
     response = await client.post(
         "/api/v1/assets",

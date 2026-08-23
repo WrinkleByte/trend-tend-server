@@ -19,6 +19,15 @@ class VehicleDetailsIn(BaseModel):
     car_display_theme: str | None = None
     stylized_plate_enabled: bool | None = None
     unit_system_override: str | None = None
+    default_oil_viscosity: str | None = None
+    default_oil_formulation: str | None = None
+    default_oil_meets_dexos: bool | None = None
+    default_oil_filter_part_number: str | None = None
+    default_air_filter_part_number: str | None = None
+    default_transmission_fluid_type: str | None = None
+    default_coolant_type: str | None = None
+    default_differential_front_fluid_type: str | None = None
+    default_differential_rear_fluid_type: str | None = None
 
 
 class EquipmentDetailsIn(BaseModel):

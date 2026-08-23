@@ -59,6 +59,54 @@ async def test_create_and_fetch_a_record(client, auth_headers):
     assert fetched.json()["description"] == "Full synthetic"
 
 
+async def test_oil_change_structured_fields_round_trip(client, auth_headers):
+    asset_id = await _asset(client, auth_headers)
+    created = await client.post(
+        "/api/v1/maintenance-records",
+        headers=auth_headers,
+        json={
+            "asset_id": asset_id,
+            "performed_at": "2026-03-01",
+            "category": "oil_change",
+            "oil_viscosity": "5W-30",
+            "oil_formulation": "full_synthetic",
+            "oil_meets_dexos": True,
+            "filter_part_number": "PF-63",
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["oil_viscosity"] == "5W-30"
+    assert body["oil_formulation"] == "full_synthetic"
+    assert body["oil_meets_dexos"] is True
+    assert body["filter_part_number"] == "PF-63"
+    assert body["fluid_type"] is None
+
+
+async def test_new_category_slugs_are_accepted_unconstrained(client, auth_headers):
+    # category has no server-side enum/CHECK constraint -- any string is
+    # accepted, including the new Vikunja #92 slugs. filter_part_number is
+    # reused here for the air filter (vs. oil filter on oil_change).
+    asset_id = await _asset(client, auth_headers)
+    for category, extra in [
+        ("air_filter", {"filter_part_number": "AF-112"}),
+        ("transmission_fluid", {"fluid_type": "Dexron VI"}),
+        ("coolant", {"fluid_type": "Dex-Cool"}),
+        ("differential_front", {"fluid_type": "75W-90"}),
+        ("differential_rear", {"fluid_type": "75W-140 LSD"}),
+    ]:
+        response = await client.post(
+            "/api/v1/maintenance-records",
+            headers=auth_headers,
+            json={"asset_id": asset_id, "performed_at": "2026-03-01", "category": category, **extra},
+        )
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["category"] == category
+        for key, value in extra.items():
+            assert body[key] == value
+
+
 async def test_record_can_be_linked_to_a_schedule(client, auth_headers):
     asset_id = await _asset(client, auth_headers)
     schedule_id = await _schedule(client, auth_headers, asset_id)
