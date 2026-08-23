@@ -105,6 +105,76 @@
   max-width: 640px;
 }
 
+/* Settings page's left-hand category sidebar -- the page split into SMTP/
+   Households/User Management/API Tokens/Display categories once a single
+   long-scrolling page got unwieldy. */
+.settings-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+
+.settings-sidebar {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 24px;
+}
+
+.settings-sidebar button {
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.settings-sidebar button:hover {
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+.settings-sidebar button.active {
+  border-left-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.settings-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .settings-layout {
+    flex-direction: column;
+  }
+
+  .settings-sidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+    width: 100%;
+  }
+
+  .settings-sidebar button {
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+  }
+
+  .settings-sidebar button.active {
+    border-bottom-color: var(--accent);
+  }
+}
+
 .notice {
   border-radius: var(--radius-md);
   padding: 16px 20px;
@@ -391,6 +461,15 @@ ul {
 .record-description {
   font-size: 14px;
   color: var(--text-h);
+  grid-column: 3 / -2;
+  word-wrap: break-word;
+  min-width: 0;
+}
+
+.record-notes {
+  font-size: 13px;
+  color: var(--text-h);
+  opacity: 0.75;
   grid-column: 3 / -2;
   word-wrap: break-word;
   min-width: 0;

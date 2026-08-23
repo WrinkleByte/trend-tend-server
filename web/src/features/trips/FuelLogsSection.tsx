@@ -105,6 +105,8 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
               <span className="record-category">{log.is_fill_up ? "full tank" : "partial"}</span>
               <span className="record-description">
                 {log.gallons} gal{log.odometer_reading != null ? ` at ${log.odometer_reading.toLocaleString()}` : ""}
+                {log.gas_brand ? ` • ${log.gas_brand}` : ""}
+                {log.location ? ` • ${log.location}` : ""}
               </span>
               <span className="record-cost">{log.total_cost != null ? `$${log.total_cost}` : ""}</span>
               <div className="record-actions">
@@ -116,6 +118,10 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
                 </button>
               </div>
             </div>
+            {/* notes/gas_brand/location/octane/cetane/additive/mpg all sync down from
+                mobile (the only place they're currently editable, see this file's top
+                comment) but were never rendered anywhere here -- Vikunja #99. */}
+            {log.notes && <div className="record-notes">{log.notes}</div>}
             {expandedId === log.id && <AttachmentsSection entityType="fuel_log" entityId={log.id} />}
           </li>
         ))}
