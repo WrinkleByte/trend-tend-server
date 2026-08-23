@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AdminHouseholdsSection } from "./AdminHouseholdsSection";
 import { ApiTokensPage } from "./ApiTokensPage";
+import { DangerZoneSection } from "./DangerZoneSection";
 import { DisplaySection } from "./DisplaySection";
 import { InstanceSettingsSection } from "./InstanceSettingsSection";
 import { UserManagementSection } from "./UserManagementSection";
@@ -11,6 +12,7 @@ const CATEGORIES = [
   { id: "users", label: "User Management" },
   { id: "api-tokens", label: "API Tokens" },
   { id: "display", label: "Display" },
+  { id: "danger-zone", label: "Danger Zone" },
 ] as const;
 
 type CategoryId = (typeof CATEGORIES)[number]["id"];
@@ -47,6 +49,7 @@ export function SettingsPage() {
           {active === "users" && <UserManagementSection />}
           {active === "api-tokens" && <ApiTokensPage />}
           {active === "display" && <DisplaySection />}
+          {active === "danger-zone" && <DangerZoneSection />}
         </div>
       </div>
     </div>
