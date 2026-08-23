@@ -53,6 +53,15 @@ services:
       # password-reset email. Set this to your real public URL in a root
       # .env file for any non-local deployment (see .env.example).
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      # The backend's own externally-reachable URL, seeded into
+      # instance_settings.public_api_url on first boot only (see
+      # backend/app/core/instance_settings.py) -- used to build the
+      # mobile-pairing QR code on the API Tokens page. Needed whenever web
+      # and API are on different ports/hosts (true for this dev compose
+      # stack by default: web on 5173, API on 8000) -- set it in a root
+      # .env file to your host's LAN IP, e.g. PUBLIC_API_URL=http://192.168.1.50:8000,
+      # or reconfigure later via the instance-settings admin UI.
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-}
       # Seeds the instance_settings singleton on first boot only (see
       # backend/app/core/instance_settings.py) — set these in a root .env
       # file (git-ignored; see .env.example) rather than editing here, so

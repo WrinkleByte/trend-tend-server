@@ -103,7 +103,7 @@ Pull's wire payload for each entity (`sync.py`'s `_serialize_row`) is built from
   {"v": 1, "server": "https://example.com", "token": "mnt_live_..."}
   ```
 
-  `v` is a schema version (currently `1`); `server` is `window.location.origin` — the same origin the token was issued from; `token` is the raw bearer token, present only in this one response/QR. Mobile clients parse this directly (plain JSON, no base64 or custom URI scheme) into `SyncEngine.validateAndPair(server, token)`'s arguments.
+  `v` is a schema version (currently `1`); `server` is `instance_settings.public_api_url` if the instance admin has configured one, else `window.location.origin` — the latter only holds when web and API share an origin (true in the production nginx deployment, per `web/nginx.conf`'s `/api/` proxy), **not** in the docker-compose dev/self-hosted setup where web and API are published on different ports with nothing bridging them for a non-browser client. A self-hoster on that setup must set `PUBLIC_API_URL` (or the equivalent Settings → Mobile Pairing URL field) to the address a phone can actually reach, or the QR code silently points pairing at the wrong service. `token` is the raw bearer token, present only in this one response/QR. Mobile clients parse this directly (plain JSON, no base64 or custom URI scheme) into `SyncEngine.validateAndPair(server, token)`'s arguments.
 
 **Sharing/invite flow.** `POST /households/{id}/invites` creates a `HouseholdInvite`; `POST /auth/invite/accept` creates the `HouseholdMembership` row. Roles: `owner` (full control incl. removing members, deleting household) and `member` (full CRUD on assets/records/schedules).
 

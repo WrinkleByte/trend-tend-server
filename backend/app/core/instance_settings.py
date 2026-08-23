@@ -41,6 +41,7 @@ async def get_or_create_instance_settings(db: AsyncSession) -> InstanceSettings:
 
     settings = InstanceSettings(id=uuid.uuid4())
     _apply_env_smtp(settings, env)
+    settings.public_api_url = env.public_api_url or None
     db.add(settings)
     # Commit, not just flush — callers that only ever read (GET
     # instance-settings, or forgot-password checking whether SMTP is

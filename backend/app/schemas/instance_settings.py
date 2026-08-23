@@ -12,6 +12,12 @@ class InstanceSettingsUpdate(BaseModel):
     smtp_password: str | None = None
     smtp_use_tls: bool | None = None
     smtp_from_address: str | None = None
+    # None = leave unchanged, same as the other plain string fields above
+    # (smtp_host etc.) -- "" is a valid value here too and is treated as
+    # "not configured" by the frontend (falls back to
+    # window.location.origin for the pairing QR code), not specially
+    # distinguished from None the way smtp_password is.
+    public_api_url: str | None = None
 
 
 class InstanceSettingsResponse(BaseModel):
@@ -25,5 +31,6 @@ class InstanceSettingsResponse(BaseModel):
     smtp_use_tls: bool
     smtp_from_address: str | None
     smtp_password_set: bool
+    public_api_url: str | None
 
     model_config = {"from_attributes": True}

@@ -21,6 +21,7 @@ def _to_response(settings) -> InstanceSettingsResponse:
         smtp_use_tls=settings.smtp_use_tls,
         smtp_from_address=settings.smtp_from_address,
         smtp_password_set=bool(settings.smtp_password),
+        public_api_url=settings.public_api_url,
     )
 
 
@@ -41,7 +42,15 @@ async def update_instance_settings(
 ) -> InstanceSettingsResponse:
     settings = await get_or_create_instance_settings(db)
 
-    for field in ("smtp_enabled", "smtp_host", "smtp_port", "smtp_username", "smtp_use_tls", "smtp_from_address"):
+    for field in (
+        "smtp_enabled",
+        "smtp_host",
+        "smtp_port",
+        "smtp_username",
+        "smtp_use_tls",
+        "smtp_from_address",
+        "public_api_url",
+    ):
         value = getattr(payload, field)
         if value is not None:
             setattr(settings, field, value)

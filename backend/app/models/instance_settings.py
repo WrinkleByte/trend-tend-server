@@ -27,6 +27,18 @@ class InstanceSettings(Base):
     smtp_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     smtp_use_tls: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     smtp_from_address: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    # The backend API's own externally-reachable base URL (e.g.
+    # "http://192.168.1.50:8000"), used to build the mobile-pairing QR code
+    # on the API Tokens page instead of assuming window.location.origin --
+    # that assumption only holds when web and API share an origin (true in
+    # the production nginx deployment, per web/nginx.conf's /api/ proxy),
+    # not in the docker-compose dev/self-hosted setup where the web dev
+    # server and the API are published on different ports with nothing
+    # bridging them for a non-browser client. Falls back to
+    # window.location.origin when unset, so production behavior is
+    # unchanged either way. See config.py's public_api_url for the
+    # one-time env-var seed on first creation.
+    public_api_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )

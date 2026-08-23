@@ -8,6 +8,7 @@ export interface InstanceSettings {
   smtp_use_tls: boolean;
   smtp_from_address: string | null;
   smtp_password_set: boolean;
+  public_api_url: string | null;
 }
 
 export interface InstanceSettingsUpdate {
@@ -20,6 +21,7 @@ export interface InstanceSettingsUpdate {
   smtp_password?: string;
   smtp_use_tls?: boolean;
   smtp_from_address?: string;
+  public_api_url?: string;
 }
 
 export function getInstanceSettings(): Promise<InstanceSettings> {

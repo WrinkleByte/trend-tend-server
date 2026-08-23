@@ -2,9 +2,11 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { createApiToken, deleteApiToken, listApiTokens, revokeApiToken } from "../../api/apiTokens";
+import { getInstanceSettings } from "../../api/instanceSettings";
 import { AdminHouseholdsSection } from "./AdminHouseholdsSection";
 import { useAssetPhotosEnabled } from "./assetPhotosSetting";
 import { InstanceSettingsSection } from "./InstanceSettingsSection";
+import { PairingUrlSection } from "./PairingUrlSection";
 import { useThemePreference, type ThemePreference } from "./themeSetting";
 
 function buildPairingPayload(server: string, token: string): string {
@@ -14,6 +16,15 @@ function buildPairingPayload(server: string, token: string): string {
 export function ApiTokensPage() {
   const queryClient = useQueryClient();
   const { data: tokens, isLoading } = useQuery({ queryKey: ["api-tokens"], queryFn: listApiTokens });
+  // 403s for a non-instance-admin generating their own token (this feature
+  // isn't admin-gated) -- React Query just leaves `data` undefined rather
+  // than throwing, so this falls through to the window.location.origin
+  // fallback below exactly like "not configured" does.
+  const { data: instanceSettings } = useQuery({
+    queryKey: ["instance-settings"],
+    queryFn: getInstanceSettings,
+    retry: false,
+  });
   const [name, setName] = useState("");
   const [justCreated, setJustCreated] = useState<string | null>(null);
   const [assetPhotosEnabled, setAssetPhotosEnabled] = useAssetPhotosEnabled();
@@ -48,6 +59,7 @@ export function ApiTokensPage() {
       <h1>Settings</h1>
 
       <InstanceSettingsSection />
+      <PairingUrlSection />
       <AdminHouseholdsSection />
 
       <section className="panel">
@@ -82,7 +94,10 @@ export function ApiTokensPage() {
             <p>Copy this token now — it won&rsquo;t be shown again.</p>
             <code>{justCreated}</code>
             <p>Or scan this code from the mobile app&rsquo;s pairing screen:</p>
-            <QRCodeSVG value={buildPairingPayload(window.location.origin, justCreated)} size={200} />
+            <QRCodeSVG
+              value={buildPairingPayload(instanceSettings?.public_api_url || window.location.origin, justCreated)}
+              size={200}
+            />
             <button type="button" onClick={() => setJustCreated(null)}>
               Done
             </button>

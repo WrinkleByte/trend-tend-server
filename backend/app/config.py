@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     # any device.
     frontend_url: str = "http://localhost:5173"
 
+    # One-time seed for instance_settings.public_api_url (see
+    # core/instance_settings.py) -- the backend API's own externally
+    # -reachable base URL, e.g. "http://192.168.1.50:8000", used to build
+    # the mobile-pairing QR code correctly instead of assuming
+    # window.location.origin (only true when web+API share an origin --
+    # see instance_settings.py model's doc comment for the full story).
+    # Blank by default; the admin instance-settings UI is the other way to
+    # set it, same dual-path as SMTP.
+    public_api_url: str = ""
+
     storage_backend: Literal["local_disk", "s3"] = "local_disk"
     storage_local_root: str = "./data/attachments"
     storage_s3_bucket: str = ""
