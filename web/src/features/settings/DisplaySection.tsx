@@ -14,7 +14,7 @@ export function DisplaySection() {
       <label style={{ maxWidth: "200px", marginBottom: "16px" }}>
         Theme
         <select value={theme} onChange={(e) => setTheme(e.target.value as ThemePreference)}>
-          <option value="system">Match system</option>
+          <option value="system">Auto</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
