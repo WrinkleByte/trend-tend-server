@@ -4,6 +4,7 @@ import {
   createMaintenanceRecord,
   deleteMaintenanceRecord,
   listMaintenanceRecords,
+  updateMaintenanceRecord,
 } from "../../api/maintenanceRecords";
 import { listMaintenanceSchedules, updateMaintenanceSchedule } from "../../api/maintenanceSchedules";
 import { RECORD_CATEGORIES as CATEGORIES, recordMatchesSchedule } from "../schedules/maintenanceAlerts";
@@ -29,6 +30,41 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
+
+  // Edit-in-place state (Vikunja #111) -- only one row editable at a time,
+  // mirrors FuelLogsSection.tsx's identical pattern.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editPerformedAt, setEditPerformedAt] = useState("");
+  const [editCategory, setEditCategory] = useState(CATEGORIES[0]);
+  const [editDescription, setEditDescription] = useState("");
+  const [editCost, setEditCost] = useState("");
+
+  function startEdit(record: MaintenanceRecord) {
+    setEditingId(record.id);
+    setEditPerformedAt(record.performed_at.slice(0, 10));
+    setEditCategory(record.category);
+    setEditDescription(record.description ?? "");
+    setEditCost(record.cost ?? "");
+  }
+
+  const updateRecordMutation = useMutation({
+    mutationFn: (id: string) =>
+      updateMaintenanceRecord(id, {
+        performed_at: editPerformedAt,
+        category: editCategory,
+        description: editDescription || null,
+        cost: editCost ? Number(editCost) : null,
+      }),
+    onSuccess: () => {
+      setEditingId(null);
+      queryClient.invalidateQueries({ queryKey: ["maintenance-records", assetId] });
+    },
+  });
+
+  function handleEditSubmit(event: FormEvent, id: string) {
+    event.preventDefault();
+    updateRecordMutation.mutate(id);
+  }
 
   // Vikunja #110: after a manually-added record, check for an active
   // schedule whose name matches its category and offer to clear it too --
@@ -177,29 +213,70 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
 
       {isLoading && <p>Loading…</p>}
       <ul className="record-list">
-        {records?.map((record) => (
-          <li key={record.id}>
-            <div className="record-row">
-              <span className="record-date">{record.performed_at}</span>
-              <span className="record-category">{record.category.replace("_", " ")}</span>
-              <span className="record-description">{record.description || "—"}</span>
-              <span className="record-cost">{record.cost != null ? `$${record.cost}` : ""}</span>
-              <div className="record-actions">
-                <button type="button" onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}>
-                  {expandedId === record.id ? "Hide receipts" : "Receipts"}
+        {records?.map((record) =>
+          editingId === record.id ? (
+            <li key={record.id}>
+              <form className="inline-form" onSubmit={(e) => handleEditSubmit(e, record.id)}>
+                <input
+                  type="date"
+                  value={editPerformedAt}
+                  onChange={(e) => setEditPerformedAt(e.target.value)}
+                  required
+                />
+                <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}>
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c.replace("_", " ")}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  placeholder="Description"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Cost"
+                  value={editCost}
+                  onChange={(e) => setEditCost(e.target.value)}
+                />
+                <button type="submit" disabled={updateRecordMutation.isPending}>
+                  Save
                 </button>
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={() => handleDelete(record.id, record.performed_at, record.category)}
-                >
-                  Delete
+                <button type="button" className="secondary" onClick={() => setEditingId(null)}>
+                  Cancel
                 </button>
+              </form>
+            </li>
+          ) : (
+            <li key={record.id}>
+              <div className="record-row">
+                <span className="record-date">{record.performed_at}</span>
+                <span className="record-category">{record.category.replace("_", " ")}</span>
+                <span className="record-description">{record.description || "—"}</span>
+                <span className="record-cost">{record.cost != null ? `$${record.cost}` : ""}</span>
+                <div className="record-actions">
+                  <button type="button" onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}>
+                    {expandedId === record.id ? "Hide receipts" : "Receipts"}
+                  </button>
+                  <button type="button" onClick={() => startEdit(record)}>
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => handleDelete(record.id, record.performed_at, record.category)}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
-            </div>
-            {expandedId === record.id && <AttachmentsSection entityType="record" entityId={record.id} />}
-          </li>
-        ))}
+              {expandedId === record.id && <AttachmentsSection entityType="record" entityId={record.id} />}
+            </li>
+          ),
+        )}
       </ul>
       {records?.length === 0 && <p>No service history yet.</p>}
     </section>

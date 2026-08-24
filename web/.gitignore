@@ -8,7 +8,9 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+node_modules.broken-uid1001
 dist
+dist.broken-uid1001
 dist-ssr
 *.local
 

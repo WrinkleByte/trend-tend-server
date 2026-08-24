@@ -11,6 +11,13 @@ export function createMaintenanceRecord(input: MaintenanceRecordCreateInput): Pr
   return apiFetch("/maintenance-records", { method: "POST", body: JSON.stringify(input) });
 }
 
+export function updateMaintenanceRecord(
+  id: string,
+  input: Partial<MaintenanceRecordCreateInput>,
+): Promise<MaintenanceRecord> {
+  return apiFetch(`/maintenance-records/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
 export function deleteMaintenanceRecord(id: string): Promise<void> {
   return apiFetch(`/maintenance-records/${id}`, { method: "DELETE" });
 }

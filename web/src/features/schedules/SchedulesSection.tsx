@@ -4,8 +4,9 @@ import {
   createMaintenanceSchedule,
   deleteMaintenanceSchedule,
   listMaintenanceSchedules,
+  updateMaintenanceSchedule,
 } from "../../api/maintenanceSchedules";
-import type { IntervalType } from "../../api/types";
+import type { IntervalType, MaintenanceSchedule } from "../../api/types";
 
 export function SchedulesSection({ assetId }: { assetId: string }) {
   const queryClient = useQueryClient();
@@ -18,6 +19,46 @@ export function SchedulesSection({ assetId }: { assetId: string }) {
   const [intervalType, setIntervalType] = useState<IntervalType>("time");
   const [intervalDays, setIntervalDays] = useState("90");
   const [intervalUsageAmount, setIntervalUsageAmount] = useState("3000");
+
+  // Edit-in-place state (Vikunja #111) -- only one row editable at a time,
+  // mirrors FuelLogsSection.tsx's identical pattern. interval_type itself
+  // isn't editable (MaintenanceScheduleUpdate has no such field -- changing
+  // time-based vs. usage-based vs. both is a different-enough schedule that
+  // it's created fresh instead), so the edit form keeps the original
+  // schedule's interval_type and only shows the day/usage fields it implies.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editIntervalType, setEditIntervalType] = useState<IntervalType>("time");
+  const [editIntervalDays, setEditIntervalDays] = useState("");
+  const [editIntervalUsageAmount, setEditIntervalUsageAmount] = useState("");
+
+  function startEdit(schedule: MaintenanceSchedule) {
+    setEditingId(schedule.id);
+    setEditName(schedule.name);
+    setEditIntervalType(schedule.interval_type);
+    setEditIntervalDays(schedule.interval_days != null ? String(schedule.interval_days) : "");
+    setEditIntervalUsageAmount(
+      schedule.interval_usage_amount != null ? String(schedule.interval_usage_amount) : "",
+    );
+  }
+
+  const updateMutation = useMutation({
+    mutationFn: (id: string) =>
+      updateMaintenanceSchedule(id, {
+        name: editName,
+        interval_days: editIntervalType !== "usage" ? Number(editIntervalDays) : null,
+        interval_usage_amount: editIntervalType !== "time" ? Number(editIntervalUsageAmount) : null,
+      }),
+    onSuccess: () => {
+      setEditingId(null);
+      queryClient.invalidateQueries({ queryKey: ["maintenance-schedules", assetId] });
+    },
+  });
+
+  function handleEditSubmit(event: FormEvent, id: string) {
+    event.preventDefault();
+    if (editName.trim()) updateMutation.mutate(id);
+  }
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -81,16 +122,49 @@ export function SchedulesSection({ assetId }: { assetId: string }) {
 
       {isLoading && <p>Loading…</p>}
       <ul className="schedule-list">
-        {schedules?.map((schedule) => (
-          <li key={schedule.id} className={schedule.is_overdue ? "overdue" : ""}>
-            <span>{schedule.name}</span>
-            <span>{schedule.next_due_date ? `Due ${schedule.next_due_date}` : "No due date yet"}</span>
-            {schedule.is_overdue && <span className="badge">Overdue</span>}
-            <button type="button" className="danger" onClick={() => deleteMutation.mutate(schedule.id)}>
-              Delete
-            </button>
-          </li>
-        ))}
+        {schedules?.map((schedule) =>
+          editingId === schedule.id ? (
+            <li key={schedule.id}>
+              <form className="inline-form" onSubmit={(e) => handleEditSubmit(e, schedule.id)}>
+                <input placeholder="e.g. Oil change" value={editName} onChange={(e) => setEditName(e.target.value)} />
+                {editIntervalType !== "usage" && (
+                  <input
+                    type="number"
+                    value={editIntervalDays}
+                    onChange={(e) => setEditIntervalDays(e.target.value)}
+                    title="Repeat every N days"
+                  />
+                )}
+                {editIntervalType !== "time" && (
+                  <input
+                    type="number"
+                    value={editIntervalUsageAmount}
+                    onChange={(e) => setEditIntervalUsageAmount(e.target.value)}
+                    title="Repeat every N miles"
+                  />
+                )}
+                <button type="submit" disabled={updateMutation.isPending}>
+                  Save
+                </button>
+                <button type="button" className="secondary" onClick={() => setEditingId(null)}>
+                  Cancel
+                </button>
+              </form>
+            </li>
+          ) : (
+            <li key={schedule.id} className={schedule.is_overdue ? "overdue" : ""}>
+              <span>{schedule.name}</span>
+              <span>{schedule.next_due_date ? `Due ${schedule.next_due_date}` : "No due date yet"}</span>
+              {schedule.is_overdue && <span className="badge">Overdue</span>}
+              <button type="button" onClick={() => startEdit(schedule)}>
+                Edit
+              </button>
+              <button type="button" className="danger" onClick={() => deleteMutation.mutate(schedule.id)}>
+                Delete
+              </button>
+            </li>
+          ),
+        )}
       </ul>
       {schedules?.length === 0 && <p>No reminders set.</p>}
     </section>
