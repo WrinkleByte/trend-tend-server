@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { deleteAsset, getAsset, updateAsset } from "../../api/assets";
 import type { AssetCreateInput, AssetStatus } from "../../api/types";
+import { GridField } from "../../components/GridField";
 import { MaintenanceRecordsSection } from "../maintenance/MaintenanceRecordsSection";
 import { MaintenanceAlertsSection } from "../schedules/MaintenanceAlertsSection";
 import { SchedulesSection } from "../schedules/SchedulesSection";
@@ -10,41 +11,6 @@ import { FuelLogsSection } from "../trips/FuelLogsSection";
 import { TripLogsSection } from "../trips/TripLogsSection";
 import { AssetProfilePhoto } from "./AssetProfilePhoto";
 import { ASSET_TYPES } from "./assetTypes";
-
-function GridField({
-  label,
-  value,
-  type = "text",
-  min,
-  max,
-  step,
-  placeholder,
-  onChange,
-}: {
-  label: string;
-  value: string | number | undefined;
-  type?: string;
-  min?: number | string;
-  max?: number | string;
-  step?: number | string;
-  placeholder?: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="form-field">
-      <label>{label}</label>
-      <input
-        type={type}
-        min={min}
-        max={max}
-        step={step}
-        placeholder={placeholder}
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </div>
-  );
-}
 
 export function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();

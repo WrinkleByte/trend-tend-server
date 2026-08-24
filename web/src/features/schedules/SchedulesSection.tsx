@@ -31,6 +31,7 @@ export function SchedulesSection({ assetId }: { assetId: string }) {
   const [editIntervalType, setEditIntervalType] = useState<IntervalType>("time");
   const [editIntervalDays, setEditIntervalDays] = useState("");
   const [editIntervalUsageAmount, setEditIntervalUsageAmount] = useState("");
+  const [editActive, setEditActive] = useState(true);
 
   function startEdit(schedule: MaintenanceSchedule) {
     setEditingId(schedule.id);
@@ -40,6 +41,7 @@ export function SchedulesSection({ assetId }: { assetId: string }) {
     setEditIntervalUsageAmount(
       schedule.interval_usage_amount != null ? String(schedule.interval_usage_amount) : "",
     );
+    setEditActive(schedule.active);
   }
 
   const updateMutation = useMutation({
@@ -48,6 +50,7 @@ export function SchedulesSection({ assetId }: { assetId: string }) {
         name: editName,
         interval_days: editIntervalType !== "usage" ? Number(editIntervalDays) : null,
         interval_usage_amount: editIntervalType !== "time" ? Number(editIntervalUsageAmount) : null,
+        active: editActive,
       }),
     onSuccess: () => {
       setEditingId(null);
@@ -143,6 +146,10 @@ export function SchedulesSection({ assetId }: { assetId: string }) {
                     title="Repeat every N miles"
                   />
                 )}
+                <label className="check-label">
+                  <input type="checkbox" checked={editActive} onChange={(e) => setEditActive(e.target.checked)} />
+                  Active
+                </label>
                 <button type="submit" disabled={updateMutation.isPending}>
                   Save
                 </button>

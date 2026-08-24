@@ -84,6 +84,12 @@ export interface MaintenanceRecord {
   currency: string;
   odometer_reading: number | null;
   schedule_id: string | null;
+  oil_viscosity: string | null;
+  oil_formulation: string | null;
+  oil_meets_dexos: boolean | null;
+  filter_part_number: string | null;
+  fluid_type: string | null;
+  capacity: string | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -100,6 +106,12 @@ export interface MaintenanceRecordCreateInput {
   currency?: string;
   odometer_reading?: number | null;
   schedule_id?: string | null;
+  oil_viscosity?: string | null;
+  oil_formulation?: string | null;
+  oil_meets_dexos?: boolean | null;
+  filter_part_number?: string | null;
+  fluid_type?: string | null;
+  capacity?: string | null;
 }
 
 export type IntervalType = "time" | "usage" | "both";

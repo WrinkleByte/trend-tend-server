@@ -491,6 +491,12 @@ ul {
   grid-column: auto / -1;
 }
 
+/* Edit-in-place forms (Vikunja #111) -- FuelLogsSection/MaintenanceRecordsSection's
+   fuller field set needs its own padding since it isn't a .record-row. */
+.record-edit-form {
+  padding: 14px 4px;
+}
+
 .admin-household-list li {
   padding: 16px 0;
 }

@@ -3,13 +3,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFuelLog, deleteFuelLog, listFuelLogs, updateFuelLog } from "../../api/fuelLogs";
 import type { FuelLog } from "../../api/types";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
+import { GridField } from "../../components/GridField";
 
-// Keeps the inline add/edit forms to the fields people actually fill in at
-// the pump -- octane/cetane/gas_brand/location/additive/mpg all exist on
-// the backend schema (and sync down from mobile, where they're editable)
-// but stay out of scope here, same scoping choice MaintenanceRecordsSection
-// makes (e.g. performed_by isn't in its inline form either). Vikunja #99
-// (rendering those fields read-only) is the separate, still-open follow-up.
+// Keeps the quick-add inline form to the fields people actually fill in at
+// the pump -- octane/cetane/gas_brand/location/additive/mpg/cost_per_gallon
+// all exist on the backend schema and sync down from mobile, but stay out
+// of the quick-add form's scope (same choice MaintenanceRecordsSection's
+// add form makes). The edit form below is different: it exposes every
+// field FuelLogUpdate tracks (Vikunja #111), since editing an existing
+// entry is exactly where those mobile-only fields need a web entry point.
 export function FuelLogsSection({ assetId }: { assetId: string }) {
   const queryClient = useQueryClient();
   const { data: logs, isLoading } = useQuery({
@@ -24,23 +26,39 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
   const [totalCost, setTotalCost] = useState("");
   const [isFillUp, setIsFillUp] = useState(true);
 
-  // Edit-in-place state (Vikunja #111) -- only one row editable at a time,
-  // mirrors the single shared "create" form's field set above rather than
-  // duplicating a whole second set of controlled inputs.
+  // Edit-in-place state (Vikunja #111) -- only one row editable at a time.
+  // Exposes every field FuelLogUpdate tracks, not just the quick-add form's
+  // subset -- see this file's top comment.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPerformedAt, setEditPerformedAt] = useState("");
   const [editOdometerReading, setEditOdometerReading] = useState("");
   const [editGallons, setEditGallons] = useState("");
+  const [editCostPerGallon, setEditCostPerGallon] = useState("");
   const [editTotalCost, setEditTotalCost] = useState("");
   const [editIsFillUp, setEditIsFillUp] = useState(true);
+  const [editMpg, setEditMpg] = useState("");
+  const [editOctane, setEditOctane] = useState("");
+  const [editCetane, setEditCetane] = useState("");
+  const [editGasBrand, setEditGasBrand] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editAdditive, setEditAdditive] = useState("");
+  const [editNotes, setEditNotes] = useState("");
 
   function startEdit(log: FuelLog) {
     setEditingId(log.id);
     setEditPerformedAt(log.performed_at.slice(0, 10));
     setEditOdometerReading(log.odometer_reading != null ? String(log.odometer_reading) : "");
     setEditGallons(log.gallons);
+    setEditCostPerGallon(log.cost_per_gallon ?? "");
     setEditTotalCost(log.total_cost ?? "");
     setEditIsFillUp(log.is_fill_up);
+    setEditMpg(log.mpg ?? "");
+    setEditOctane(log.octane != null ? String(log.octane) : "");
+    setEditCetane(log.cetane != null ? String(log.cetane) : "");
+    setEditGasBrand(log.gas_brand ?? "");
+    setEditLocation(log.location ?? "");
+    setEditAdditive(log.additive ?? "");
+    setEditNotes(log.notes ?? "");
   }
 
   const updateMutation = useMutation({
@@ -49,8 +67,16 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
         performed_at: editPerformedAt,
         odometer_reading: editOdometerReading ? Number(editOdometerReading) : null,
         gallons: editGallons,
+        cost_per_gallon: editCostPerGallon || null,
         total_cost: editTotalCost || null,
         is_fill_up: editIsFillUp,
+        mpg: editMpg || null,
+        octane: editOctane ? Number(editOctane) : null,
+        cetane: editCetane ? Number(editCetane) : null,
+        gas_brand: editGasBrand || null,
+        location: editLocation || null,
+        additive: editAdditive || null,
+        notes: editNotes || null,
       }),
     onSuccess: () => {
       setEditingId(null);
@@ -142,49 +168,69 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
         {logs?.map((log) =>
           editingId === log.id ? (
             <li key={log.id}>
-              <form className="inline-form" onSubmit={(e) => handleEditSubmit(e, log.id)}>
-                <input
-                  type="date"
-                  value={editPerformedAt}
-                  onChange={(e) => setEditPerformedAt(e.target.value)}
-                  required
-                />
-                <input
-                  type="number"
-                  step="0.1"
-                  placeholder="Odometer"
-                  value={editOdometerReading}
-                  onChange={(e) => setEditOdometerReading(e.target.value)}
-                />
-                <input
-                  type="number"
-                  step="0.001"
-                  placeholder="Gallons"
-                  value={editGallons}
-                  onChange={(e) => setEditGallons(e.target.value)}
-                  required
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="Total cost"
-                  value={editTotalCost}
-                  onChange={(e) => setEditTotalCost(e.target.value)}
-                />
-                <label className="check-label" style={{ marginBottom: 0 }}>
-                  <input
-                    type="checkbox"
-                    checked={editIsFillUp}
-                    onChange={(e) => setEditIsFillUp(e.target.checked)}
+              <form className="record-edit-form" onSubmit={(e) => handleEditSubmit(e, log.id)}>
+                <div className="field-grid field-compact">
+                  <GridField label="Date" type="date" value={editPerformedAt} onChange={setEditPerformedAt} />
+                  <GridField
+                    label="Odometer"
+                    type="number"
+                    step="0.1"
+                    value={editOdometerReading}
+                    onChange={setEditOdometerReading}
                   />
-                  Full tank
-                </label>
-                <button type="submit" disabled={updateMutation.isPending}>
-                  Save
-                </button>
-                <button type="button" className="secondary" onClick={() => setEditingId(null)}>
-                  Cancel
-                </button>
+                  <GridField
+                    label="Gallons"
+                    type="number"
+                    step="0.001"
+                    value={editGallons}
+                    onChange={setEditGallons}
+                  />
+                  <GridField
+                    label="Cost per gallon"
+                    type="number"
+                    step="0.001"
+                    value={editCostPerGallon}
+                    onChange={setEditCostPerGallon}
+                  />
+                  <GridField
+                    label="Total cost"
+                    type="number"
+                    step="0.01"
+                    value={editTotalCost}
+                    onChange={setEditTotalCost}
+                  />
+                  <GridField label="MPG" type="number" step="0.1" value={editMpg} onChange={setEditMpg} />
+                  <GridField label="Octane" type="number" value={editOctane} onChange={setEditOctane} />
+                  <GridField label="Cetane" type="number" value={editCetane} onChange={setEditCetane} />
+                  <GridField label="Gas brand" value={editGasBrand} onChange={setEditGasBrand} />
+                  <GridField label="Location" value={editLocation} onChange={setEditLocation} />
+                  <GridField label="Additive" value={editAdditive} onChange={setEditAdditive} />
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={editIsFillUp}
+                      onChange={(e) => setEditIsFillUp(e.target.checked)}
+                    />
+                    Full tank
+                  </label>
+                  <div className="field-full form-field">
+                    <label htmlFor="fuel-edit-notes">Notes</label>
+                    <textarea
+                      id="fuel-edit-notes"
+                      rows={2}
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="form-actions" style={{ marginTop: 12 }}>
+                  <button type="submit" disabled={updateMutation.isPending}>
+                    Save
+                  </button>
+                  <button type="button" className="secondary" onClick={() => setEditingId(null)}>
+                    Cancel
+                  </button>
+                </div>
               </form>
             </li>
           ) : (
