@@ -781,6 +781,23 @@ ul {
   margin-left: 0;
 }
 
+/* .secondary's border/text normally come from --border/--text-h, which are
+   calibrated for this page's own light/dark background -- but .asset-header
+   is a fixed navy gradient regardless of theme (see above), and on the
+   light theme --text-h (#1b2c4c) is nearly the same color as --navy-top
+   (#1b2c4c), making "Restore to Active" nearly invisible there. Same
+   "cream on navy, independent of theme" treatment .asset-type-badge
+   already uses just above. .danger (Retire, Delete) is unaffected --
+   it's already a fixed red regardless of theme. */
+.asset-header-right button.secondary {
+  border-color: rgba(244, 241, 234, 0.4);
+  color: var(--cream);
+}
+
+.asset-header-right button.secondary:hover:not(:disabled) {
+  background: rgba(244, 241, 234, 0.12);
+}
+
 /* Main body — two-column grid */
 .asset-body {
   display: grid;

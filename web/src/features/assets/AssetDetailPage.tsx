@@ -115,7 +115,12 @@ export function AssetDetailPage() {
           </div>
         </div>
         <div className="asset-header-right">
-          <button type="button" className="secondary" disabled={statusMutation.isPending} onClick={handleToggleStatus}>
+          <button
+            type="button"
+            className={asset.status === "active" ? "danger" : "secondary"}
+            disabled={statusMutation.isPending}
+            onClick={handleToggleStatus}
+          >
             {asset.status === "active" ? "Retire" : "Restore to Active"}
           </button>
           <button type="button" className="danger" onClick={handleDelete} disabled={deleteMutation.isPending}>
