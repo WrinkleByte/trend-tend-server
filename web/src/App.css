@@ -580,6 +580,67 @@ ul {
   border-radius: 999px;
 }
 
+/* Maintenance alerts (Vikunja #110) -- mirrors .schedule-list/.record-row's
+   existing conventions rather than introducing new patterns. */
+.alert-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.alert-list li.overdue .alert-name {
+  color: #dc2626;
+}
+
+.alert-list li.due-soon .badge {
+  background: #d97706;
+}
+
+.alert-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 4px;
+}
+
+.alert-name {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.alert-due {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.alert-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.schedule-match-prompt {
+  margin-bottom: 20px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-alt);
+}
+
+.schedule-match-prompt ul {
+  margin: 8px 0;
+}
+
+.schedule-match-prompt li {
+  padding: 4px 0;
+}
+
+.schedule-match-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .attachments-section {
   padding: 12px 0 12px 16px;
   border-left: 2px solid var(--border);

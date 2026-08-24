@@ -99,6 +99,7 @@ export interface MaintenanceRecordCreateInput {
   cost?: number | null;
   currency?: string;
   odometer_reading?: number | null;
+  schedule_id?: string | null;
 }
 
 export type IntervalType = "time" | "usage" | "both";
@@ -115,6 +116,7 @@ export interface MaintenanceSchedule {
   anchor_date: string | null;
   anchor_usage_value: number | null;
   active: boolean;
+  dismissed_at: string | null;
   next_due_date: string | null;
   next_due_usage: number | null;
   is_overdue: boolean;
@@ -132,6 +134,16 @@ export interface MaintenanceScheduleCreateInput {
   usage_field?: string | null;
   anchor_date?: string | null;
   anchor_usage_value?: number | null;
+}
+
+export interface MaintenanceScheduleUpdateInput {
+  name?: string;
+  interval_days?: number | null;
+  interval_usage_amount?: number | null;
+  anchor_date?: string | null;
+  anchor_usage_value?: number | null;
+  active?: boolean | null;
+  dismissed_at?: string | null;
 }
 
 export type StorageBackendType = "local_disk" | "s3";

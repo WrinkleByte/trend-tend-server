@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { deleteAsset, getAsset, updateAsset } from "../../api/assets";
 import type { AssetCreateInput, AssetStatus } from "../../api/types";
 import { MaintenanceRecordsSection } from "../maintenance/MaintenanceRecordsSection";
+import { MaintenanceAlertsSection } from "../schedules/MaintenanceAlertsSection";
 import { SchedulesSection } from "../schedules/SchedulesSection";
 import { FuelLogsSection } from "../trips/FuelLogsSection";
 import { TripLogsSection } from "../trips/TripLogsSection";
@@ -344,6 +345,9 @@ export function AssetDetailPage() {
       <div className="asset-bottom">
         <section className="asset-detail-panel">
           <MaintenanceRecordsSection assetId={asset.id} />
+        </section>
+        <section className="asset-detail-panel">
+          <MaintenanceAlertsSection assetId={asset.id} currentUsage={asset.vehicle_details?.current_mileage ?? null} />
         </section>
         <section className="asset-detail-panel">
           <SchedulesSection assetId={asset.id} />

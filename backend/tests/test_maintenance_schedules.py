@@ -119,6 +119,42 @@ async def test_update_a_schedule(client, auth_headers):
     assert updated.json()["name"] == "Brakes", "a partial update must not blank untouched fields"
 
 
+async def test_dismissed_at_round_trips_through_update(client, auth_headers):
+    # Vikunja #110: dismissed_at previously lived only on the sync-protocol
+    # schema (MaintenanceScheduleSyncData) -- the REST
+    # MaintenanceScheduleUpdate/Response schemas didn't expose it, so the
+    # web app's own PATCH endpoint couldn't dismiss/undismiss an alert.
+    asset_id = await _asset(client, auth_headers)
+    schedule_id = (
+        await client.post(
+            "/api/v1/maintenance-schedules",
+            headers=auth_headers,
+            json={"asset_id": asset_id, "name": "Wipers", "interval_type": "time", "interval_days": 365},
+        )
+    ).json()["id"]
+    assert (
+        await client.get(f"/api/v1/maintenance-schedules/{schedule_id}", headers=auth_headers)
+    ).json()["dismissed_at"] is None
+
+    dismissed_at = datetime.now(UTC).isoformat()
+    updated = await client.patch(
+        f"/api/v1/maintenance-schedules/{schedule_id}",
+        headers=auth_headers,
+        json={"dismissed_at": dismissed_at},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["dismissed_at"] is not None
+
+    # Explicit null clears it (un-dismiss), same "explicit-set wins" PATCH
+    # semantics test_update_a_schedule already relies on.
+    cleared = await client.patch(
+        f"/api/v1/maintenance-schedules/{schedule_id}",
+        headers=auth_headers,
+        json={"dismissed_at": None},
+    )
+    assert cleared.json()["dismissed_at"] is None
+
+
 async def test_deleted_schedule_disappears_from_reads(client, auth_headers):
     asset_id = await _asset(client, auth_headers)
     schedule_id = (

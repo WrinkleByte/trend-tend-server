@@ -24,6 +24,7 @@ class MaintenanceScheduleUpdate(BaseModel):
     anchor_date: date | None = None
     anchor_usage_value: int | None = None
     active: bool | None = None
+    dismissed_at: datetime | None = None
 
 
 class MaintenanceScheduleResponse(BaseModel):
@@ -38,6 +39,7 @@ class MaintenanceScheduleResponse(BaseModel):
     anchor_date: date | None
     anchor_usage_value: int | None
     active: bool
+    dismissed_at: datetime | None
     next_due_date: date | None
     next_due_usage: int | None
     is_overdue: bool

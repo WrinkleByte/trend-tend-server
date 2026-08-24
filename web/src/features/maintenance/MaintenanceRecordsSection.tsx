@@ -5,9 +5,10 @@ import {
   deleteMaintenanceRecord,
   listMaintenanceRecords,
 } from "../../api/maintenanceRecords";
+import { listMaintenanceSchedules, updateMaintenanceSchedule } from "../../api/maintenanceSchedules";
+import { RECORD_CATEGORIES as CATEGORIES, recordMatchesSchedule } from "../schedules/maintenanceAlerts";
+import type { MaintenanceRecord, MaintenanceSchedule } from "../../api/types";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
-
-const CATEGORIES = ["oil_change", "tires", "repair", "inspection", "cleaning", "filter", "other"];
 
 export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
   const queryClient = useQueryClient();
@@ -15,12 +16,30 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
     queryKey: ["maintenance-records", assetId],
     queryFn: () => listMaintenanceRecords(assetId),
   });
+  // Same query key MaintenanceAlertsSection.tsx uses -- shares its cache.
+  // Needed here only to check for a matching active schedule right after a
+  // record is created; the section itself has no schedule UI of its own.
+  const { data: schedules } = useQuery({
+    queryKey: ["maintenance-schedules", assetId],
+    queryFn: () => listMaintenanceSchedules(assetId),
+  });
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [performedAt, setPerformedAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
+
+  // Vikunja #110: after a manually-added record, check for an active
+  // schedule whose name matches its category and offer to clear it too --
+  // mirrors mobile's ScheduleMatchConfirmationView (getActiveSchedulesForCategorySync),
+  // including its "list every match individually, default all selected"
+  // handling of duplicate same-name schedules.
+  const [pendingMatch, setPendingMatch] = useState<{
+    record: MaintenanceRecord;
+    schedules: MaintenanceSchedule[];
+    selected: Set<string>;
+  } | null>(null);
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -31,12 +50,47 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
         description: description || null,
         cost: cost ? Number(cost) : null,
       }),
-    onSuccess: () => {
+    onSuccess: (record) => {
       setDescription("");
       setCost("");
       queryClient.invalidateQueries({ queryKey: ["maintenance-records", assetId] });
+
+      const matches = (schedules ?? []).filter((s) => s.active && recordMatchesSchedule(record, s.name));
+      if (matches.length > 0) {
+        setPendingMatch({ record, schedules: matches, selected: new Set(matches.map((s) => s.id)) });
+      }
     },
   });
+
+  const clearMatchingSchedulesMutation = useMutation({
+    mutationFn: async () => {
+      if (!pendingMatch) return;
+      const toClear = pendingMatch.schedules.filter((s) => pendingMatch.selected.has(s.id));
+      await Promise.all(
+        toClear.map((s) =>
+          updateMaintenanceSchedule(s.id, {
+            anchor_date: pendingMatch.record.performed_at,
+            anchor_usage_value: pendingMatch.record.odometer_reading,
+            dismissed_at: null,
+          }),
+        ),
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["maintenance-schedules", assetId] });
+      setPendingMatch(null);
+    },
+  });
+
+  function toggleMatchSelected(scheduleId: string) {
+    setPendingMatch((prev) => {
+      if (!prev) return prev;
+      const selected = new Set(prev.selected);
+      if (selected.has(scheduleId)) selected.delete(scheduleId);
+      else selected.add(scheduleId);
+      return { ...prev, selected };
+    });
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (recordId: string) => deleteMaintenanceRecord(recordId),
@@ -84,6 +138,42 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
           Add record
         </button>
       </form>
+
+      {pendingMatch && (
+        <div className="schedule-match-prompt">
+          <p>
+            This matches {pendingMatch.schedules.length === 1 ? "an active reminder" : "active reminders"} for this
+            asset. Clear it too?
+          </p>
+          <ul>
+            {pendingMatch.schedules.map((s) => (
+              <li key={s.id}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={pendingMatch.selected.has(s.id)}
+                    onChange={() => toggleMatchSelected(s.id)}
+                  />
+                  {s.name}
+                  {s.next_due_date ? ` (due ${s.next_due_date})` : ""}
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="schedule-match-actions">
+            <button
+              type="button"
+              onClick={() => clearMatchingSchedulesMutation.mutate()}
+              disabled={clearMatchingSchedulesMutation.isPending || pendingMatch.selected.size === 0}
+            >
+              Confirm
+            </button>
+            <button type="button" onClick={() => setPendingMatch(null)}>
+              Skip
+            </button>
+          </div>
+        </div>
+      )}
 
       {isLoading && <p>Loading…</p>}
       <ul className="record-list">
