@@ -21,6 +21,7 @@ from app.models.asset import (
 )
 from app.models.attachment import Attachment
 from app.models.fuel_log import FuelLog
+from app.models.maintenance_category import MaintenanceCategory
 from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.mixins import utcnow
@@ -31,6 +32,7 @@ from app.schemas.sync import (
     AttachmentSyncData,
     EquipmentDetailsSyncData,
     FuelLogSyncData,
+    MaintenanceCategorySyncData,
     MaintenanceRecordSyncData,
     MaintenanceScheduleSyncData,
     PropertyDetailsSyncData,
@@ -89,6 +91,7 @@ SYNC_REGISTRY: dict[str, EntitySyncConfig] = {
     ),
     "fuel_log": EntitySyncConfig(FuelLog, FuelLogSyncData),
     "trip_log": EntitySyncConfig(TripLog, TripLogSyncData),
+    "maintenance_category": EntitySyncConfig(MaintenanceCategory, MaintenanceCategorySyncData),
     "attachment": EntitySyncConfig(Attachment, AttachmentSyncData),
 }
 

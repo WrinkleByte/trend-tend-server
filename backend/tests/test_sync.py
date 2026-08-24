@@ -459,6 +459,40 @@ async def test_trip_log_syncs_via_push_and_pull(client, auth_headers):
     assert changes_as_b[trip_log_id]["data"]["distance"] == "42.0"
 
 
+async def test_maintenance_category_syncs_via_push_and_pull(client, auth_headers):
+    device_a = await _register_device(client, auth_headers, "Device A")
+    device_b = await _register_device(client, auth_headers, "Device B")
+
+    category_id = str(uuid.uuid4())
+
+    push = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_a,
+            "changes": [
+                {
+                    "entity_type": "maintenance_category",
+                    "id": category_id,
+                    "base_version": 0,
+                    "client_updated_at": "2026-01-01T00:00:00Z",
+                    "data": {"name": "Wiper Blades"},
+                }
+            ],
+        },
+    )
+    result = push.json()["results"][0]
+    assert result["status"] == "accepted"
+    assert result["new_version"] == 1
+
+    pull_as_b = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_b}
+    )
+    changes_as_b = {c["id"]: c for c in pull_as_b.json()["changes"]}
+    assert changes_as_b[category_id]["entity_type"] == "maintenance_category"
+    assert changes_as_b[category_id]["data"]["name"] == "Wiper Blades"
+
+
 # --- Revoking a lost or stolen paired device (Vikunja #36) ---
 #
 # SyncDevice.revoked_at and its enforcement in _get_active_device already

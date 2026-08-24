@@ -166,6 +166,10 @@ class MaintenanceScheduleSyncData(BaseModel):
     dismissed_at: datetime | None = None
 
 
+class MaintenanceCategorySyncData(BaseModel):
+    name: str
+
+
 class AttachmentSyncData(BaseModel):
     # storage_backend/storage_key are set by whichever path actually put the
     # blob bytes in place — today that's the multipart POST /attachments
