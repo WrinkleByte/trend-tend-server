@@ -421,6 +421,23 @@ ul {
   font-size: 14px;
 }
 
+/* Retired-assets grouping (Vikunja #106 web parity) */
+.asset-list-section-heading {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-h);
+  margin: 24px 0 4px;
+}
+
+.asset-list-retired a {
+  opacity: 0.6;
+}
+
+.asset-list-retired .status-pill {
+  margin-left: auto;
+}
+
 .record-row,
 .schedule-list li,
 .token-list li,

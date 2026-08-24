@@ -24,6 +24,9 @@ export function AssetsPage() {
     if (name.trim()) createMutation.mutate();
   }
 
+  const activeAssets = assets?.filter((a) => a.status === "active") ?? [];
+  const retiredAssets = assets?.filter((a) => a.status === "archived" || a.status === "disposed") ?? [];
+
   return (
     <div>
       <h1>Assets</h1>
@@ -46,8 +49,14 @@ export function AssetsPage() {
       </form>
 
       {isLoading && <p>Loading…</p>}
+
+      {/* Active/Retired split mirrors the mobile apps' AssetListScreen.kt/
+          AssetListView.swift grouping (Vikunja #106) -- a retired asset used
+          to sit interleaved alphabetically among active ones here with no
+          visual distinction beyond a status pill you'd only see after
+          clicking in. */}
       <ul className="asset-list">
-        {assets?.map((asset) => (
+        {activeAssets.map((asset) => (
           <li key={asset.id}>
             <Link to={`/assets/${asset.id}`}>
               <strong>{asset.name}</strong>
@@ -56,6 +65,24 @@ export function AssetsPage() {
           </li>
         ))}
       </ul>
+
+      {retiredAssets.length > 0 && (
+        <>
+          <h2 className="asset-list-section-heading">Retired</h2>
+          <ul className="asset-list asset-list-retired">
+            {retiredAssets.map((asset) => (
+              <li key={asset.id}>
+                <Link to={`/assets/${asset.id}`}>
+                  <strong>{asset.name}</strong>
+                  <span className="asset-type">{ASSET_TYPES.find((t) => t.value === asset.asset_type)?.label}</span>
+                  <span className={`status-pill status-${asset.status}`}>{asset.status}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       {assets?.length === 0 && <p>No assets yet — add your first one above.</p>}
     </div>
   );

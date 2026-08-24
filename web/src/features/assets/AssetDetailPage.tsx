@@ -44,9 +44,15 @@ export function AssetDetailPage() {
   });
 
   // Deliberately its own mutation, independent of the Save button below —
-  // archiving is a one-click status flip, not something that should also
+  // retiring is a one-click status flip, not something that should also
   // silently commit whatever unsaved edits happen to be sitting in the rest
-  // of the form at the time.
+  // of the form at the time. Calls the same PATCH /assets/{id} as Save, but
+  // the backend only touches vehicle_details/equipment_details/property_details
+  // when they're present in the request body (app/api/v1/assets.py's
+  // `if payload.vehicle_details:` guards) -- sending status alone here never
+  // risks wiping them, unlike the bug this mirrors on mobile (Vikunja #106,
+  // fixed there with a dedicated writeDetails-free repository method; the
+  // backend never had that bug since it does a real partial update).
   const statusMutation = useMutation({
     mutationFn: (status: AssetStatus) => updateAsset(id!, { status }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["assets", id] }),
@@ -74,6 +80,26 @@ export function AssetDetailPage() {
     }
   }
 
+  // "Retire"/"Restore" terminology and confirm() text mirror the mobile
+  // apps' AssetFormView.swift/AssetFormScreen.kt exactly (Vikunja #106) --
+  // this used to say "Archive"/"Activate" with no confirmation at all,
+  // diverging from mobile on both wording and safety for what's the same
+  // underlying status flip.
+  function handleToggleStatus() {
+    if (!asset) return;
+    if (asset.status === "active") {
+      if (
+        window.confirm(
+          `Retire "${asset.name}"? This will move it to the retired section. You can still view its history, but it won't appear in active lists.`,
+        )
+      ) {
+        statusMutation.mutate("archived");
+      }
+    } else if (window.confirm(`Restore "${asset.name}" to active? This will move it back to your active list.`)) {
+      statusMutation.mutate("active");
+    }
+  }
+
   if (isLoading || !asset) return <p>Loading…</p>;
 
   const assetTypeLabel = ASSET_TYPES.find((t) => t.value === asset.asset_type)?.label ?? asset.asset_type;
@@ -89,13 +115,8 @@ export function AssetDetailPage() {
           </div>
         </div>
         <div className="asset-header-right">
-          <button
-            type="button"
-            className="secondary"
-            disabled={statusMutation.isPending}
-            onClick={() => statusMutation.mutate(asset.status === "active" ? "archived" : "active")}
-          >
-            {asset.status === "active" ? "Archive" : "Activate"}
+          <button type="button" className="secondary" disabled={statusMutation.isPending} onClick={handleToggleStatus}>
+            {asset.status === "active" ? "Retire" : "Restore to Active"}
           </button>
           <button type="button" className="danger" onClick={handleDelete} disabled={deleteMutation.isPending}>
             Delete
