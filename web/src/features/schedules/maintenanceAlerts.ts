@@ -10,7 +10,24 @@ export const DUE_SOON_USAGE = 500;
 // Record categories (MaintenanceRecordsSection.tsx's create-form select) --
 // lives here, not in that component file, so exporting it doesn't trip
 // react-refresh's "only export components" Fast Refresh rule.
-export const RECORD_CATEGORIES = ["oil_change", "tires", "repair", "inspection", "cleaning", "filter", "other"];
+//
+// Mirrors tendfida-mobile's shared/.../domain/MaintenanceCategories.kt --
+// the union of its VEHICLE_CATEGORIES and PROPERTY_CATEGORIES (web has no
+// per-asset-type split like mobile does, so one flat list covers both).
+// Previously a narrower, web-only 7-item list with a divergent "other"
+// custom-sentinel; unified onto mobile's vocabulary and its "custom"
+// sentinel so a household syncing both platforms sees one consistent set
+// instead of the same real-world category round-tripping as two different
+// stored strings depending which platform wrote it.
+export const CUSTOM_CATEGORY_VALUE = "custom";
+export const RECORD_CATEGORIES = [
+  "oil_change", "tires", "alignment", "tpms_sensors", "brakes", "filters", "air_filter", "fluids",
+  "transmission_fluid", "coolant", "differential_front", "differential_rear",
+  "battery", "inspection", "electrical", "engine", "general_service", "note",
+  "lawn_mowing", "fertilizing_n", "fertilizing_s", "fertilizing_e", "fertilizing_w",
+  "water_filter_change", "water_softener_salt", "gutter_cleaning", "pest_control",
+  "hvac_filter_change", "smoke_co_detector", CUSTOM_CATEGORY_VALUE,
+];
 
 export type AlertSeverity = "overdue" | "due_soon";
 
@@ -30,15 +47,28 @@ export function normalizeForMatch(value: string): string {
   return value.trim().toLowerCase().replace(/_/g, " ");
 }
 
+/** Every category key a record is tagged with: its primary `category` plus
+ * whatever's in the additive, comma-joined `additional_categories` field
+ * (Vikunja: multi-category tagging). Mirrors shared Kotlin's `allCategories`
+ * helper (tendfida-mobile's `domain/MaintenanceCategories.kt`) -- keep the
+ * two in sync if this logic changes. */
+export function allCategories(record: MaintenanceRecord): string[] {
+  const extra = record.additional_categories?.split(",").map((c) => c.trim()).filter(Boolean) ?? [];
+  return [record.category, ...extra];
+}
+
 /** Mirrors getActiveSchedulesForCategorySync's case-insensitive name match
  * (tendfida-mobile) -- used both when marking an alert performed (does
  * this existing record match this schedule?) and when creating a new
  * record (does it match any active schedule, so we can offer to clear
- * one?). Checks `custom_category` too, for a record filed under "other". */
+ * one?). Checks `custom_category` too, for a record filed under the
+ * "custom" sentinel, and every tag in `additional_categories`, not just
+ * the primary category -- so a record tagged with both "oil_change" and
+ * "tires" matches an active schedule for either. */
 export function recordMatchesSchedule(record: MaintenanceRecord, scheduleName: string): boolean {
   const normalized = normalizeForMatch(scheduleName);
   return (
-    normalizeForMatch(record.category) === normalized ||
+    allCategories(record).some((c) => normalizeForMatch(c) === normalized) ||
     (record.custom_category != null && normalizeForMatch(record.custom_category) === normalized)
   );
 }

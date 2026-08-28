@@ -19,6 +19,13 @@ class MaintenanceRecord(SyncedEntityMixin, Base):
     performed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     custom_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Vikunja: comma-joined category keys beyond the primary `category`
+    # above, for a record that covers more than one thing (e.g. an oil
+    # change done alongside a tire rotation). `category` stays the single
+    # value every existing display site reads; this is additive, consulted
+    # only by category-matching call sites (schedule auto-clear, dashboard
+    # gauges, filters) that need to know every category a record touches.
+    additional_categories: Mapped[str | None] = mapped_column(String(500), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)

@@ -7,7 +7,7 @@ import {
   updateMaintenanceRecord,
 } from "../../api/maintenanceRecords";
 import { listMaintenanceSchedules, updateMaintenanceSchedule } from "../../api/maintenanceSchedules";
-import { RECORD_CATEGORIES as CATEGORIES, recordMatchesSchedule } from "../schedules/maintenanceAlerts";
+import { CUSTOM_CATEGORY_VALUE, RECORD_CATEGORIES as CATEGORIES, recordMatchesSchedule } from "../schedules/maintenanceAlerts";
 import type { MaintenanceRecord, MaintenanceSchedule } from "../../api/types";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
 import { GridField } from "../../components/GridField";
@@ -29,8 +29,34 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
 
   const [performedAt, setPerformedAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState(CATEGORIES[0]);
+  // Vikunja: multi-category tagging -- additive to `category` above, which
+  // stays the single "primary" value. Comma-joined into additional_categories
+  // on save. A custom name typed via "Add new category" goes straight into
+  // this set as free text (no CUSTOM_CATEGORY_VALUE sentinel needed here,
+  // unlike the primary category, since there's no single paired free-text
+  // field -- any entry not in CATEGORIES is displayed and matched verbatim).
+  const [additionalCategories, setAdditionalCategories] = useState<Set<string>>(new Set());
+  const [newAdditionalCategoryName, setNewAdditionalCategoryName] = useState("");
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
+
+  function toggleAdditionalCategory(c: string) {
+    setAdditionalCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      return next;
+    });
+  }
+
+  function toggleEditAdditionalCategory(c: string) {
+    setEditAdditionalCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      return next;
+    });
+  }
 
   // Edit-in-place state (Vikunja #111) -- only one row editable at a time.
   // Unlike the quick-add form above, this exposes every field the backend
@@ -41,6 +67,8 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
   const [editPerformedAt, setEditPerformedAt] = useState("");
   const [editCategory, setEditCategory] = useState(CATEGORIES[0]);
   const [editCustomCategory, setEditCustomCategory] = useState("");
+  const [editAdditionalCategories, setEditAdditionalCategories] = useState<Set<string>>(new Set());
+  const [newEditAdditionalCategoryName, setNewEditAdditionalCategoryName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editCost, setEditCost] = useState("");
   const [editPerformedBy, setEditPerformedBy] = useState("");
@@ -56,6 +84,9 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
     setEditPerformedAt(record.performed_at.slice(0, 10));
     setEditCategory(record.category);
     setEditCustomCategory(record.custom_category ?? "");
+    setEditAdditionalCategories(
+      new Set((record.additional_categories ?? "").split(",").map((c) => c.trim()).filter(Boolean)),
+    );
     setEditDescription(record.description ?? "");
     setEditCost(record.cost ?? "");
     setEditPerformedBy(record.performed_by ?? "");
@@ -72,7 +103,9 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
       updateMaintenanceRecord(id, {
         performed_at: editPerformedAt,
         category: editCategory,
-        custom_category: editCategory === "other" ? editCustomCategory || null : null,
+        custom_category: editCategory === CUSTOM_CATEGORY_VALUE ? editCustomCategory || null : null,
+        additional_categories:
+          editAdditionalCategories.size > 0 ? Array.from(editAdditionalCategories).join(",") : null,
         description: editDescription || null,
         cost: editCost ? Number(editCost) : null,
         performed_by: editPerformedBy || null,
@@ -111,12 +144,14 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
         asset_id: assetId,
         performed_at: performedAt,
         category,
+        additional_categories: additionalCategories.size > 0 ? Array.from(additionalCategories).join(",") : null,
         description: description || null,
         cost: cost ? Number(cost) : null,
       }),
     onSuccess: (record) => {
       setDescription("");
       setCost("");
+      setAdditionalCategories(new Set());
       queryClient.invalidateQueries({ queryKey: ["maintenance-records", assetId] });
 
       const matches = (schedules ?? []).filter((s) => s.active && recordMatchesSchedule(record, s.name));
@@ -202,6 +237,57 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
           Add record
         </button>
       </form>
+      <details className="additional-categories">
+        <summary>
+          Additional categories{additionalCategories.size > 0 ? ` (${additionalCategories.size})` : ""}
+        </summary>
+        <div className="additional-categories-list">
+          {CATEGORIES.filter((c) => c !== CUSTOM_CATEGORY_VALUE).map((c) => (
+            <label key={c}>
+              <input
+                type="checkbox"
+                checked={additionalCategories.has(c)}
+                onChange={() => toggleAdditionalCategory(c)}
+              />
+              {c.replace("_", " ")}
+            </label>
+          ))}
+          {/* Custom names already checked this session (typed via "Add"
+              below) -- web has no remembered-custom-category list the way
+              mobile does, so these only exist for the life of this form. */}
+          {Array.from(additionalCategories)
+            .filter((c) => !CATEGORIES.includes(c))
+            .map((c) => (
+              <label key={c}>
+                <input
+                  type="checkbox"
+                  checked
+                  onChange={() => toggleAdditionalCategory(c)}
+                />
+                {c}
+              </label>
+            ))}
+        </div>
+        <div className="additional-categories-add">
+          <input
+            placeholder="Add new category"
+            value={newAdditionalCategoryName}
+            onChange={(e) => setNewAdditionalCategoryName(e.target.value)}
+          />
+          <button
+            type="button"
+            disabled={!newAdditionalCategoryName.trim()}
+            onClick={() => {
+              const trimmed = newAdditionalCategoryName.trim();
+              if (!trimmed) return;
+              setAdditionalCategories((prev) => new Set(prev).add(trimmed));
+              setNewAdditionalCategoryName("");
+            }}
+          >
+            Add
+          </button>
+        </div>
+      </details>
 
       {pendingMatch && (
         <div className="schedule-match-prompt">
@@ -266,9 +352,60 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
                       ))}
                     </select>
                   </div>
-                  {editCategory === "other" && (
+                  {editCategory === CUSTOM_CATEGORY_VALUE && (
                     <GridField label="Custom category" value={editCustomCategory} onChange={setEditCustomCategory} />
                   )}
+                  <div className="field-full form-field">
+                    <details className="additional-categories">
+                      <summary>
+                        Additional categories
+                        {editAdditionalCategories.size > 0 ? ` (${editAdditionalCategories.size})` : ""}
+                      </summary>
+                      <div className="additional-categories-list">
+                        {CATEGORIES.filter((c) => c !== CUSTOM_CATEGORY_VALUE).map((c) => (
+                          <label key={c}>
+                            <input
+                              type="checkbox"
+                              checked={editAdditionalCategories.has(c)}
+                              onChange={() => toggleEditAdditionalCategory(c)}
+                            />
+                            {c.replace("_", " ")}
+                          </label>
+                        ))}
+                        {Array.from(editAdditionalCategories)
+                          .filter((c) => !CATEGORIES.includes(c))
+                          .map((c) => (
+                            <label key={c}>
+                              <input
+                                type="checkbox"
+                                checked
+                                onChange={() => toggleEditAdditionalCategory(c)}
+                              />
+                              {c}
+                            </label>
+                          ))}
+                      </div>
+                      <div className="additional-categories-add">
+                        <input
+                          placeholder="Add new category"
+                          value={newEditAdditionalCategoryName}
+                          onChange={(e) => setNewEditAdditionalCategoryName(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          disabled={!newEditAdditionalCategoryName.trim()}
+                          onClick={() => {
+                            const trimmed = newEditAdditionalCategoryName.trim();
+                            if (!trimmed) return;
+                            setEditAdditionalCategories((prev) => new Set(prev).add(trimmed));
+                            setNewEditAdditionalCategoryName("");
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </details>
+                  </div>
                   <div className="field-full form-field">
                     <label htmlFor="record-edit-description">Description</label>
                     <input

@@ -12,6 +12,7 @@ class MaintenanceRecordCreate(BaseModel):
     performed_by: str | None = None
     category: str
     custom_category: str | None = None
+    additional_categories: str | None = None
     description: str | None = None
     cost: Decimal | None = None
     currency: str = "USD"
@@ -44,6 +45,7 @@ class MaintenanceRecordUpdate(BaseModel):
     performed_by: str | None = None
     category: str | None = None
     custom_category: str | None = None
+    additional_categories: str | None = None
     description: str | None = None
     cost: Decimal | None = None
     currency: str | None = None
@@ -64,6 +66,7 @@ class MaintenanceRecordResponse(BaseModel):
     performed_by: str | None
     category: str
     custom_category: str | None
+    additional_categories: str | None
     description: str | None
     cost: Decimal | None
     currency: str

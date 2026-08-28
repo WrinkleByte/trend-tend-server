@@ -53,24 +53,23 @@ function guessAssetType(vehicleName: string): AssetType {
   return EQUIPMENT_HINTS.some(hint => lower.includes(hint)) ? 'equipment' : 'vehicle';
 }
 
-// Web's fixed maintenance-category list (MaintenanceRecordsSection.tsx's
-// CATEGORIES) is narrower than mobile's -- no "fluids"/"brakes"/"battery"/
-// "electrical"/"engine"/"custom" buckets, just this set plus "other". The
-// backend doesn't enforce a category enum (plain string column), but
+// Web's fixed maintenance-category list (maintenanceAlerts.ts's
+// RECORD_CATEGORIES) now mirrors mobile's full vocabulary -- these keys
+// must match values actually in that list (e.g. "filters", not "filter").
+// The backend doesn't enforce a category enum (plain string column), but
 // guessing onto a category this app's own UI doesn't offer would be
-// confusing to edit later, so this maps aCar's real service names onto
-// web's actual list rather than mobile's richer one.
+// confusing to edit later.
 const CATEGORY_KEYWORDS: [string, string][] = [
   ['oil', 'oil_change'],
   ['tire', 'tires'],
-  ['filter', 'filter'],
+  ['filter', 'filters'],
   ['inspect', 'inspection'],
-  ['clean', 'cleaning'],
+  ['clean', 'general_service'],
 ];
 
 function guessMaintenanceCategory(acarServiceName: string): string {
   const lower = acarServiceName.toLowerCase();
-  return CATEGORY_KEYWORDS.find(([keyword]) => lower.includes(keyword))?.[1] ?? 'other';
+  return CATEGORY_KEYWORDS.find(([keyword]) => lower.includes(keyword))?.[1] ?? 'custom';
 }
 
 interface ParsedAcarFuelLog {
@@ -196,7 +195,7 @@ function parseFillup(el: Element, unitSystem: UnitSystem): ParsedAcarFuelLog {
 // element name differs ("services"/"service" vs. "expenses"/"expense").
 // isExpense only controls whether a category-keyword guess is attempted
 // (aCar's expense types -- Insurance, Tolls, Tax -- aren't maintenance
-// categories, so guessing would misfile them; they always land in "other"
+// categories, so guessing would misfile them; they always land in "custom"
 // with the real expense-type name preserved in custom_category).
 function parseServiceOrExpenseRecord(
   el: Element,
@@ -214,14 +213,14 @@ function parseServiceOrExpenseRecord(
     .map(id => nameLookup.get(id))
     .filter((name): name is string => name !== undefined);
   const combinedName = names.length > 0 ? names.join(', ') : null;
-  const category = !isExpense && combinedName ? guessMaintenanceCategory(combinedName) : 'other';
+  const category = !isExpense && combinedName ? guessMaintenanceCategory(combinedName) : 'custom';
   const odometer = childFloat(el, 'odometer-reading');
 
   return {
     performedAt: parseAcarDateTime(childText(el, 'date')),
     odometerReading: odometer !== null ? Math.round(distanceToMiles(odometer, unitSystem)) : null,
     category,
-    customCategory: category === 'other' ? combinedName : null,
+    customCategory: category === 'custom' ? combinedName : null,
     description: childText(el, 'notes'),
     cost: childFloat(el, 'total-cost'),
   };

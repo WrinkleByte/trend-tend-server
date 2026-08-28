@@ -4,6 +4,7 @@ import { listMaintenanceSchedules, updateMaintenanceSchedule } from "../../api/m
 import { createMaintenanceRecord, listMaintenanceRecords } from "../../api/maintenanceRecords";
 import {
   computeAlerts,
+  CUSTOM_CATEGORY_VALUE,
   normalizeForMatch,
   RECORD_CATEGORIES as CATEGORIES,
   recordMatchesSchedule,
@@ -15,13 +16,16 @@ type ExpandedMode = "perform" | "existing";
 
 /** A schedule's `name` is free text on web -- best-effort match it against
  * the fixed record CATEGORIES set (e.g. "Oil Change" -> "oil_change");
- * falls back to "other" + the schedule's own name as the custom category
- * when nothing matches, so "Mark as Performed" always produces a sensible
- * record even for a schedule named something CATEGORIES doesn't cover. */
+ * falls back to the "custom" sentinel + the schedule's own name as the
+ * custom category when nothing matches, so "Mark as Performed" always
+ * produces a sensible record even for a schedule named something CATEGORIES
+ * doesn't cover. */
 function bestGuessCategory(scheduleName: string): { category: string; customCategory: string | null } {
   const normalized = normalizeForMatch(scheduleName);
   const match = CATEGORIES.find((c) => normalizeForMatch(c) === normalized);
-  return match ? { category: match, customCategory: null } : { category: "other", customCategory: scheduleName };
+  return match
+    ? { category: match, customCategory: null }
+    : { category: CUSTOM_CATEGORY_VALUE, customCategory: scheduleName };
 }
 
 function dueText(alert: ScheduleAlert): string {

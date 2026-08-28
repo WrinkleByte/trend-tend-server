@@ -79,6 +79,7 @@ export interface MaintenanceRecord {
   performed_by: string | null;
   category: string;
   custom_category: string | null;
+  additional_categories: string | null;
   description: string | null;
   cost: string | null;
   currency: string;
@@ -101,6 +102,7 @@ export interface MaintenanceRecordCreateInput {
   performed_by?: string | null;
   category: string;
   custom_category?: string | null;
+  additional_categories?: string | null;
   description?: string | null;
   cost?: number | null;
   currency?: string;

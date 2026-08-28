@@ -111,6 +111,7 @@ class MaintenanceRecordSyncData(BaseModel):
     performed_by: str | None = None
     category: str
     custom_category: str | None = None
+    additional_categories: str | None = None
     description: str | None = None
     cost: Decimal | None = None
     currency: str = "USD"

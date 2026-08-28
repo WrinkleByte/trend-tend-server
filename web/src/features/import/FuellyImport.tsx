@@ -27,10 +27,10 @@ function guessMaintenanceCategory(servicesText: string): string {
   const lower = servicesText.toLowerCase();
   if (lower.includes('oil')) return 'oil_change';
   if (lower.includes('tire')) return 'tires';
-  if (lower.includes('filter')) return 'filter';
+  if (lower.includes('filter')) return 'filters';
   if (lower.includes('inspect')) return 'inspection';
-  if (lower.includes('clean')) return 'cleaning';
-  return 'other';
+  if (lower.includes('clean')) return 'general_service';
+  return 'custom';
 }
 
 interface ParsedFuelLog {
