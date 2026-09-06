@@ -16,6 +16,12 @@ class HouseholdResponse(BaseModel):
     # show owner-only actions (invite/revoke/remove-member) without a
     # separate "who am I" lookup.
     my_role: HouseholdRole
+    # The caller's own user id, for the same reason. The mobile apps
+    # authenticate with an API key and genuinely cannot otherwise know which
+    # user they are, which makes an "only show my stuff" filter (keyed on
+    # asset.owner_user_id) impossible to evaluate client-side. The web app
+    # doesn't need it — its filtering happens server-side in list_assets.
+    my_user_id: uuid.UUID
 
     model_config = {"from_attributes": True}
 

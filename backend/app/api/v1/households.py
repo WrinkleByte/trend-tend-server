@@ -56,7 +56,9 @@ async def get_current_household(
 ) -> HouseholdResponse:
     result = await db.execute(select(Household).where(Household.id == principal.household_id))
     household = result.scalar_one()
-    return HouseholdResponse.model_validate({**household.__dict__, "my_role": principal.role})
+    return HouseholdResponse.model_validate(
+        {**household.__dict__, "my_role": principal.role, "my_user_id": principal.user_id}
+    )
 
 
 @router.patch("/me/settings", response_model=HouseholdResponse)
@@ -83,7 +85,9 @@ async def update_household_settings(
     household.settings = {**household.settings, **updates}
     await db.commit()
     await db.refresh(household)
-    return HouseholdResponse.model_validate({**household.__dict__, "my_role": principal.role})
+    return HouseholdResponse.model_validate(
+        {**household.__dict__, "my_role": principal.role, "my_user_id": principal.user_id}
+    )
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
