@@ -1,5 +1,12 @@
 import { apiFetch } from "./client";
-import type { Household, HouseholdInvite, HouseholdMember, InvitePreview, TokenResponse } from "./types";
+import type {
+  CreatedHouseholdInvite,
+  Household,
+  HouseholdInvite,
+  HouseholdMember,
+  InvitePreview,
+  TokenResponse,
+} from "./types";
 
 export function getCurrentHousehold(): Promise<Household> {
   return apiFetch("/households/me");
@@ -25,7 +32,10 @@ export function listInvites(): Promise<HouseholdInvite[]> {
   return apiFetch("/households/invites");
 }
 
-export function createInvite(invitedEmail: string, role: "owner" | "member" = "member"): Promise<HouseholdInvite> {
+export function createInvite(
+  invitedEmail: string,
+  role: "owner" | "member" = "member",
+): Promise<CreatedHouseholdInvite> {
   return apiFetch("/households/invites", {
     method: "POST",
     body: JSON.stringify({ invited_email: invitedEmail, role }),

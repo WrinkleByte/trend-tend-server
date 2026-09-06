@@ -17,10 +17,12 @@ from app.models.asset import (
     AssetType,
     EquipmentDetails,
     PropertyDetails,
+    ValuableDetails,
     VehicleDetails,
 )
 from app.models.attachment import Attachment
 from app.models.fuel_log import FuelLog
+from app.models.household import HouseholdMembership
 from app.models.maintenance_category import MaintenanceCategory
 from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_schedule import MaintenanceSchedule
@@ -46,6 +48,7 @@ from app.schemas.sync import (
     SyncPushResponse,
     SyncPushResult,
     TripLogSyncData,
+    ValuableDetailsSyncData,
     VehicleDetailsSyncData,
 )
 
@@ -58,6 +61,7 @@ _ASSET_DETAIL_MODELS: dict[AssetType, type] = {
     AssetType.EQUIPMENT: EquipmentDetails,
     AssetType.PROPERTY: PropertyDetails,
     AssetType.HOME_SYSTEM: PropertyDetails,
+    AssetType.VALUABLE: ValuableDetails,
 }
 
 router = APIRouter(prefix="/sync", tags=["sync"])
@@ -131,6 +135,7 @@ def _serialize_row(entity_type: str, obj, detail: object | None = None) -> dict:
         base["vehicle_details"] = None
         base["equipment_details"] = None
         base["property_details"] = None
+        base["valuable_details"] = None
         if detail is not None:
             if isinstance(detail, VehicleDetails):
                 base["vehicle_details"] = VehicleDetailsSyncData.model_validate(
@@ -142,6 +147,10 @@ def _serialize_row(entity_type: str, obj, detail: object | None = None) -> dict:
                 ).model_dump(mode="json")
             elif isinstance(detail, PropertyDetails):
                 base["property_details"] = PropertyDetailsSyncData.model_validate(
+                    detail, from_attributes=True
+                ).model_dump(mode="json")
+            elif isinstance(detail, ValuableDetails):
+                base["valuable_details"] = ValuableDetailsSyncData.model_validate(
                     detail, from_attributes=True
                 ).model_dump(mode="json")
     return base
@@ -174,6 +183,8 @@ async def _upsert_asset_details(
         model, data = EquipmentDetails, parsed.equipment_details.model_dump()
     elif asset_type in (AssetType.PROPERTY, AssetType.HOME_SYSTEM) and parsed.property_details is not None:
         model, data = PropertyDetails, parsed.property_details.model_dump()
+    elif asset_type == AssetType.VALUABLE and parsed.valuable_details is not None:
+        model, data = ValuableDetails, parsed.valuable_details.model_dump()
     else:
         return
 
@@ -492,6 +503,35 @@ async def _apply_change(
                 detail=f"{label} not found",
             )
 
+    # asset.owner_user_id is a client-supplied foreign key to `users`, not to
+    # a household-scoped table, so verify_owned_reference (which checks
+    # household_id on the target row) can't express the check — a user row has
+    # no household_id, it has memberships. Same class of cross-tenant risk as
+    # Vikunja #32 all the same: without this, a client could hand its asset to
+    # a user in someone else's household, leaking that user's id into this
+    # household's data and putting the asset under a filter nobody here can
+    # select.
+    if (
+        change.entity_type == "asset"
+        and isinstance(parsed, AssetSyncData)
+        and parsed.owner_user_id is not None
+    ):
+        is_member = (
+            await db.execute(
+                select(HouseholdMembership.id).where(
+                    HouseholdMembership.user_id == parsed.owner_user_id,
+                    HouseholdMembership.household_id == principal.household_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if is_member is None:
+            return SyncPushResult(
+                id=change.id,
+                status="rejected",
+                reason="invalid_reference",
+                detail="Owner is not a member of this household",
+            )
+
     # property_details.parent_asset_id is a client-supplied foreign key
     # nested inside AssetSyncData rather than a top-level field, so it isn't
     # covered by the _REFERENCE_FIELDS loop above -- same cross-tenant risk
@@ -514,6 +554,27 @@ async def _apply_change(
                 detail="Parent asset not found",
             )
 
+    # valuable_details.linked_property_asset_id is the same shape of
+    # client-supplied nested foreign key as property_details.parent_asset_id
+    # above -- same cross-tenant check needed (Vikunja #32).
+    if (
+        change.entity_type == "asset"
+        and isinstance(parsed, AssetSyncData)
+        and parsed.valuable_details is not None
+        and parsed.valuable_details.linked_property_asset_id is not None
+    ):
+        try:
+            await verify_owned_reference(
+                db, principal, Asset, parsed.valuable_details.linked_property_asset_id, "Linked property"
+            )
+        except HTTPException:
+            return SyncPushResult(
+                id=change.id,
+                status="rejected",
+                reason="invalid_reference",
+                detail="Linked property not found",
+            )
+
     try:
         # A SAVEPOINT per row, not one giant transaction — an error on one
         # row (e.g. a bad foreign key in its data) rolls back only that
@@ -531,13 +592,27 @@ async def _apply_change(
             # exclude=... naming fields a given model doesn't have is a
             # harmless no-op for the other five entity types.
             base_data = parsed.model_dump(
-                exclude={"vehicle_details", "equipment_details", "property_details"}
+                exclude={
+                    "vehicle_details",
+                    "equipment_details",
+                    "property_details",
+                    "valuable_details",
+                    # Attribution is server-authored, never client-supplied.
+                    # AttributedSyncData declares it so pull serializes it,
+                    # but honouring it on push would let any client credit its
+                    # own edits to another household member — full-row
+                    # semantics mean whatever arrives here becomes the row.
+                    # Set from the authenticated principal just below instead,
+                    # exactly like updated_by_device_id.
+                    "updated_by_user_id",
+                }
             )
             if existing is None:
                 row = config.model(
                     id=change.id,
                     household_id=principal.household_id,
                     updated_by_device_id=device_id,
+                    updated_by_user_id=principal.user_id,
                     version=1,
                     **base_data,
                 )
@@ -548,6 +623,7 @@ async def _apply_change(
                 for field, value in base_data.items():
                     setattr(existing, field, value)
                 existing.updated_by_device_id = device_id
+                existing.updated_by_user_id = principal.user_id
                 existing.version += 1
                 existing.updated_at = utcnow()
                 await db.flush()

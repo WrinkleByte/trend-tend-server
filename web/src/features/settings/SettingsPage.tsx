@@ -4,10 +4,12 @@ import { ApiTokensPage } from "./ApiTokensPage";
 import { DangerZoneSection } from "./DangerZoneSection";
 import { DisplaySection } from "./DisplaySection";
 import { InstanceSettingsSection } from "./InstanceSettingsSection";
+import { RegistrationSection } from "./RegistrationSection";
 import { UserManagementSection } from "./UserManagementSection";
 
 const CATEGORIES = [
   { id: "smtp", label: "SMTP" },
+  { id: "registration", label: "Registration" },
   { id: "households", label: "Households" },
   { id: "users", label: "User Management" },
   { id: "api-tokens", label: "API Tokens" },
@@ -45,6 +47,7 @@ export function SettingsPage() {
         </nav>
         <div className="settings-content">
           {active === "smtp" && <InstanceSettingsSection />}
+          {active === "registration" && <RegistrationSection />}
           {active === "households" && <AdminHouseholdsSection />}
           {active === "users" && <UserManagementSection />}
           {active === "api-tokens" && <ApiTokensPage />}

@@ -39,6 +39,28 @@ class SyncDeviceResponse(BaseModel):
 # across a batch of devices with different partial views of a row.
 
 
+class AttributedSyncData(BaseModel):
+    """Base for every top-level entity payload, carrying the "who last touched
+    this" attribution that SyncedEntityMixin adds to all synced tables.
+
+    Declared once here rather than repeated on all seven schemas so a new
+    syncable entity can't quietly ship without it.
+
+    **Outbound only.** Full-row semantics (above) mean push takes whatever the
+    client sends as the row's new field set, so a client could otherwise
+    attribute its own edit to another household member. sync.py's
+    _apply_change strips this field from the incoming payload and sets it from
+    the authenticated Principal instead — it is present here purely so
+    _serialize_row includes it on pull, since that function derives the wire
+    shape from these same schemas (the allowlist invariant in
+    ../../CLAUDE.md). Nested detail payloads (VehicleDetailsSyncData and
+    friends) deliberately don't inherit it: they have no sync envelope of
+    their own and ride along inside their parent asset.
+    """
+
+    updated_by_user_id: uuid.UUID | None = None
+
+
 class VehicleDetailsSyncData(BaseModel):
     vin: str | None = None
     make: str | None = None
@@ -51,6 +73,7 @@ class VehicleDetailsSyncData(BaseModel):
     car_display_theme: str | None = None
     stylized_plate_enabled: bool | None = None
     unit_system_override: str | None = None
+    plate_style: str | None = None
     default_oil_viscosity: str | None = None
     default_oil_formulation: str | None = None
     default_oil_meets_dexos: bool | None = None
@@ -82,13 +105,22 @@ class PropertyDetailsSyncData(BaseModel):
     install_date: date | None = None
 
 
-class AssetSyncData(BaseModel):
+class ValuableDetailsSyncData(BaseModel):
+    manufacturer: str | None = None
+    model_number: str | None = None
+    serial_number: str | None = None
+    warranty_expiration: date | None = None
+    purchase_location: str | None = None
+    linked_property_asset_id: uuid.UUID | None = None
+
+
+class AssetSyncData(AttributedSyncData):
     """The base `assets` row plus, nested, whichever 1:1 detail side table
     matches asset_type — the 1:1 tables carry no sync envelope of their own
     (see VehicleDetails' doc comment in app/models/asset.py) so they ride
     along inside the parent asset's change instead of getting their own
     SYNC_REGISTRY entry. sync.py's _apply_change/_serialize_row special-case
-    entity_type=="asset" to upsert/nest whichever of these three is present
+    entity_type=="asset" to upsert/nest whichever of these four is present
     — every other entity type ignores these fields entirely (StrEnum-typed
     asset_type is the discriminator, mirroring the asset.assetType-based
     discriminator the mobile client now also uses instead of "which detail
@@ -100,12 +132,17 @@ class AssetSyncData(BaseModel):
     status: AssetStatus = AssetStatus.ACTIVE
     purchase_date: date | None = None
     purchase_cost: Decimal | None = None
+    # Client-settable, unlike the inherited updated_by_user_id — assigning an
+    # asset to a household member is a normal edit. _apply_change verifies the
+    # id names an actual member of the pushing household before storing it.
+    owner_user_id: uuid.UUID | None = None
     vehicle_details: VehicleDetailsSyncData | None = None
     equipment_details: EquipmentDetailsSyncData | None = None
     property_details: PropertyDetailsSyncData | None = None
+    valuable_details: ValuableDetailsSyncData | None = None
 
 
-class MaintenanceRecordSyncData(BaseModel):
+class MaintenanceRecordSyncData(AttributedSyncData):
     asset_id: uuid.UUID
     performed_at: date
     performed_by: str | None = None
@@ -125,7 +162,7 @@ class MaintenanceRecordSyncData(BaseModel):
     capacity: str | None = None
 
 
-class FuelLogSyncData(BaseModel):
+class FuelLogSyncData(AttributedSyncData):
     asset_id: uuid.UUID
     performed_at: date
     odometer_reading: int | None = None
@@ -139,11 +176,13 @@ class FuelLogSyncData(BaseModel):
     cetane: int | None = None
     gas_brand: str | None = None
     location: str | None = None
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
     notes: str | None = None
     additive: str | None = None
 
 
-class TripLogSyncData(BaseModel):
+class TripLogSyncData(AttributedSyncData):
     asset_id: uuid.UUID
     performed_at: datetime
     purpose: str
@@ -154,7 +193,7 @@ class TripLogSyncData(BaseModel):
     notes: str | None = None
 
 
-class MaintenanceScheduleSyncData(BaseModel):
+class MaintenanceScheduleSyncData(AttributedSyncData):
     asset_id: uuid.UUID
     name: str
     interval_type: IntervalType
@@ -167,11 +206,11 @@ class MaintenanceScheduleSyncData(BaseModel):
     dismissed_at: datetime | None = None
 
 
-class MaintenanceCategorySyncData(BaseModel):
+class MaintenanceCategorySyncData(AttributedSyncData):
     name: str
 
 
-class AttachmentSyncData(BaseModel):
+class AttachmentSyncData(AttributedSyncData):
     # storage_backend/storage_key are set by whichever path actually put the
     # blob bytes in place — today that's the multipart POST /attachments
     # endpoint. A client that creates an attachment row locally-only (no

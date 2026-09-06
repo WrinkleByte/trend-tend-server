@@ -676,3 +676,178 @@ async def test_revoking_is_idempotent_and_device_stays_listed(client, auth_heade
     revoked = [d for d in listing.json() if d["id"] == device_id]
     assert len(revoked) == 1
     assert revoked[0]["revoked_at"] is not None
+
+
+# ===== attribution and asset ownership over the sync protocol =====
+
+
+async def _members(client, auth_headers) -> dict:
+    response = await client.get("/api/v1/households/members", headers=auth_headers)
+    return {m["email"]: m["user_id"] for m in response.json()}
+
+
+async def _join(client, auth_headers, email: str) -> dict:
+    invite = await client.post(
+        "/api/v1/households/invites", headers=auth_headers, json={"invited_email": email}
+    )
+    assert invite.status_code == 201
+    register = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "a very good password",
+            "display_name": email.split("@")[0],
+            "invite_token": invite.json()["token"],
+        },
+    )
+    assert register.status_code == 201
+    return {"Authorization": f"Bearer {register.json()['access_token']}"}
+
+
+async def test_push_attributes_the_change_to_the_pushing_user(client, auth_headers):
+    device_id = await _register_device(client, auth_headers)
+    me_id = (await _members(client, auth_headers))["alice@example.com"]
+    asset_id = str(uuid.uuid4())
+
+    push = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_id,
+            "changes": [
+                {
+                    "id": asset_id,
+                    "entity_type": "asset",
+                    "base_version": 0,
+                    "client_updated_at": "2026-01-01T00:00:00Z",
+                    "data": {"asset_type": "vehicle", "name": "Pushed Truck"},
+                }
+            ],
+        },
+    )
+    assert push.json()["results"][0]["status"] == "accepted"
+
+    other_device = await _register_device(client, auth_headers, name="Reader")
+    pull = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"device_id": other_device}
+    )
+    change = next(c for c in pull.json()["changes"] if c["id"] == asset_id)
+    assert change["data"]["updated_by_user_id"] == me_id
+
+
+async def test_push_cannot_spoof_attribution_to_another_member(client, auth_headers):
+    """updated_by_user_id is outbound-only. Full-row push semantics mean a
+    client's payload becomes the row, so if this field were trusted anyone
+    could credit their edits to someone else. The server must overwrite it."""
+    bob_headers = await _join(client, auth_headers, "bob@example.com")
+    members = await _members(client, auth_headers)
+    alice_id, bob_id = members["alice@example.com"], members["bob@example.com"]
+
+    bob_device = await _register_device(client, bob_headers, name="Bob's Phone")
+    asset_id = str(uuid.uuid4())
+
+    push = await client.post(
+        "/api/v1/sync/push",
+        headers=bob_headers,
+        json={
+            "device_id": bob_device,
+            "changes": [
+                {
+                    "id": asset_id,
+                    "entity_type": "asset",
+                    "base_version": 0,
+                    "client_updated_at": "2026-01-01T00:00:00Z",
+                    "data": {
+                        "asset_type": "vehicle",
+                        "name": "Not Alice's Doing",
+                        # Bob claiming Alice made this change.
+                        "updated_by_user_id": alice_id,
+                    },
+                }
+            ],
+        },
+    )
+    assert push.json()["results"][0]["status"] == "accepted"
+
+    reader = await _register_device(client, auth_headers, name="Reader")
+    pull = await client.post("/api/v1/sync/pull", headers=auth_headers, json={"device_id": reader})
+    change = next(c for c in pull.json()["changes"] if c["id"] == asset_id)
+    assert change["data"]["updated_by_user_id"] == bob_id
+    assert change["data"]["updated_by_user_id"] != alice_id
+
+
+async def test_push_rejects_an_owner_from_another_household(client, auth_headers):
+    """owner_user_id IS client-settable, so it needs the cross-tenant check
+    verify_owned_reference can't express (users have memberships, not a
+    household_id)."""
+    outsider = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "outsider@example.com",
+            "password": "a very good password",
+            "display_name": "Outsider",
+            "household_name": "Elsewhere",
+        },
+    )
+    outsider_headers = {"Authorization": f"Bearer {outsider.json()['access_token']}"}
+    outsider_id = (await _members(client, outsider_headers))["outsider@example.com"]
+
+    device_id = await _register_device(client, auth_headers)
+    push = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_id,
+            "changes": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "entity_type": "asset",
+                    "base_version": 0,
+                    "client_updated_at": "2026-01-01T00:00:00Z",
+                    "data": {
+                        "asset_type": "vehicle",
+                        "name": "Cross-tenant Owner",
+                        "owner_user_id": outsider_id,
+                    },
+                }
+            ],
+        },
+    )
+    result = push.json()["results"][0]
+    assert result["status"] == "rejected"
+    assert result["reason"] == "invalid_reference"
+
+
+async def test_push_accepts_an_owner_who_is_a_member(client, auth_headers):
+    bob_headers = await _join(client, auth_headers, "bob@example.com")
+    assert bob_headers  # joined via the real invite flow
+    bob_id = (await _members(client, auth_headers))["bob@example.com"]
+
+    device_id = await _register_device(client, auth_headers)
+    asset_id = str(uuid.uuid4())
+    push = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_id,
+            "changes": [
+                {
+                    "id": asset_id,
+                    "entity_type": "asset",
+                    "base_version": 0,
+                    "client_updated_at": "2026-01-01T00:00:00Z",
+                    "data": {
+                        "asset_type": "vehicle",
+                        "name": "Bob's Truck",
+                        "owner_user_id": bob_id,
+                    },
+                }
+            ],
+        },
+    )
+    assert push.json()["results"][0]["status"] == "accepted"
+
+    reader = await _register_device(client, auth_headers, name="Reader")
+    pull = await client.post("/api/v1/sync/pull", headers=auth_headers, json={"device_id": reader})
+    change = next(c for c in pull.json()["changes"] if c["id"] == asset_id)
+    assert change["data"]["owner_user_id"] == bob_id

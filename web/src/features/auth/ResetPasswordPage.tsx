@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { resetPassword } from "../../api/auth";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT, passwordPolicyError, resetPassword } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { StatusMessage } from "../../components/StatusMessage";
 
@@ -17,9 +17,10 @@ export function ResetPasswordPage() {
     onSuccess: () => navigate("/login"),
     onError: (err) =>
       setError(
-        err instanceof ApiError && err.status === 400
-          ? "This reset link is invalid or has expired — request a new one."
-          : "Something went wrong.",
+        passwordPolicyError(err) ??
+          (err instanceof ApiError && err.status === 400
+            ? "This reset link is invalid or has expired — request a new one."
+            : "Something went wrong."),
       ),
   });
 
@@ -58,9 +59,10 @@ export function ResetPasswordPage() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             required
           />
+          <small className="field-hint">{PASSWORD_HINT}</small>
         </label>
         <button type="submit" disabled={mutation.isPending}>
           {mutation.isPending ? "Saving…" : "Reset password"}

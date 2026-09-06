@@ -7,12 +7,20 @@ import {
   updateMaintenanceRecord,
 } from "../../api/maintenanceRecords";
 import { listMaintenanceSchedules, updateMaintenanceSchedule } from "../../api/maintenanceSchedules";
-import { CUSTOM_CATEGORY_VALUE, RECORD_CATEGORIES as CATEGORIES, recordMatchesSchedule } from "../schedules/maintenanceAlerts";
+import {
+  categoriesForAssetType,
+  categoryLabel,
+  CUSTOM_CATEGORY_VALUE,
+  recordMatchesSchedule,
+} from "../schedules/maintenanceAlerts";
 import type { MaintenanceRecord, MaintenanceSchedule } from "../../api/types";
+import { uploadPendingAttachments } from "../../api/attachments";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
+import { PendingAttachmentPicker } from "../attachments/PendingAttachmentPicker";
 import { GridField } from "../../components/GridField";
 
-export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
+export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: string; assetType: string }) {
+  const CATEGORIES = categoriesForAssetType(assetType);
   const queryClient = useQueryClient();
   const { data: records, isLoading } = useQuery({
     queryKey: ["maintenance-records", assetId],
@@ -39,6 +47,7 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
   const [newAdditionalCategoryName, setNewAdditionalCategoryName] = useState("");
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   function toggleAdditionalCategory(c: string) {
     setAdditionalCategories((prev) => {
@@ -109,12 +118,25 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
         description: editDescription || null,
         cost: editCost ? Number(editCost) : null,
         performed_by: editPerformedBy || null,
-        oil_viscosity: editOilViscosity || null,
-        oil_formulation: editOilFormulation || null,
-        oil_meets_dexos: editOilMeetsDexos,
-        filter_part_number: editFilterPartNumber || null,
-        fluid_type: editFluidType || null,
-        capacity: editCapacity || null,
+        // Nulled out (not just hidden) when the category no longer
+        // matches -- otherwise a value left over from before the user
+        // switched categories mid-edit would silently persist despite
+        // the field no longer being shown at all. Mirrors the mobile
+        // apps' save-time gating (MaintenanceRecordFormScreen.kt/
+        // MaintenanceRecordFormView.swift), same category sets as the
+        // conditional rendering above.
+        oil_viscosity: editCategory === "oil_change" ? editOilViscosity || null : null,
+        oil_formulation: editCategory === "oil_change" ? editOilFormulation || null : null,
+        oil_meets_dexos: editCategory === "oil_change" ? editOilMeetsDexos : null,
+        filter_part_number: ["oil_change", "air_filter", "transmission_fluid"].includes(editCategory)
+          ? editFilterPartNumber || null
+          : null,
+        fluid_type: ["transmission_fluid", "coolant", "differential_front", "differential_rear"].includes(editCategory)
+          ? editFluidType || null
+          : null,
+        capacity: ["oil_change", "transmission_fluid", "differential_front", "differential_rear"].includes(editCategory)
+          ? editCapacity || null
+          : null,
       }),
     onSuccess: () => {
       setEditingId(null);
@@ -152,6 +174,13 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
       setDescription("");
       setCost("");
       setAdditionalCategories(new Set());
+      if (pendingFiles.length > 0) {
+        const files = pendingFiles;
+        setPendingFiles([]);
+        uploadPendingAttachments("record", record.id, files).then(() =>
+          queryClient.invalidateQueries({ queryKey: ["attachments", "record", record.id] }),
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["maintenance-records", assetId] });
 
       const matches = (schedules ?? []).filter((s) => s.active && recordMatchesSchedule(record, s.name));
@@ -207,7 +236,7 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
   // is the exact entity type that prompted the follow-up (an accidental
   // single-click delete on this same section).
   function handleDelete(recordId: string, performedAt: string, category: string) {
-    const label = category.replace("_", " ");
+    const label = categoryLabel(category);
     if (window.confirm(`Permanently delete this ${label} record from ${performedAt.slice(0, 10)}? This cannot be undone.`)) {
       deleteMutation.mutate(recordId);
     }
@@ -221,11 +250,16 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
         <select value={category} onChange={(e) => setCategory(e.target.value)}>
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>
-              {c.replace("_", " ")}
+              {categoryLabel(c)}
             </option>
           ))}
         </select>
-        <input placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <textarea
+          placeholder="Description"
+          rows={2}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
         <input
           type="number"
           step="0.01"
@@ -249,7 +283,7 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
                 checked={additionalCategories.has(c)}
                 onChange={() => toggleAdditionalCategory(c)}
               />
-              {c.replace("_", " ")}
+              {categoryLabel(c)}
             </label>
           ))}
           {/* Custom names already checked this session (typed via "Add"
@@ -288,6 +322,7 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
           </button>
         </div>
       </details>
+      <PendingAttachmentPicker files={pendingFiles} onFilesChange={setPendingFiles} />
 
       {pendingMatch && (
         <div className="schedule-match-prompt">
@@ -347,7 +382,7 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
                     >
                       {CATEGORIES.map((c) => (
                         <option key={c} value={c}>
-                          {c.replace("_", " ")}
+                          {categoryLabel(c)}
                         </option>
                       ))}
                     </select>
@@ -369,7 +404,7 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
                               checked={editAdditionalCategories.has(c)}
                               onChange={() => toggleEditAdditionalCategory(c)}
                             />
-                            {c.replace("_", " ")}
+                            {categoryLabel(c)}
                           </label>
                         ))}
                         {Array.from(editAdditionalCategories)
@@ -408,27 +443,46 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
                   </div>
                   <div className="field-full form-field">
                     <label htmlFor="record-edit-description">Description</label>
-                    <input
+                    <textarea
                       id="record-edit-description"
+                      rows={3}
                       value={editDescription}
                       onChange={(e) => setEditDescription(e.target.value)}
                     />
                   </div>
                   <GridField label="Cost" type="number" step="0.01" value={editCost} onChange={setEditCost} />
                   <GridField label="Performed by" value={editPerformedBy} onChange={setEditPerformedBy} />
-                  <GridField label="Oil viscosity" placeholder="e.g. 5W-30" value={editOilViscosity} onChange={setEditOilViscosity} />
-                  <GridField label="Oil formulation" placeholder="e.g. Synthetic" value={editOilFormulation} onChange={setEditOilFormulation} />
-                  <GridField label="Filter part number" value={editFilterPartNumber} onChange={setEditFilterPartNumber} />
-                  <GridField label="Fluid type" value={editFluidType} onChange={setEditFluidType} />
-                  <GridField label="Capacity" placeholder="e.g. 5 qt" value={editCapacity} onChange={setEditCapacity} />
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      checked={editOilMeetsDexos}
-                      onChange={(e) => setEditOilMeetsDexos(e.target.checked)}
-                    />
-                    Meets dexos spec
-                  </label>
+                  {/* Structured oil/fluid fields, meaningful only for
+                      certain categories -- mirrors the exact category sets
+                      the mobile apps gate these same fields on
+                      (MaintenanceRecordFormScreen.kt/MaintenanceRecordFormView.swift).
+                      Previously shown unconditionally regardless of
+                      category, which is what prompted this. */}
+                  {editCategory === "oil_change" && (
+                    <>
+                      <GridField label="Oil viscosity" placeholder="e.g. 5W-30" value={editOilViscosity} onChange={setEditOilViscosity} />
+                      <GridField label="Oil formulation" placeholder="e.g. Synthetic" value={editOilFormulation} onChange={setEditOilFormulation} />
+                    </>
+                  )}
+                  {["oil_change", "air_filter", "transmission_fluid"].includes(editCategory) && (
+                    <GridField label="Filter part number" value={editFilterPartNumber} onChange={setEditFilterPartNumber} />
+                  )}
+                  {["transmission_fluid", "coolant", "differential_front", "differential_rear"].includes(editCategory) && (
+                    <GridField label="Fluid type" value={editFluidType} onChange={setEditFluidType} />
+                  )}
+                  {["oil_change", "transmission_fluid", "differential_front", "differential_rear"].includes(editCategory) && (
+                    <GridField label="Capacity" placeholder="e.g. 5 qt" value={editCapacity} onChange={setEditCapacity} />
+                  )}
+                  {editCategory === "oil_change" && (
+                    <label className="check-label">
+                      <input
+                        type="checkbox"
+                        checked={editOilMeetsDexos}
+                        onChange={(e) => setEditOilMeetsDexos(e.target.checked)}
+                      />
+                      Meets dexos spec
+                    </label>
+                  )}
                 </div>
                 <div className="form-actions" style={{ marginTop: 12 }}>
                   <button type="submit" disabled={updateRecordMutation.isPending}>
@@ -444,12 +498,12 @@ export function MaintenanceRecordsSection({ assetId }: { assetId: string }) {
             <li key={record.id}>
               <div className="record-row">
                 <span className="record-date">{record.performed_at}</span>
-                <span className="record-category">{record.category.replace("_", " ")}</span>
+                <span className="record-category">{categoryLabel(record.category)}</span>
                 <span className="record-description">{record.description || "—"}</span>
                 <span className="record-cost">{record.cost != null ? `$${record.cost}` : ""}</span>
                 <div className="record-actions">
                   <button type="button" onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}>
-                    {expandedId === record.id ? "Hide receipts" : "Receipts"}
+                    {expandedId === record.id ? "Hide photos" : "Photos"}
                   </button>
                   <button type="button" onClick={() => startEdit(record)}>
                     Edit

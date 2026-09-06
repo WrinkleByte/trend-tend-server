@@ -36,6 +36,7 @@ async def create_maintenance_category(
         id=uuid.uuid4(),
         household_id=principal.household_id,
         updated_by_device_id=principal.device_id,
+        updated_by_user_id=principal.user_id,
         **payload.model_dump(),
     )
     db.add(category)
@@ -75,6 +76,7 @@ async def update_maintenance_category(
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(category, field, value)
     category.updated_by_device_id = principal.device_id
+    category.updated_by_user_id = principal.user_id
     category.version += 1
     category.updated_at = utcnow()
     await db.commit()
@@ -91,5 +93,6 @@ async def delete_maintenance_category(
     category = await _get_owned_maintenance_category(db, principal, category_id)
     category.deleted_at = utcnow()
     category.updated_by_device_id = principal.device_id
+    category.updated_by_user_id = principal.user_id
     category.version += 1
     await db.commit()

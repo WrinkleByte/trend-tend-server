@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { register } from "../../api/auth";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT, passwordPolicyError, register } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { acceptInvite, previewInvite } from "../../api/households";
 import { isAuthenticated, useAuthStore } from "../../auth/authStore";
@@ -50,7 +50,13 @@ export function JoinPage() {
       setTokens(tokens.access_token, tokens.refresh_token);
       navigate("/");
     },
-    onError: (err) => setError(err instanceof ApiError && err.status === 409 ? "That email is already registered — log in instead." : "Something went wrong."),
+    onError: (err) =>
+      setError(
+        passwordPolicyError(err) ??
+          (err instanceof ApiError && err.status === 409
+            ? "That email is already registered — log in instead."
+            : "Something went wrong."),
+      ),
   });
 
   function handleRegisterSubmit(event: FormEvent) {
@@ -117,9 +123,10 @@ export function JoinPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                minLength={8}
+                minLength={MIN_PASSWORD_LENGTH}
                 required
               />
+              <small className="field-hint">{PASSWORD_HINT}</small>
             </label>
             <button type="submit" disabled={registerMutation.isPending}>
               Create account &amp; join

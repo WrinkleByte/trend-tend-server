@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getSetupStatus } from "../../api/auth";
 import { SetupPage } from "./SetupPage";
+import { useSetupStatus } from "./useSetupStatus";
 
 /**
  * Wraps the whole route tree — on a freshly-deployed instance with zero
@@ -12,13 +11,10 @@ import { SetupPage } from "./SetupPage";
  * and children render normally.
  */
 export function SetupGate({ children }: { children: ReactNode }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ["setup-status"],
-    queryFn: getSetupStatus,
-    // Only relevant once, right after a fresh deploy — no need to keep
-    // re-checking an established instance on every focus/mount.
-    staleTime: Infinity,
-  });
+  // Only relevant once, right after a fresh deploy — no need to keep
+  // re-checking an established instance on every focus/mount, hence the
+  // shared Infinity staleTime in useSetupStatus.
+  const { data, isLoading } = useSetupStatus();
 
   // Deliberately render nothing (not even a spinner) while this resolves —
   // it's one fast local request, and briefly flashing the login form before

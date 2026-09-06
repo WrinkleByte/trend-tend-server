@@ -306,3 +306,72 @@ async def test_owner_cannot_remove_self(client, auth_headers, registered_user):
 
     response = await client.delete(f"/api/v1/households/members/{owner_user_id}", headers=auth_headers)
     assert response.status_code == 400
+
+
+# ===== invite emails =====
+
+
+async def test_invite_reports_no_email_when_smtp_is_unconfigured(client, auth_headers):
+    """The default self-hosted state. The invite must still be created — the
+    owner falls back to copying the link — but the response has to say so
+    rather than implying a delivery that never happened."""
+    response = await client.post(
+        "/api/v1/households/invites",
+        headers=auth_headers,
+        json={"invited_email": "nobody@example.com"},
+    )
+    assert response.status_code == 201
+    assert response.json()["email_sent"] is False
+    assert response.json()["token"]
+
+
+async def test_invite_emails_the_join_link_when_smtp_is_configured(client, auth_headers, monkeypatch):
+    sent: list[dict] = []
+
+    def _fake_send_email(settings, *, to, subject, body):
+        sent.append({"to": to, "subject": subject, "body": body})
+        return True
+
+    monkeypatch.setattr("app.api.v1.households.send_email", _fake_send_email)
+
+    response = await client.post(
+        "/api/v1/households/invites",
+        headers=auth_headers,
+        json={"invited_email": "newperson@example.com", "role": "member"},
+    )
+    assert response.status_code == 201
+    assert response.json()["email_sent"] is True
+
+    assert len(sent) == 1
+    assert sent[0]["to"] == "newperson@example.com"
+    # The link has to carry the token and point at the web app's /join route,
+    # not the API — a recipient opening it needs the SPA, not JSON.
+    assert f"/join?token={response.json()['token']}" in sent[0]["body"]
+    # Enough context to tell a real invite from a phish: who invited them,
+    # into what, and as what.
+    assert "Alice" in sent[0]["subject"]
+    assert "Alice's House" in sent[0]["subject"]
+    assert "member" in sent[0]["body"]
+
+
+async def test_invite_survives_a_failing_email_relay(client, auth_headers, monkeypatch):
+    """A broken relay must not turn a successful invite into a failed request —
+    the row is already committed and copy-the-link still works."""
+
+    def _exploding_send_email(settings, *, to, subject, body):
+        raise RuntimeError("relay exploded")
+
+    monkeypatch.setattr("app.api.v1.households.send_email", _exploding_send_email)
+
+    response = await client.post(
+        "/api/v1/households/invites",
+        headers=auth_headers,
+        json={"invited_email": "unlucky@example.com"},
+    )
+    assert response.status_code == 201
+    assert response.json()["email_sent"] is False
+
+    # And it's a real, usable invite despite the failed notification.
+    preview = await client.get(f"/api/v1/households/invites/by-token/{response.json()['token']}")
+    assert preview.status_code == 200
+    assert preview.json()["status"] == "pending"

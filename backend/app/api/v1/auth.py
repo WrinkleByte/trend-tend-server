@@ -158,9 +158,18 @@ async def setup_status(db: AsyncSession = Depends(get_db)) -> SetupStatusRespons
     """Unauthenticated by design — a freshly-deployed instance has no user
     yet, so nothing could call this with credentials. Clients use it to
     decide whether to show a normal login form or a first-run "Create
-    Admin Account" screen."""
+    Admin Account" screen, and whether to offer self-service signup."""
     result = await db.execute(select(func.count()).select_from(User))
-    return SetupStatusResponse(setup_complete=result.scalar_one() > 0)
+    setup_complete = result.scalar_one() > 0
+    instance_settings = await get_or_create_instance_settings(db)
+    return SetupStatusResponse(
+        setup_complete=setup_complete,
+        # Never report signups as closed on a fresh instance: the first-run
+        # screen *is* a registration, so honouring the flag before any user
+        # exists would brick a deployment whose admin turned signups off and
+        # then restored an empty database.
+        allow_self_registration=instance_settings.allow_self_registration or not setup_complete,
+    )
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -183,6 +192,23 @@ async def register(
     # a self-hosted single-family deployment's first two requests landing in
     # the same instant is not a scenario worth an advisory lock over.
     user_count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
+
+    # Self-service signup can be closed instance-wide, but only self-service:
+    # an invited user registering through a household owner's invite link
+    # comes through this same endpoint, and closing signups must not take
+    # away an owner's ability to add people to their own household. Checked
+    # after the invite is consumed above so `invite` distinguishes the two.
+    #
+    # Exempts the first-ever registration for the same reason setup_status()
+    # does — that one *is* the instance-admin bootstrap, and there'd be
+    # nobody left who could reopen signups if it were blocked.
+    if invite is None and user_count > 0:
+        instance_settings = await get_or_create_instance_settings(db)
+        if not instance_settings.allow_self_registration:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "This instance is not accepting new signups. Ask a household owner to invite you.",
+            )
 
     user = User(
         id=uuid.uuid4(),

@@ -22,6 +22,7 @@ def _to_response(settings) -> InstanceSettingsResponse:
         smtp_from_address=settings.smtp_from_address,
         smtp_password_set=bool(settings.smtp_password),
         public_api_url=settings.public_api_url,
+        allow_self_registration=settings.allow_self_registration,
     )
 
 
@@ -50,6 +51,7 @@ async def update_instance_settings(
         "smtp_use_tls",
         "smtp_from_address",
         "public_api_url",
+        "allow_self_registration",
     ):
         value = getattr(payload, field)
         if value is not None:

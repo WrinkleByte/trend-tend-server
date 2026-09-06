@@ -37,6 +37,10 @@ class TripLogResponse(BaseModel):
     end_odometer: Decimal
     distance: Decimal
     notes: str | None
+    # Who in the household last changed this row. Server-set from the
+    # authenticated principal, never client-supplied — see
+    # SyncedEntityMixin.updated_by_user_id.
+    updated_by_user_id: uuid.UUID | None = None
     version: int
     created_at: datetime
     updated_at: datetime

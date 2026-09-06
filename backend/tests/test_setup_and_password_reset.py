@@ -25,16 +25,20 @@ async def _register(client, email: str, household_name: str) -> dict:
 # ===== setup-status / first-user-is-admin =====
 
 
+# These two assert on the one field they're about rather than the whole
+# payload — setup-status now also carries allow_self_registration (see the
+# registration-toggle tests at the bottom of this file), and an exact-dict
+# comparison makes every future addition to this response a false failure.
 async def test_setup_status_false_before_any_user_exists(client):
     response = await client.get("/api/v1/auth/setup-status")
     assert response.status_code == 200
-    assert response.json() == {"setup_complete": False}
+    assert response.json()["setup_complete"] is False
 
 
 async def test_setup_status_true_after_first_user_registers(client):
     await _register(client, "first@example.com", "First House")
     response = await client.get("/api/v1/auth/setup-status")
-    assert response.json() == {"setup_complete": True}
+    assert response.json()["setup_complete"] is True
 
 
 async def test_first_registered_user_becomes_instance_admin(client, db_session):
@@ -604,3 +608,95 @@ async def test_reset_evicts_a_token_issued_in_the_same_second(client, db_session
     assert reset.status_code == 200
 
     assert (await client.get("/api/v1/assets", headers=stolen_headers)).status_code == 401
+
+
+# ===== self-service registration toggle =====
+
+
+async def _close_signups(client, auth_headers) -> None:
+    response = await client.put(
+        "/api/v1/instance-settings",
+        headers=auth_headers,
+        json={"allow_self_registration": False},
+    )
+    assert response.status_code == 200
+    assert response.json()["allow_self_registration"] is False
+
+
+async def test_self_registration_open_by_default(client, auth_headers):
+    response = await client.get("/api/v1/instance-settings", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["allow_self_registration"] is True
+
+
+async def test_closing_signups_rejects_uninvited_registration(client, auth_headers):
+    await _close_signups(client, auth_headers)
+
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "stranger@example.com",
+            "password": "a very good password",
+            "display_name": "Stranger",
+            "household_name": "Stranger's House",
+        },
+    )
+    assert response.status_code == 403
+
+
+async def test_closing_signups_still_lets_an_invited_user_register(client, auth_headers):
+    """The whole point of gating only the uninvited branch — an owner must not
+    lose the ability to add people to their household when signups close."""
+    invite = await client.post(
+        "/api/v1/households/invites",
+        headers=auth_headers,
+        json={"invited_email": "invited@example.com"},
+    )
+    assert invite.status_code == 201
+    token = invite.json()["token"]
+
+    await _close_signups(client, auth_headers)
+
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "invited@example.com",
+            "password": "a very good password",
+            "display_name": "Invited",
+            "invite_token": token,
+        },
+    )
+    assert response.status_code == 201
+
+
+async def test_setup_status_reports_the_registration_flag(client, auth_headers):
+    assert (await client.get("/api/v1/auth/setup-status")).json()["allow_self_registration"] is True
+
+    await _close_signups(client, auth_headers)
+
+    body = (await client.get("/api/v1/auth/setup-status")).json()
+    assert body["setup_complete"] is True
+    assert body["allow_self_registration"] is False
+
+
+async def test_closed_signups_never_block_the_first_ever_registration(client, db_session):
+    """A restored-empty-database instance whose settings row says signups are
+    closed must still allow the first-run admin account — otherwise there is
+    nobody left who could reopen them."""
+    db_session.add(InstanceSettings(allow_self_registration=False))
+    await db_session.commit()
+
+    status_body = (await client.get("/api/v1/auth/setup-status")).json()
+    assert status_body["setup_complete"] is False
+    assert status_body["allow_self_registration"] is True
+
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "first@example.com",
+            "password": "a very good password",
+            "display_name": "First",
+            "household_name": "First House",
+        },
+    )
+    assert response.status_code == 201

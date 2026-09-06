@@ -42,6 +42,7 @@ async def create_trip_log(
         id=uuid.uuid4(),
         household_id=principal.household_id,
         updated_by_device_id=principal.device_id,
+        updated_by_user_id=principal.user_id,
         **payload.model_dump(),
     )
     db.add(trip_log)
@@ -81,6 +82,7 @@ async def update_trip_log(
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(trip_log, field, value)
     trip_log.updated_by_device_id = principal.device_id
+    trip_log.updated_by_user_id = principal.user_id
     trip_log.version += 1
     trip_log.updated_at = utcnow()
     await db.commit()
@@ -97,5 +99,6 @@ async def delete_trip_log(
     trip_log = await _get_owned_trip_log(db, principal, trip_log_id)
     trip_log.deleted_at = utcnow()
     trip_log.updated_by_device_id = principal.device_id
+    trip_log.updated_by_user_id = principal.user_id
     trip_log.version += 1
     await db.commit()

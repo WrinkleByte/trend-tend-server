@@ -78,6 +78,13 @@ class SetupStatusResponse(BaseModel):
     # a "Create Admin Account" screen instead of the normal login form on a
     # freshly-deployed, empty instance.
     setup_complete: bool
+    # Mirrors instance_settings.allow_self_registration. Carried on this
+    # endpoint rather than a new one because a client has to know it *before*
+    # authenticating (to decide whether to offer a "Create account" link at
+    # all), and this is already the unauthenticated pre-login probe every
+    # client makes on load. Not a security boundary — the server enforces the
+    # flag in register() regardless of what the client renders.
+    allow_self_registration: bool = True
 
 
 class ForgotPasswordRequest(BaseModel):

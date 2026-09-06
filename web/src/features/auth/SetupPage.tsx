@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { register } from "../../api/auth";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT, passwordPolicyError, register } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { useAuthStore } from "../../auth/authStore";
 import { StatusMessage } from "../../components/StatusMessage";
@@ -36,7 +36,12 @@ export function SetupPage() {
       setTokens(tokens.access_token, tokens.refresh_token);
       navigate("/");
     } catch (err) {
-      setError(err instanceof ApiError ? "Couldn't create the admin account — check your details and try again." : "Something went wrong.");
+      setError(
+        passwordPolicyError(err) ??
+          (err instanceof ApiError
+            ? "Couldn't create the admin account — check your details and try again."
+            : "Something went wrong."),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -71,9 +76,10 @@ export function SetupPage() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             required
           />
+          <small className="field-hint">{PASSWORD_HINT}</small>
         </label>
         <button type="submit" disabled={submitting}>
           {submitting ? "Setting up…" : "Create admin account"}

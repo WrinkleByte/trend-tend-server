@@ -21,7 +21,10 @@ export function ImportPage() {
   const queryClient = useQueryClient();
   const { data: assets = [], isLoading } = useQuery({
     queryKey: ['assets'],
-    queryFn: listAssets,
+    // Wrapped, not passed bare: listAssets takes an optional mineOnly flag,
+    // and react-query would hand its context object in as that argument.
+    // Import must always see every asset regardless of anyone's view filter.
+    queryFn: () => listAssets(),
   });
 
   if (isLoading) {

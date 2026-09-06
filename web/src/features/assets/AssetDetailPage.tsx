@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
-import { deleteAsset, getAsset, updateAsset } from "../../api/assets";
+import { deleteAsset, getAsset, listAssets, updateAsset } from "../../api/assets";
+import { useHouseholdMembers } from "../household/useHouseholdMembers";
 import type { AssetCreateInput, AssetStatus } from "../../api/types";
 import { GridField } from "../../components/GridField";
 import { MaintenanceRecordsSection } from "../maintenance/MaintenanceRecordsSection";
@@ -9,6 +10,7 @@ import { MaintenanceAlertsSection } from "../schedules/MaintenanceAlertsSection"
 import { SchedulesSection } from "../schedules/SchedulesSection";
 import { FuelLogsSection } from "../trips/FuelLogsSection";
 import { TripLogsSection } from "../trips/TripLogsSection";
+import { AttachmentsSection } from "../attachments/AttachmentsSection";
 import { AssetProfilePhoto } from "./AssetProfilePhoto";
 import { ASSET_TYPES } from "./assetTypes";
 
@@ -23,6 +25,14 @@ export function AssetDetailPage() {
     enabled: !!id,
   });
 
+  // Only fetched for the "Located At" picker below -- a Valuable's optional
+  // link to a property/home_system asset.
+  const { data: allAssets } = useQuery({ queryKey: ["assets"], queryFn: () => listAssets() });
+  const propertyAssets = (allAssets ?? []).filter(
+    (a) => a.asset_type === "property" || a.asset_type === "home_system",
+  );
+
+  const { members, nameFor } = useHouseholdMembers();
   const [form, setForm] = useState<Partial<AssetCreateInput>>({});
   useEffect(() => {
     if (asset) {
@@ -31,9 +41,11 @@ export function AssetDetailPage() {
         notes: asset.notes ?? undefined,
         purchase_date: asset.purchase_date ?? undefined,
         purchase_cost: asset.purchase_cost ?? undefined,
+        owner_user_id: asset.owner_user_id ?? undefined,
         vehicle_details: asset.vehicle_details ? { ...asset.vehicle_details } : undefined,
         equipment_details: asset.equipment_details ? { ...asset.equipment_details } : undefined,
         property_details: asset.property_details ? { ...asset.property_details } : undefined,
+        valuable_details: asset.valuable_details ? { ...asset.valuable_details } : undefined,
       });
     }
   }, [asset]);
@@ -136,6 +148,27 @@ export function AssetDetailPage() {
           <h2>Information</h2>
           <div className="field-grid">
             <GridField label="Name" value={form.name ?? ""} onChange={(v) => setForm({ ...form, name: v })} />
+            {(members?.length ?? 0) > 1 && (
+              <div>
+                <label htmlFor="asset-owner">Owner</label>
+                <select
+                  id="asset-owner"
+                  value={form.owner_user_id ?? ""}
+                  onChange={(e) => setForm({ ...form, owner_user_id: e.target.value || undefined })}
+                >
+                  <option value="">Unassigned</option>
+                  {members?.map((m) => (
+                    <option key={m.user_id} value={m.user_id}>
+                      {m.display_name}
+                    </option>
+                  ))}
+                </select>
+                <span className="field-hint">
+                  Only affects who sees this under &ldquo;Only show my stuff&rdquo;. Everyone in the
+                  household can still view and edit it.
+                </span>
+              </div>
+            )}
             <div className="field-full">
               <label>Notes</label>
               <textarea
@@ -271,6 +304,75 @@ export function AssetDetailPage() {
             </>
           )}
 
+          {asset.asset_type === "valuable" && (
+            <>
+              <h2 style={{ marginTop: 24 }}>Valuable details</h2>
+              <div className="field-grid field-compact">
+                <GridField
+                  label="Manufacturer"
+                  value={form.valuable_details?.manufacturer ?? ""}
+                  onChange={(v) =>
+                    setForm({ ...form, valuable_details: { ...form.valuable_details, manufacturer: v } })
+                  }
+                />
+                <GridField
+                  label="Model number"
+                  value={form.valuable_details?.model_number ?? ""}
+                  onChange={(v) =>
+                    setForm({ ...form, valuable_details: { ...form.valuable_details, model_number: v } })
+                  }
+                />
+                <GridField
+                  label="Serial number"
+                  value={form.valuable_details?.serial_number ?? ""}
+                  onChange={(v) =>
+                    setForm({ ...form, valuable_details: { ...form.valuable_details, serial_number: v } })
+                  }
+                />
+                <GridField
+                  label="Warranty expiration"
+                  type="date"
+                  value={form.valuable_details?.warranty_expiration ?? ""}
+                  onChange={(v) =>
+                    setForm({
+                      ...form,
+                      valuable_details: { ...form.valuable_details, warranty_expiration: v || null },
+                    })
+                  }
+                />
+                <GridField
+                  label="Store / purchased at"
+                  value={form.valuable_details?.purchase_location ?? ""}
+                  onChange={(v) =>
+                    setForm({ ...form, valuable_details: { ...form.valuable_details, purchase_location: v || null } })
+                  }
+                />
+                <div className="field-full">
+                  <label>Located at</label>
+                  <select
+                    value={form.valuable_details?.linked_property_asset_id ?? ""}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        valuable_details: {
+                          ...form.valuable_details,
+                          linked_property_asset_id: e.target.value || null,
+                        },
+                      })
+                    }
+                  >
+                    <option value="">None</option>
+                    {propertyAssets.map((property) => (
+                      <option key={property.id} value={property.id}>
+                        {property.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
+
           {(asset.asset_type === "property" || asset.asset_type === "home_system") && (
             <>
               <h2 style={{ marginTop: 24 }}>Property details</h2>
@@ -307,7 +409,19 @@ export function AssetDetailPage() {
               <dt>Created</dt>
               <dd>{new Date(asset.created_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</dd>
               <dt>Last updated</dt>
-              <dd>{new Date(asset.updated_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</dd>
+              <dd>
+                {new Date(asset.updated_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+                {/* Null for rows that predate the attribution column and for
+                    imported rows — omit the clause entirely rather than
+                    printing "by unknown". */}
+                {asset.updated_by_user_id && <> by {nameFor(asset.updated_by_user_id)}</>}
+              </dd>
+              {(members?.length ?? 0) > 1 && (
+                <>
+                  <dt>Owner</dt>
+                  <dd>{nameFor(asset.owner_user_id) ?? "Unassigned"}</dd>
+                </>
+              )}
               <dt>Sync version</dt>
               <dd>v{asset.version}</dd>
               {asset.purchase_cost != null && (
@@ -336,14 +450,29 @@ export function AssetDetailPage() {
 
       <div className="asset-bottom">
         <section className="asset-detail-panel">
-          <MaintenanceRecordsSection assetId={asset.id} />
+          <MaintenanceRecordsSection assetId={asset.id} assetType={asset.asset_type} />
         </section>
         <section className="asset-detail-panel">
-          <MaintenanceAlertsSection assetId={asset.id} currentUsage={asset.vehicle_details?.current_mileage ?? null} />
+          <MaintenanceAlertsSection
+            assetId={asset.id}
+            assetType={asset.asset_type}
+            currentUsage={asset.vehicle_details?.current_mileage ?? null}
+          />
         </section>
         <section className="asset-detail-panel">
-          <SchedulesSection assetId={asset.id} />
+          <SchedulesSection assetId={asset.id} assetType={asset.asset_type} />
         </section>
+        {asset.asset_type === "valuable" && (
+          <section className="asset-detail-panel">
+            <h2>Documents &amp; Receipts</h2>
+            <AttachmentsSection
+              entityType="asset"
+              entityId={asset.id}
+              addButtonLabel="Add Document or Photo"
+              emptyLabel="No documents or receipts attached."
+            />
+          </section>
+        )}
         {asset.asset_type === "vehicle" && (
           <>
             <section className="asset-detail-panel">

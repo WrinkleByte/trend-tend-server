@@ -86,6 +86,7 @@ async def create_schedule(
         id=uuid.uuid4(),
         household_id=principal.household_id,
         updated_by_device_id=principal.device_id,
+        updated_by_user_id=principal.user_id,
         **payload.model_dump(),
     )
     db.add(schedule)
@@ -128,6 +129,7 @@ async def update_schedule(
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(schedule, field, value)
     schedule.updated_by_device_id = principal.device_id
+    schedule.updated_by_user_id = principal.user_id
     schedule.version += 1
     schedule.updated_at = utcnow()
     await db.commit()
@@ -144,5 +146,6 @@ async def delete_schedule(
     schedule = await _get_owned_schedule(db, principal, schedule_id)
     schedule.deleted_at = utcnow()
     schedule.updated_by_device_id = principal.device_id
+    schedule.updated_by_user_id = principal.user_id
     schedule.version += 1
     await db.commit()

@@ -43,6 +43,10 @@ class MaintenanceScheduleResponse(BaseModel):
     next_due_date: date | None
     next_due_usage: int | None
     is_overdue: bool
+    # Who in the household last changed this row. Server-set from the
+    # authenticated principal, never client-supplied — see
+    # SyncedEntityMixin.updated_by_user_id.
+    updated_by_user_id: uuid.UUID | None = None
     version: int
     created_at: datetime
     updated_at: datetime

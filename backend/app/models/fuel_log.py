@@ -31,6 +31,11 @@ class FuelLog(SyncedEntityMixin, Base):
     cetane: Mapped[int | None] = mapped_column(Integer, nullable=True)
     gas_brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Vikunja #100 (mobile): the fill-up's real-world coordinates, captured
+    # automatically at save time on mobile -- no map picker, no station
+    # search. Independent of `location` above, which stays free text.
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True)
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     additive: Mapped[str | None] = mapped_column(String(100), nullable=True)
 

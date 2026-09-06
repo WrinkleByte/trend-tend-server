@@ -8,26 +8,61 @@ export const DUE_SOON_DAYS = 14;
 export const DUE_SOON_USAGE = 500;
 
 // Record categories (MaintenanceRecordsSection.tsx's create-form select) --
-// lives here, not in that component file, so exporting it doesn't trip
+// live here, not in that component file, so exporting them doesn't trip
 // react-refresh's "only export components" Fast Refresh rule.
 //
 // Mirrors tendfida-mobile's shared/.../domain/MaintenanceCategories.kt --
-// the union of its VEHICLE_CATEGORIES and PROPERTY_CATEGORIES (web has no
-// per-asset-type split like mobile does, so one flat list covers both).
-// Previously a narrower, web-only 7-item list with a divergent "other"
-// custom-sentinel; unified onto mobile's vocabulary and its "custom"
-// sentinel so a household syncing both platforms sees one consistent set
-// instead of the same real-world category round-tripping as two different
-// stored strings depending which platform wrote it.
+// same VEHICLE_CATEGORIES/PROPERTY_CATEGORIES split and
+// categoriesForAssetType(assetType) function, so a vehicle asset doesn't
+// offer property-only categories (fertilizing, gutter cleaning, etc.) and
+// vice versa. Previously one flat union list shown regardless of asset
+// type; equipment deliberately still gets the vehicle list here, same as
+// mobile's categoriesForAssetType (only "property"/"home_system" gets the
+// property list) -- revisit if equipment ever needs its own set.
 export const CUSTOM_CATEGORY_VALUE = "custom";
-export const RECORD_CATEGORIES = [
+
+export const VEHICLE_CATEGORIES = [
   "oil_change", "tires", "alignment", "tpms_sensors", "brakes", "filters", "air_filter", "fluids",
   "transmission_fluid", "coolant", "differential_front", "differential_rear",
-  "battery", "inspection", "electrical", "engine", "general_service", "note",
+  "battery", "inspection", "electrical", "engine", "title_and_registration",
+  "general_service", "note", CUSTOM_CATEGORY_VALUE,
+];
+
+export const PROPERTY_CATEGORIES = [
   "lawn_mowing", "fertilizing_n", "fertilizing_s", "fertilizing_e", "fertilizing_w",
   "water_filter_change", "water_softener_salt", "gutter_cleaning", "pest_control",
-  "hvac_filter_change", "smoke_co_detector", CUSTOM_CATEGORY_VALUE,
+  "hvac_filter_change", "smoke_co_detector", "general_service", "note", CUSTOM_CATEGORY_VALUE,
 ];
+
+// Categories for assetType="valuable" -- large one-off purchases (TVs,
+// grills, appliances). Its own list rather than falling back to
+// VEHICLE_CATEGORIES or PROPERTY_CATEGORIES: repair/replacement/appraisal
+// history for lifetime cost tally, not scheduled service intervals. Keep
+// this in lockstep with shared's MaintenanceCategories.kt and iOS's
+// MaintenanceCategories.swift.
+export const VALUABLE_CATEGORIES = [
+  "repair", "replacement_part", "warranty_service", "appraisal",
+  "general_service", "note", CUSTOM_CATEGORY_VALUE,
+];
+
+export function categoriesForAssetType(assetType: string): string[] {
+  if (assetType === "property" || assetType === "home_system") return PROPERTY_CATEGORIES;
+  if (assetType === "valuable") return VALUABLE_CATEGORIES;
+  return VEHICLE_CATEGORIES;
+}
+
+/** Display text for a category key -- web has no per-category label
+ * overrides the way mobile's categoryLabel() does (e.g. "TPMS Sensors",
+ * "Front Differential Service"); a plain underscore-to-space swap is the
+ * existing convention here. Centralized as a function (rather than each
+ * call site doing its own `.replace("_", " ")`) specifically because
+ * `.replace` with a string (not regex) argument only replaces the *first*
+ * occurrence -- every inline call site had this bug for any category with
+ * more than one underscore, invisible until "title_and_registration"
+ * became the first one to actually have two. */
+export function categoryLabel(category: string): string {
+  return category.replaceAll("_", " ");
+}
 
 export type AlertSeverity = "overdue" | "due_soon";
 

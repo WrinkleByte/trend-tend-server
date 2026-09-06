@@ -8,7 +8,10 @@ import {
 } from "../../api/maintenanceSchedules";
 import type { IntervalType, MaintenanceSchedule } from "../../api/types";
 
-export function SchedulesSection({ assetId }: { assetId: string }) {
+export function SchedulesSection({ assetId, assetType }: { assetId: string; assetType: string }) {
+  // Valuables have no usage metric (no mileage or hours) -- their
+  // schedules are always time-based, with no "Repeats" choice to make.
+  const supportsUsageInterval = assetType !== "valuable";
   const queryClient = useQueryClient();
   const { data: schedules, isLoading } = useQuery({
     queryKey: ["maintenance-schedules", assetId],
@@ -97,11 +100,13 @@ export function SchedulesSection({ assetId }: { assetId: string }) {
       <h2>Reminders</h2>
       <form className="inline-form" onSubmit={handleSubmit}>
         <input placeholder="e.g. Oil change" value={name} onChange={(e) => setName(e.target.value)} />
-        <select value={intervalType} onChange={(e) => setIntervalType(e.target.value as IntervalType)}>
-          <option value="time">Time-based</option>
-          <option value="usage">Usage-based (mileage)</option>
-          <option value="both">Both</option>
-        </select>
+        {supportsUsageInterval && (
+          <select value={intervalType} onChange={(e) => setIntervalType(e.target.value as IntervalType)}>
+            <option value="time">Time-based</option>
+            <option value="usage">Usage-based (mileage)</option>
+            <option value="both">Both</option>
+          </select>
+        )}
         {intervalType !== "usage" && (
           <input
             type="number"

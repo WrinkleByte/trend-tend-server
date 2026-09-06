@@ -18,6 +18,8 @@ class InstanceSettingsUpdate(BaseModel):
     # window.location.origin for the pairing QR code), not specially
     # distinguished from None the way smtp_password is.
     public_api_url: str | None = None
+    # None = leave unchanged, same as every other field here.
+    allow_self_registration: bool | None = None
 
 
 class InstanceSettingsResponse(BaseModel):
@@ -32,5 +34,6 @@ class InstanceSettingsResponse(BaseModel):
     smtp_from_address: str | None
     smtp_password_set: bool
     public_api_url: str | None
+    allow_self_registration: bool
 
     model_config = {"from_attributes": True}

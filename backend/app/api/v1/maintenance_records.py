@@ -63,6 +63,7 @@ async def create_record(
         id=uuid.uuid4(),
         household_id=principal.household_id,
         updated_by_device_id=principal.device_id,
+        updated_by_user_id=principal.user_id,
         **payload.model_dump(),
     )
     db.add(record)
@@ -108,6 +109,7 @@ async def create_records_bulk(
                     id=uuid.uuid4(),
                     household_id=principal.household_id,
                     updated_by_device_id=principal.device_id,
+                    updated_by_user_id=principal.user_id,
                     **item.model_dump(),
                 )
                 db.add(record)
@@ -156,6 +158,7 @@ async def update_record(
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(record, field, value)
     record.updated_by_device_id = principal.device_id
+    record.updated_by_user_id = principal.user_id
     record.version += 1
     record.updated_at = utcnow()
     await db.commit()
@@ -172,5 +175,6 @@ async def delete_record(
     record = await _get_owned_record(db, principal, record_id)
     record.deleted_at = utcnow()
     record.updated_by_device_id = principal.device_id
+    record.updated_by_user_id = principal.user_id
     record.version += 1
     await db.commit()

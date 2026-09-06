@@ -4,8 +4,10 @@ import { login } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { useAuthStore } from "../../auth/authStore";
 import { StatusMessage } from "../../components/StatusMessage";
+import { useSetupStatus } from "./useSetupStatus";
 
 export function LoginPage() {
+  const { data: setupStatus } = useSetupStatus();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -49,9 +51,16 @@ export function LoginPage() {
         <p>
           <Link to="/forgot-password">Forgot password?</Link>
         </p>
-        <p>
-          No account? <Link to="/register">Register</Link>
-        </p>
+        {/* Hidden rather than disabled when signups are closed: there is no
+            self-service route to offer, and an invited user reaches /join
+            directly from their invite link, never through here. Defaults to
+            shown while the status is still loading so the link doesn't
+            flicker in on an ordinary open instance. */}
+        {setupStatus?.allow_self_registration !== false && (
+          <p>
+            No account? <Link to="/register">Register</Link>
+          </p>
+        )}
       </form>
     </div>
   );

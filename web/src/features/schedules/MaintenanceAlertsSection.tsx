@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listMaintenanceSchedules, updateMaintenanceSchedule } from "../../api/maintenanceSchedules";
 import { createMaintenanceRecord, listMaintenanceRecords } from "../../api/maintenanceRecords";
 import {
+  categoriesForAssetType,
+  categoryLabel,
   computeAlerts,
   CUSTOM_CATEGORY_VALUE,
   normalizeForMatch,
-  RECORD_CATEGORIES as CATEGORIES,
   recordMatchesSchedule,
   type ScheduleAlert,
 } from "./maintenanceAlerts";
@@ -15,14 +16,14 @@ import type { MaintenanceRecord } from "../../api/types";
 type ExpandedMode = "perform" | "existing";
 
 /** A schedule's `name` is free text on web -- best-effort match it against
- * the fixed record CATEGORIES set (e.g. "Oil Change" -> "oil_change");
- * falls back to the "custom" sentinel + the schedule's own name as the
- * custom category when nothing matches, so "Mark as Performed" always
- * produces a sensible record even for a schedule named something CATEGORIES
- * doesn't cover. */
-function bestGuessCategory(scheduleName: string): { category: string; customCategory: string | null } {
+ * the asset-type-appropriate fixed category set (e.g. "Oil Change" ->
+ * "oil_change"); falls back to the "custom" sentinel + the schedule's own
+ * name as the custom category when nothing matches, so "Mark as Performed"
+ * always produces a sensible record even for a schedule named something
+ * that set doesn't cover. */
+function bestGuessCategory(scheduleName: string, assetType: string): { category: string; customCategory: string | null } {
   const normalized = normalizeForMatch(scheduleName);
-  const match = CATEGORIES.find((c) => normalizeForMatch(c) === normalized);
+  const match = categoriesForAssetType(assetType).find((c) => normalizeForMatch(c) === normalized);
   return match
     ? { category: match, customCategory: null }
     : { category: CUSTOM_CATEGORY_VALUE, customCategory: scheduleName };
@@ -41,7 +42,15 @@ function dueText(alert: ScheduleAlert): string {
   return parts.join(" · ");
 }
 
-export function MaintenanceAlertsSection({ assetId, currentUsage }: { assetId: string; currentUsage: number | null }) {
+export function MaintenanceAlertsSection({
+  assetId,
+  assetType,
+  currentUsage,
+}: {
+  assetId: string;
+  assetType: string;
+  currentUsage: number | null;
+}) {
   const queryClient = useQueryClient();
   const { data: schedules } = useQuery({
     queryKey: ["maintenance-schedules", assetId],
@@ -100,7 +109,7 @@ export function MaintenanceAlertsSection({ assetId, currentUsage }: { assetId: s
 
   const markPerformedMutation = useMutation({
     mutationFn: async (schedule: ScheduleAlert["schedule"]) => {
-      const { category, customCategory } = bestGuessCategory(schedule.name);
+      const { category, customCategory } = bestGuessCategory(schedule.name, assetType);
       const odometerReading = odometer ? Number(odometer) : null;
       await createMaintenanceRecord({
         asset_id: assetId,
@@ -191,7 +200,7 @@ export function MaintenanceAlertsSection({ assetId, currentUsage }: { assetId: s
                         onClick={() => clearViaExistingMutation.mutate({ scheduleId: schedule.id, record })}
                         disabled={clearViaExistingMutation.isPending}
                       >
-                        {record.performed_at} — {record.category.replace("_", " ")}
+                        {record.performed_at} — {categoryLabel(record.category)}
                         {record.description ? `: ${record.description}` : ""}
                       </button>
                     </li>

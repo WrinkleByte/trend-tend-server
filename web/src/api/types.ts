@@ -8,7 +8,7 @@ export interface TokenResponse {
   token_type: string;
 }
 
-export type AssetType = "vehicle" | "equipment" | "property" | "home_system";
+export type AssetType = "vehicle" | "equipment" | "property" | "home_system" | "valuable";
 export type AssetStatus = "active" | "archived" | "disposed";
 
 export interface VehicleDetails {
@@ -35,6 +35,20 @@ export interface PropertyDetails {
   install_date: string | null;
 }
 
+export interface ValuableDetails {
+  manufacturer: string | null;
+  model_number: string | null;
+  serial_number: string | null;
+  warranty_expiration: string | null;
+  // Where it was bought (store name) -- distinct from linked_property_asset_id
+  // below, which is where it lives now.
+  purchase_location: string | null;
+  // Optional location -- deliberately separate from PropertyDetails'
+  // parent_asset_id (property-to-property nesting); this just says "this
+  // valuable is located at that property."
+  linked_property_asset_id: string | null;
+}
+
 export interface Asset {
   id: string;
   household_id: string;
@@ -48,12 +62,20 @@ export interface Asset {
   // DELETE /assets/{id}/photo — not part of AssetCreateInput, same
   // reasoning as the backend's AssetCreate/AssetUpdate schemas.
   photo_attachment_id: string | null;
+  // Optional owner within the household. A view filter only — everyone can
+  // still see and edit every asset (see the backend's Asset.owner_user_id).
+  // null means unassigned, which shows under every filter.
+  owner_user_id: string | null;
+  // Which household member last changed this row. Server-set, never sent by
+  // a client. null for rows predating the column and for imported rows.
+  updated_by_user_id: string | null;
   version: number;
   created_at: string;
   updated_at: string;
   vehicle_details: VehicleDetails | null;
   equipment_details: EquipmentDetails | null;
   property_details: PropertyDetails | null;
+  valuable_details: ValuableDetails | null;
 }
 
 export interface AssetCreateInput {
@@ -66,9 +88,11 @@ export interface AssetCreateInput {
   status?: AssetStatus;
   purchase_date?: string | null;
   purchase_cost?: number | null;
+  owner_user_id?: string | null;
   vehicle_details?: Partial<VehicleDetails> | null;
   equipment_details?: Partial<EquipmentDetails> | null;
   property_details?: Partial<PropertyDetails> | null;
+  valuable_details?: Partial<ValuableDetails> | null;
 }
 
 export interface MaintenanceRecord {
@@ -220,6 +244,15 @@ export interface HouseholdInvite {
   token: string;
   created_at: string;
   expires_at: string;
+}
+
+/** What POST /households/invites returns: the invite, plus whether the
+ *  backend actually managed to email the join link (false when SMTP isn't
+ *  configured or the relay refused — the copy-the-link fallback still works
+ *  either way). Not part of HouseholdInvite because the listing endpoint
+ *  can't report it for invites created in the past. */
+export interface CreatedHouseholdInvite extends HouseholdInvite {
+  email_sent: boolean;
 }
 
 export interface InvitePreview {

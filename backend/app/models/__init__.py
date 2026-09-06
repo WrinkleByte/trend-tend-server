@@ -1,5 +1,12 @@
 from app.models.api_token import ApiToken
-from app.models.asset import Asset, EquipmentDetails, PropertyDetails, VehicleDetails
+from app.models.asset import (
+    Asset,
+    AssetAttachment,
+    EquipmentDetails,
+    PropertyDetails,
+    ValuableDetails,
+    VehicleDetails,
+)
 from app.models.attachment import Attachment
 from app.models.fuel_log import FuelLog, FuelLogAttachment
 from app.models.household import Household, HouseholdInvite, HouseholdMembership
@@ -15,6 +22,7 @@ from app.models.user import User
 __all__ = [
     "ApiToken",
     "Asset",
+    "AssetAttachment",
     "Attachment",
     "EquipmentDetails",
     "FuelLog",
@@ -33,5 +41,6 @@ __all__ = [
     "TripLog",
     "TripLogAttachment",
     "User",
+    "ValuableDetails",
     "VehicleDetails",
 ]

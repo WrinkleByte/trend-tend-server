@@ -20,6 +20,8 @@ class FuelLogCreate(BaseModel):
     cetane: int | None = None
     gas_brand: str | None = None
     location: str | None = None
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
     notes: str | None = None
     additive: str | None = None
 
@@ -54,6 +56,8 @@ class FuelLogUpdate(BaseModel):
     cetane: int | None = None
     gas_brand: str | None = None
     location: str | None = None
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
     notes: str | None = None
     additive: str | None = None
 
@@ -74,8 +78,14 @@ class FuelLogResponse(BaseModel):
     cetane: int | None
     gas_brand: str | None
     location: str | None
+    latitude: Decimal | None
+    longitude: Decimal | None
     notes: str | None
     additive: str | None
+    # Who in the household last changed this row. Server-set from the
+    # authenticated principal, never client-supplied — see
+    # SyncedEntityMixin.updated_by_user_id.
+    updated_by_user_id: uuid.UUID | None = None
     version: int
     created_at: datetime
     updated_at: datetime

@@ -39,6 +39,16 @@ class InstanceSettings(Base):
     # unchanged either way. See config.py's public_api_url for the
     # one-time env-var seed on first creation.
     public_api_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Whether anyone who can reach the instance may create their own account
+    # and household at POST /auth/register. Defaults True so existing
+    # deployments (and a fresh install, which needs *someone* to register to
+    # become the instance admin) behave exactly as before.
+    #
+    # This gates self-service signup only, never invited signup: an invited
+    # user registering through a household owner's invite link goes through
+    # the same endpoint, and closing signups must not lock them out. See
+    # api/v1/auth.py's register() for where the distinction is enforced.
+    allow_self_registration: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )

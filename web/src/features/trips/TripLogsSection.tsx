@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createTripLog, deleteTripLog, listTripLogs } from "../../api/tripLogs";
+import { uploadPendingAttachments } from "../../api/attachments";
 import type { TripPurpose } from "../../api/types";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
+import { PendingAttachmentPicker } from "../attachments/PendingAttachmentPicker";
 
 // Fixed set plus free text — same pattern as maintenance record
 // category/custom_category. See TripLogInput.kt in tendfida-mobile's
@@ -30,6 +32,7 @@ export function TripLogsSection({ assetId }: { assetId: string }) {
   const [distance, setDistance] = useState("");
   const [distanceTouched, setDistanceTouched] = useState(false);
   const [notes, setNotes] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   // Distance auto-fills from odometer readings when both are present —
   // per TripLogInput.kt's doc comment, distance is normally derived this
@@ -56,13 +59,20 @@ export function TripLogsSection({ assetId }: { assetId: string }) {
         distance,
         notes: notes || null,
       }),
-    onSuccess: () => {
+    onSuccess: (trip) => {
       setCustomPurpose("");
       setStartOdometer("");
       setEndOdometer("");
       setDistance("");
       setDistanceTouched(false);
       setNotes("");
+      if (pendingFiles.length > 0) {
+        const files = pendingFiles;
+        setPendingFiles([]);
+        uploadPendingAttachments("trip_log", trip.id, files).then(() =>
+          queryClient.invalidateQueries({ queryKey: ["attachments", "trip_log", trip.id] }),
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["trip-logs", assetId] });
     },
   });
@@ -136,6 +146,7 @@ export function TripLogsSection({ assetId }: { assetId: string }) {
           Add trip
         </button>
       </form>
+      <PendingAttachmentPicker files={pendingFiles} onFilesChange={setPendingFiles} />
 
       {isLoading && <p>Loading…</p>}
       <ul className="record-list">
@@ -148,7 +159,7 @@ export function TripLogsSection({ assetId }: { assetId: string }) {
               <span className="record-cost">{trip.distance} mi</span>
               <div className="record-actions">
                 <button type="button" onClick={() => setExpandedId(expandedId === trip.id ? null : trip.id)}>
-                  {expandedId === trip.id ? "Hide receipts" : "Receipts"}
+                  {expandedId === trip.id ? "Hide photos" : "Photos"}
                 </button>
                 <button type="button" className="danger" onClick={() => handleDelete(trip.id, trip.performed_at)}>
                   Delete

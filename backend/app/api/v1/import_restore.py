@@ -121,6 +121,11 @@ async def restore_backup(
                 status=row.get("status", "active"),
                 purchase_date=_parse_date(row.get("purchase_date")),
                 purchase_cost=_parse_decimal(row.get("purchase_cost")),
+                # owner_user_id and updated_by_user_id are deliberately left
+                # unset (null) rather than carried over, for the same reason
+                # performed_by_user_id is below: a user id from the backup's
+                # original household means nothing here. Don't "fix" this by
+                # copying them across.
                 version=1,
                 created_at=_parse_datetime(row["created_at"]),
                 updated_at=_parse_datetime(row["updated_at"]),

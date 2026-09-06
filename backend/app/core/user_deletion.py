@@ -4,12 +4,33 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.api_token import ApiToken
+from app.models.asset import Asset
+from app.models.attachment import Attachment
+from app.models.fuel_log import FuelLog
 from app.models.household import Household, HouseholdInvite, HouseholdMembership
+from app.models.maintenance_category import MaintenanceCategory
 from app.models.maintenance_record import MaintenanceRecord
+from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.password_reset_token import PasswordResetToken
 from app.models.refresh_token import RefreshToken
 from app.models.sync_device import SyncDevice
+from app.models.trip_log import TripLog
 from app.models.user import User
+
+# Every SyncedEntityMixin table, which is exactly the set carrying
+# updated_by_user_id. Listed explicitly rather than walked off the mixin so
+# adding a new syncable entity is a deliberate edit here — missing one would
+# only show up as a foreign-key violation the first time somebody deleted a
+# user who had touched that entity.
+_USER_ATTRIBUTED_MODELS = (
+    Asset,
+    MaintenanceRecord,
+    MaintenanceSchedule,
+    FuelLog,
+    TripLog,
+    MaintenanceCategory,
+    Attachment,
+)
 
 
 class UserOwnsHouseholdsError(Exception):
@@ -60,5 +81,18 @@ async def delete_user_data(db: AsyncSession, user_id: uuid.UUID) -> None:
         .where(MaintenanceRecord.performed_by_user_id == user_id)
         .values(performed_by_user_id=None)
     )
+
+    # Attribution and asset ownership both point at `users`, so every one of
+    # these has to be released before the row can go — a FK violation here
+    # would fail the whole deletion. Nulled rather than cascaded: the history
+    # belongs to the household and outlives whoever entered it, and an
+    # unowned asset is visible under every "my stuff" filter rather than
+    # disappearing for everyone (see Asset.owner_user_id).
+    for model in _USER_ATTRIBUTED_MODELS:
+        await db.execute(
+            update(model).where(model.updated_by_user_id == user_id).values(updated_by_user_id=None)
+        )
+    await db.execute(update(Asset).where(Asset.owner_user_id == user_id).values(owner_user_id=None))
+
     await db.execute(delete(HouseholdMembership).where(HouseholdMembership.user_id == user_id))
     await db.execute(delete(User).where(User.id == user_id))

@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFuelLog, deleteFuelLog, listFuelLogs, updateFuelLog } from "../../api/fuelLogs";
+import { uploadPendingAttachments } from "../../api/attachments";
 import type { FuelLog } from "../../api/types";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
+import { PendingAttachmentPicker } from "../attachments/PendingAttachmentPicker";
 import { GridField } from "../../components/GridField";
 
 // Keeps the quick-add inline form to the fields people actually fill in at
@@ -25,6 +27,7 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
   const [gallons, setGallons] = useState("");
   const [totalCost, setTotalCost] = useState("");
   const [isFillUp, setIsFillUp] = useState(true);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   // Edit-in-place state (Vikunja #111) -- only one row editable at a time.
   // Exposes every field FuelLogUpdate tracks, not just the quick-add form's
@@ -99,11 +102,18 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
         total_cost: totalCost || null,
         is_fill_up: isFillUp,
       }),
-    onSuccess: () => {
+    onSuccess: (log) => {
       setOdometerReading("");
       setGallons("");
       setTotalCost("");
       setIsFillUp(true);
+      if (pendingFiles.length > 0) {
+        const files = pendingFiles;
+        setPendingFiles([]);
+        uploadPendingAttachments("fuel_log", log.id, files).then(() =>
+          queryClient.invalidateQueries({ queryKey: ["attachments", "fuel_log", log.id] }),
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["fuel-logs", assetId] });
     },
   });
@@ -162,6 +172,7 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
           Add fuel-up
         </button>
       </form>
+      <PendingAttachmentPicker files={pendingFiles} onFilesChange={setPendingFiles} />
 
       {isLoading && <p>Loading…</p>}
       <ul className="record-list">
@@ -247,7 +258,7 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
                 <span className="record-cost">{log.total_cost != null ? `$${log.total_cost}` : ""}</span>
                 <div className="record-actions">
                   <button type="button" onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}>
-                    {expandedId === log.id ? "Hide receipts" : "Receipts"}
+                    {expandedId === log.id ? "Hide photos" : "Photos"}
                   </button>
                   <button type="button" onClick={() => startEdit(log)}>
                     Edit

@@ -19,6 +19,7 @@ class VehicleDetailsIn(BaseModel):
     car_display_theme: str | None = None
     stylized_plate_enabled: bool | None = None
     unit_system_override: str | None = None
+    plate_style: str | None = None
     default_oil_viscosity: str | None = None
     default_oil_formulation: str | None = None
     default_oil_meets_dexos: bool | None = None
@@ -50,15 +51,29 @@ class PropertyDetailsIn(BaseModel):
     install_date: date | None = None
 
 
+class ValuableDetailsIn(BaseModel):
+    manufacturer: str | None = None
+    model_number: str | None = None
+    serial_number: str | None = None
+    warranty_expiration: date | None = None
+    purchase_location: str | None = None
+    linked_property_asset_id: uuid.UUID | None = None
+
+
 class AssetCreate(BaseModel):
     asset_type: AssetType
     name: str
     notes: str | None = None
     purchase_date: date | None = None
     purchase_cost: Decimal | None = None
+    # Optional owner within the household — powers the client-side "only show
+    # my stuff" filter. Not a permission: see Asset.owner_user_id. Verified to
+    # be a member of this household by the endpoint before it's stored.
+    owner_user_id: uuid.UUID | None = None
     vehicle_details: VehicleDetailsIn | None = None
     equipment_details: EquipmentDetailsIn | None = None
     property_details: PropertyDetailsIn | None = None
+    valuable_details: ValuableDetailsIn | None = None
 
 
 class AssetUpdate(BaseModel):
@@ -67,9 +82,16 @@ class AssetUpdate(BaseModel):
     status: AssetStatus | None = None
     purchase_date: date | None = None
     purchase_cost: Decimal | None = None
+    # None means "leave unchanged" here, same as every other field on this
+    # partial-update schema — so there is deliberately no way to *clear* an
+    # owner through this field alone. AssetUpdate has no other nullable-to-
+    # null case today; if unassigning becomes a real need it wants an
+    # explicit sentinel rather than overloading None.
+    owner_user_id: uuid.UUID | None = None
     vehicle_details: VehicleDetailsIn | None = None
     equipment_details: EquipmentDetailsIn | None = None
     property_details: PropertyDetailsIn | None = None
+    valuable_details: ValuableDetailsIn | None = None
 
 
 class AssetResponse(BaseModel):
@@ -87,11 +109,17 @@ class AssetResponse(BaseModel):
     # attachment-upload endpoint: the relationship is driven by the upload
     # itself, not a raw id field a client could point anywhere.
     photo_attachment_id: uuid.UUID | None = None
+    owner_user_id: uuid.UUID | None = None
+    # Who in the household last changed this row (server-set, never client-
+    # supplied — see SyncedEntityMixin.updated_by_user_id). Null for rows
+    # predating the column and for imported rows.
+    updated_by_user_id: uuid.UUID | None = None
     version: int
     created_at: datetime
     updated_at: datetime
     vehicle_details: VehicleDetailsIn | None = None
     equipment_details: EquipmentDetailsIn | None = None
     property_details: PropertyDetailsIn | None = None
+    valuable_details: ValuableDetailsIn | None = None
 
     model_config = {"from_attributes": True}

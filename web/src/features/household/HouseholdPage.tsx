@@ -32,9 +32,15 @@ export function HouseholdPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [manualCopyInvite, setManualCopyInvite] = useState<{ id: string; url: string } | null>(null);
 
+  const [lastInvite, setLastInvite] = useState<{ email: string; emailSent: boolean } | null>(null);
+
   const inviteMutation = useMutation({
     mutationFn: () => createInvite(email, role),
-    onSuccess: () => {
+    onSuccess: (invite) => {
+      // Report which delivery actually happened rather than assuming the
+      // email went out — on an instance with no SMTP relay configured,
+      // copying the link is still the only way the invitee hears about this.
+      setLastInvite({ email: invite.invited_email, emailSent: invite.email_sent });
       setEmail("");
       queryClient.invalidateQueries({ queryKey: ["invites"] });
     },
@@ -114,9 +120,17 @@ export function HouseholdPage() {
               <option value="owner">Owner</option>
             </select>
             <button type="submit" disabled={inviteMutation.isPending}>
-              Create invite
+              {inviteMutation.isPending ? "Sending…" : "Send invite"}
             </button>
           </form>
+          {lastInvite && (
+            <StatusMessage>
+              {lastInvite.emailSent
+                ? `Invite emailed to ${lastInvite.email}.`
+                : `Invite created for ${lastInvite.email}, but no email was sent — this instance has no working
+                   email relay configured. Copy the link below and send it to them yourself.`}
+            </StatusMessage>
+          )}
 
           <h2>Pending &amp; past invites</h2>
           <ul className="invite-list">

@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import uuid
 from datetime import timedelta
 
@@ -6,7 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_principal
+from app.config import get_settings
+from app.core.email import send_email
 from app.core.household_deletion import delete_household_data, wipe_household_data
+from app.core.instance_settings import get_or_create_instance_settings
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -29,11 +34,13 @@ from app.schemas.household import (
     HouseholdResponse,
     HouseholdSettingsUpdate,
     InviteCreate,
+    InviteCreateResponse,
     InvitePreviewResponse,
     InviteResponse,
 )
 
 router = APIRouter(prefix="/households", tags=["households"])
+logger = logging.getLogger("app.households")
 
 INVITE_TTL_DAYS = 7
 
@@ -156,12 +163,12 @@ async def remove_member(
     await db.commit()
 
 
-@router.post("/invites", response_model=InviteResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/invites", response_model=InviteCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_invite(
     payload: InviteCreate,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
-) -> HouseholdInvite:
+) -> InviteCreateResponse:
     _require_owner(principal)
 
     invite = HouseholdInvite(
@@ -176,7 +183,70 @@ async def create_invite(
     db.add(invite)
     await db.commit()
     await db.refresh(invite)
-    return invite
+
+    email_sent = await _email_invite(db, invite, household_id=principal.household_id)
+    return InviteCreateResponse.model_validate({**invite.__dict__, "email_sent": email_sent})
+
+
+async def _email_invite(db: AsyncSession, invite: HouseholdInvite, *, household_id: uuid.UUID) -> bool:
+    """Best-effort delivery of the join link. Returns whether it actually went
+    out, so the caller can tell the owner to fall back to copying the link.
+
+    Deliberately never raises: the invite row is already committed and the
+    copy-the-link path still works, so a missing/broken SMTP relay must not
+    turn a successful invite into a failed request.
+    """
+    join_link = f"{get_settings().frontend_url.rstrip('/')}/join?token={invite.token}"
+
+    household = (
+        await db.execute(select(Household).where(Household.id == household_id))
+    ).scalar_one()
+    inviter = (
+        await db.execute(select(User).where(User.id == invite.created_by_user_id))
+    ).scalar_one_or_none()
+    inviter_name = inviter.display_name if inviter else "Someone"
+
+    try:
+        instance_settings = await get_or_create_instance_settings(db)
+        # smtplib is blocking — offload so a slow or unreachable relay doesn't
+        # stall the shared event loop, same as auth.py's password-reset send.
+        delivered = await asyncio.to_thread(
+            send_email,
+            instance_settings,
+            to=invite.invited_email,
+            subject=f"{inviter_name} invited you to {household.name} on WrinkleByte",
+            body=(
+                f"{inviter_name} has invited you to join the household "
+                # invite.role, not invite.role.value — the column is String(20)
+                # rather than Enum, so a refreshed row hands back a plain str.
+                # StrEnum and str both interpolate to the same text here.
+                f'"{household.name}" on WrinkleByte as a {invite.role}.\n\n'
+                f"Accept the invitation: {join_link}\n\n"
+                f"This invitation expires in {INVITE_TTL_DAYS} days. "
+                f"If you weren't expecting this, you can ignore this email."
+            ),
+        )
+    except Exception:
+        # send_email swallows SMTP/OS errors itself; this is the belt-and-braces
+        # catch for anything else (a malformed address reaching EmailMessage,
+        # say) so invite creation can't be failed by its notification.
+        logger.exception("Unexpected error emailing invite %s", invite.id)
+        return False
+
+    if delivered:
+        logger.info("Invite %s emailed to %s.", invite.id, invite.invited_email)
+    else:
+        # No token in this log line, unlike forgot-password's fallback: the
+        # owner who created the invite is sitting in front of the UI with a
+        # working "Copy invite link" button, so there's no need to put a
+        # credential in the logs to recover delivery.
+        logger.info(
+            "Invite %s created for %s but no email was sent (SMTP not configured, or the "
+            "send failed) — the owner can still copy the link from the household page.",
+            invite.id,
+            invite.invited_email,
+        )
+    return delivered
 
 
 @router.get("/invites", response_model=list[InviteResponse])

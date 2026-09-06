@@ -2,13 +2,19 @@ import { apiFetch, apiFetchBlob, apiUpload } from "./client";
 import { getAsset } from "./assets";
 import type { Asset, Attachment } from "./types";
 
-// Matches the three join tables on the backend (RecordAttachment /
-// FuelLogAttachment / TripLogAttachment) — "record" here means
-// MaintenanceRecord, kept short since it's the query-param prefix too.
-export type AttachmentEntityType = "record" | "fuel_log" | "trip_log";
+// Matches the four join tables on the backend (RecordAttachment /
+// FuelLogAttachment / TripLogAttachment / AssetAttachment) — "record" here
+// means MaintenanceRecord, kept short since it's the query-param prefix
+// too. "asset" maps to `linked_asset_id`, distinct from the `asset_id`
+// query param uploadAssetPhoto below uses -- that one sets the 1:1
+// Asset.photo_attachment_id column, this one is for extra documents (e.g.
+// a Valuable's PDF service manual) via the many-to-many join table.
+export type AttachmentEntityType = "record" | "fuel_log" | "trip_log" | "asset";
 
 function entityQueryParam(entityType: AttachmentEntityType): string {
-  return entityType === "record" ? "record_id" : `${entityType}_id`;
+  if (entityType === "record") return "record_id";
+  if (entityType === "asset") return "linked_asset_id";
+  return `${entityType}_id`;
 }
 
 export function listAttachments(entityType: AttachmentEntityType, entityId: string): Promise<Attachment[]> {
@@ -35,6 +41,18 @@ export function deleteAttachment(id: string): Promise<void> {
 
 export function fetchAttachmentBlob(id: string): Promise<Blob> {
   return apiFetchBlob(`/attachments/${id}/blob`);
+}
+
+/** Uploads every file picked before the parent entity existed yet (see
+ * PendingAttachmentPicker) -- called from a create-mutation's onSuccess,
+ * once the entity has a real id to attach to. Mirrors the mobile apps'
+ * "pick photos, Save uploads them" flow. */
+export function uploadPendingAttachments(
+  entityType: AttachmentEntityType,
+  entityId: string,
+  files: File[],
+): Promise<Attachment[]> {
+  return Promise.all(files.map((file) => uploadAttachment(entityType, entityId, file)));
 }
 
 // Asset profile photo — a direct 1:1 FK on the asset row (Asset.photo_

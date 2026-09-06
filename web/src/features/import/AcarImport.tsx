@@ -54,9 +54,10 @@ function guessAssetType(vehicleName: string): AssetType {
 }
 
 // Web's fixed maintenance-category list (maintenanceAlerts.ts's
-// RECORD_CATEGORIES) now mirrors mobile's full vocabulary -- these keys
-// must match values actually in that list (e.g. "filters", not "filter").
-// The backend doesn't enforce a category enum (plain string column), but
+// VEHICLE_CATEGORIES -- aCar imports are always vehicle/equipment, never
+// property) now mirrors mobile's full vocabulary -- these keys must
+// match values actually in that list (e.g. "filters", not "filter"). The
+// backend doesn't enforce a category enum (plain string column), but
 // guessing onto a category this app's own UI doesn't offer would be
 // confusing to edit later.
 const CATEGORY_KEYWORDS: [string, string][] = [

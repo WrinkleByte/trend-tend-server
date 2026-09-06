@@ -1,8 +1,11 @@
 import { apiFetch } from "./client";
 import type { Asset, AssetCreateInput } from "./types";
 
-export function listAssets(): Promise<Asset[]> {
-  return apiFetch("/assets");
+/** `mineOnly` is a view filter, not access control — the backend still
+ *  returns unassigned assets under it, and every member can read everything
+ *  either way. */
+export function listAssets(mineOnly = false): Promise<Asset[]> {
+  return apiFetch(mineOnly ? "/assets?mine_only=true" : "/assets");
 }
 
 export function getAsset(id: string): Promise<Asset> {

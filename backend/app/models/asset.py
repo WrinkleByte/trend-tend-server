@@ -16,6 +16,7 @@ class AssetType(StrEnum):
     EQUIPMENT = "equipment"
     PROPERTY = "property"
     HOME_SYSTEM = "home_system"
+    VALUABLE = "valuable"
 
 
 class AssetStatus(StrEnum):
@@ -41,6 +42,24 @@ class Asset(SyncedEntityMixin, Base):
     status: Mapped[AssetStatus] = mapped_column(String(20), default=AssetStatus.ACTIVE, nullable=False)
     purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     purchase_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # Whose asset this is, within the household. A view filter only, NOT a
+    # permission: every member can still see and edit every asset, and the
+    # household remains the sole tenant boundary (no RLS or
+    # household_scoped_query change). Clients use it to offer an "only show
+    # my stuff" toggle for people who share an instance but don't care about
+    # each other's cars.
+    #
+    # Null means unassigned, which is both the pre-existing state of every
+    # row and the state an asset returns to when its owner is deleted — an
+    # unassigned asset is visible under every filter rather than becoming
+    # invisible to everyone.
+    #
+    # Unlike updated_by_user_id (SyncedEntityMixin), this one IS legitimately
+    # client-settable, so every write path has to check the id actually
+    # belongs to a member of this household — see sync.py's _apply_change.
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+    )
 
 
 class VehicleDetails(Base):
@@ -71,6 +90,13 @@ class VehicleDetails(Base):
     car_display_theme: Mapped[str | None] = mapped_column(String(30), nullable=True)
     stylized_plate_enabled: Mapped[bool | None] = mapped_column(nullable=True)
     unit_system_override: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Vikunja #103: which stylized plate design to draw when
+    # stylized_plate_enabled resolves true -- plain per-vehicle attribute
+    # (not a device/household-resolved override like the two fields
+    # above), values are the mobile PlateStyle enum's raw cases (defined
+    # per-platform, no shared vocabulary to mirror here). NULL means the
+    # plain "generic" style.
+    plate_style: Mapped[str | None] = mapped_column(String(30), nullable=True)
     # Vikunja #92: this vehicle's remembered service specs -- the mobile
     # app prefills a new maintenance record's matching structured field
     # (see MaintenanceRecord above) from these when the user hasn't
@@ -133,3 +159,53 @@ class PropertyDetails(Base):
         UUID(as_uuid=True), ForeignKey("assets.id"), nullable=True
     )
     install_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class ValuableDetails(Base):
+    """1:1 detail table for Asset rows where asset_type=valuable -- large
+    one-off purchases (TVs, grills, appliances, and similar) that aren't
+    engine/power-driven the way `equipment` is (no hour-meter field here)
+    and aren't the home/land itself the way `property` is.
+
+    linked_property_asset_id is a deliberately separate concept from
+    PropertyDetails.parent_asset_id above: parent_asset_id nests a
+    property/home_system asset under a parent property, wired specifically
+    for that in AssetRepository/SyncEngine on the client. This field just
+    says "this valuable is located at that property" -- optional, and not
+    restricted at the DB level to property-typed assets (validated at the
+    API layer instead, same as every other cross-asset reference here)."""
+
+    __tablename__ = "valuable_details"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("assets.id"), primary_key=True
+    )
+    manufacturer: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    model_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    serial_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    warranty_expiration: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Where it was bought (store name, e.g. "Best Buy", "Costco") -- distinct
+    # from linked_property_asset_id below, which is *where it lives now*.
+    purchase_location: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    linked_property_asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("assets.id"), nullable=True
+    )
+
+
+class AssetAttachment(Base):
+    """Join table linking an Asset to N Attachments (extra photos, PDF
+    service manuals, etc.) -- distinct from Asset.photo_attachment_id, which
+    stays the single 1:1 primary-photo column. Not a SyncedEntityMixin
+    table, same as RecordAttachment/FuelLogAttachment/TripLogAttachment:
+    plain server-side join-table bookkeeping, not part of the sync wire
+    protocol."""
+
+    __tablename__ = "asset_attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("assets.id"), nullable=False, index=True
+    )
+    attachment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("attachments.id"), nullable=False, index=True
+    )

@@ -75,6 +75,19 @@ class InviteResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class InviteCreateResponse(InviteResponse):
+    """Everything InviteResponse carries, plus whether the invite email
+    actually went out — so the UI can say "emailed to X" instead of implying
+    a delivery that never happened when SMTP is off or the relay refused.
+
+    A separate schema rather than a nullable field on InviteResponse: the
+    listing endpoint returns invites created long ago, for which "was an
+    email sent" is not something we store and would always have to be null.
+    """
+
+    email_sent: bool
+
+
 class InvitePreviewResponse(BaseModel):
     """What an unauthenticated visitor sees at a `/join?token=...` link
     before deciding to register or accept — deliberately excludes the

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_principal, household_scoped_query
 from app.db.session import get_db
-from app.models.asset import Asset
+from app.models.asset import Asset, AssetAttachment
 from app.models.attachment import Attachment, StorageBackendType
 from app.models.fuel_log import FuelLog, FuelLogAttachment
 from app.models.maintenance_record import MaintenanceRecord, RecordAttachment
@@ -36,12 +36,15 @@ INLINE_RENDERABLE_CONTENT_TYPES = frozenset(
 
 _FALLBACK_CONTENT_TYPE = "application/octet-stream"
 
-# Upload ceiling. Receipt/odometer photos from a modern phone run 3-12MB, so
-# this leaves generous headroom while bounding what a single request can
-# cost us. Enforced by reading in chunks and stopping early (see
-# _read_upload_capped) rather than trusting Content-Length, which a client
-# controls and can simply lie about.
-MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024
+# Upload ceiling. Receipt/odometer photos from a modern phone run 3-12MB;
+# a compressed multi-page scanned PDF (e.g. a service manual, see the iOS
+# document-scanner feature) runs a few hundred KB per page, so a long
+# manual can still land in the tens of MB. 150MB leaves generous headroom
+# for both while bounding what a single request can cost us. Enforced by
+# reading in chunks and stopping early (see _read_upload_capped) rather
+# than trusting Content-Length, which a client controls and can simply lie
+# about.
+MAX_ATTACHMENT_BYTES = 150 * 1024 * 1024
 _UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 
@@ -158,6 +161,12 @@ async def upload_attachment(
     fuel_log_id: uuid.UUID | None = None,
     trip_log_id: uuid.UUID | None = None,
     asset_id: uuid.UUID | None = None,
+    # Distinct from asset_id above, which sets the 1:1 photo_attachment_id
+    # column: this links into AssetAttachment, the many-to-many join table
+    # for extra documents on an asset (e.g. a Valuable's PDF service
+    # manual, or a second/third photo) -- same relationship shape as
+    # record_id/fuel_log_id/trip_log_id above, just for assets.
+    linked_asset_id: uuid.UUID | None = None,
     captured_at: datetime | None = None,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
@@ -194,6 +203,8 @@ async def upload_attachment(
         await _get_owned_fuel_log(db, principal, fuel_log_id)
     if trip_log_id is not None:
         await _get_owned_trip_log(db, principal, trip_log_id)
+    if linked_asset_id is not None:
+        await _get_owned_asset(db, principal, linked_asset_id)
     asset: Asset | None = None
     if asset_id is not None:
         # A profile photo is 1:1 with its asset (a direct FK column, not a
@@ -213,6 +224,7 @@ async def upload_attachment(
         id=attachment_id,
         household_id=principal.household_id,
         updated_by_device_id=principal.device_id,
+        updated_by_user_id=principal.user_id,
         original_filename=file.filename or "upload",
         content_type=file.content_type or "application/octet-stream",
         size_bytes=len(data),
@@ -232,9 +244,12 @@ async def upload_attachment(
         db.add(FuelLogAttachment(id=uuid.uuid4(), fuel_log_id=fuel_log_id, attachment_id=attachment.id))
     if trip_log_id is not None:
         db.add(TripLogAttachment(id=uuid.uuid4(), trip_log_id=trip_log_id, attachment_id=attachment.id))
+    if linked_asset_id is not None:
+        db.add(AssetAttachment(id=uuid.uuid4(), asset_id=linked_asset_id, attachment_id=attachment.id))
     if asset is not None:
         asset.photo_attachment_id = attachment.id
         asset.updated_by_device_id = principal.device_id
+        asset.updated_by_user_id = principal.user_id
         asset.version += 1
         asset.updated_at = utcnow()
         if previous_photo_attachment_id is not None:
@@ -248,6 +263,7 @@ async def upload_attachment(
             if previous_attachment is not None:
                 previous_attachment.deleted_at = utcnow()
                 previous_attachment.updated_by_device_id = principal.device_id
+                previous_attachment.updated_by_user_id = principal.user_id
                 previous_attachment.version += 1
 
     await db.commit()
@@ -260,14 +276,16 @@ async def list_attachments(
     record_id: uuid.UUID | None = None,
     fuel_log_id: uuid.UUID | None = None,
     trip_log_id: uuid.UUID | None = None,
+    linked_asset_id: uuid.UUID | None = None,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
     storage: StorageBackend = Depends(get_storage_backend),
 ) -> list[AttachmentResponse]:
-    provided = [x for x in (record_id, fuel_log_id, trip_log_id) if x is not None]
+    provided = [x for x in (record_id, fuel_log_id, trip_log_id, linked_asset_id) if x is not None]
     if len(provided) != 1:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "Exactly one of record_id, fuel_log_id, trip_log_id is required"
+            status.HTTP_400_BAD_REQUEST,
+            "Exactly one of record_id, fuel_log_id, trip_log_id, linked_asset_id is required",
         )
 
     if record_id is not None:
@@ -284,12 +302,19 @@ async def list_attachments(
             .join(FuelLogAttachment, FuelLogAttachment.attachment_id == Attachment.id)
             .where(FuelLogAttachment.fuel_log_id == fuel_log_id)
         )
-    else:
+    elif trip_log_id is not None:
         await _get_owned_trip_log(db, principal, trip_log_id)
         query = (
             household_scoped_query(Attachment, principal)
             .join(TripLogAttachment, TripLogAttachment.attachment_id == Attachment.id)
             .where(TripLogAttachment.trip_log_id == trip_log_id)
+        )
+    else:
+        await _get_owned_asset(db, principal, linked_asset_id)
+        query = (
+            household_scoped_query(Attachment, principal)
+            .join(AssetAttachment, AssetAttachment.attachment_id == Attachment.id)
+            .where(AssetAttachment.asset_id == linked_asset_id)
         )
 
     result = await db.execute(query)
@@ -372,6 +397,40 @@ async def unlink_attachment(
     await db.commit()
 
 
+@router.post("/{attachment_id}/asset-link/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def link_attachment_to_asset(
+    attachment_id: uuid.UUID,
+    asset_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await _get_owned_attachment(db, principal, attachment_id)
+    await _get_owned_asset(db, principal, asset_id)
+    db.add(AssetAttachment(id=uuid.uuid4(), asset_id=asset_id, attachment_id=attachment_id))
+    await db.commit()
+
+
+@router.delete("/{attachment_id}/asset-link/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_attachment_from_asset(
+    attachment_id: uuid.UUID,
+    asset_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    # Same ownership-check-both-sides requirement as unlink_attachment
+    # above (Vikunja #207's bug class), and same hard-delete rationale:
+    # AssetAttachment isn't a SyncedEntityMixin table and isn't in
+    # sync.py's SYNC_REGISTRY -- plain server-side join-table bookkeeping.
+    await _get_owned_attachment(db, principal, attachment_id)
+    await _get_owned_asset(db, principal, asset_id)
+    await db.execute(
+        AssetAttachment.__table__.delete().where(
+            AssetAttachment.attachment_id == attachment_id, AssetAttachment.asset_id == asset_id
+        )
+    )
+    await db.commit()
+
+
 @router.delete("/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_attachment(
     attachment_id: uuid.UUID,
@@ -386,5 +445,6 @@ async def delete_attachment(
     attachment = await _get_owned_attachment(db, principal, attachment_id)
     attachment.deleted_at = utcnow()
     attachment.updated_by_device_id = principal.device_id
+    attachment.updated_by_user_id = principal.user_id
     attachment.version += 1
     await db.commit()

@@ -5,4 +5,5 @@ export const ASSET_TYPES: { value: AssetType; label: string }[] = [
   { value: "equipment", label: "Equipment" },
   { value: "property", label: "Property" },
   { value: "home_system", label: "Home System" },
+  { value: "valuable", label: "Valuable" },
 ];
