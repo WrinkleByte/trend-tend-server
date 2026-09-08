@@ -31,7 +31,7 @@ export const VEHICLE_CATEGORIES = [
 export const PROPERTY_CATEGORIES = [
   "lawn_mowing", "fertilizing_n", "fertilizing_s", "fertilizing_e", "fertilizing_w",
   "water_filter_change", "water_softener_salt", "gutter_cleaning", "pest_control",
-  "hvac_filter_change", "smoke_co_detector", "general_service", "note", CUSTOM_CATEGORY_VALUE,
+  "hvac_filter_change", "smoke_co_detector", "paint", "general_service", "note", CUSTOM_CATEGORY_VALUE,
 ];
 
 // Categories for assetType="valuable" -- large one-off purchases (TVs,
