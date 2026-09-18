@@ -270,7 +270,9 @@ export interface FuelLog {
   asset_id: string;
   performed_at: string;
   odometer_reading: number | null;
-  gallons: string;
+  // null = volume not recorded. Deliberately not 0, which would mean a real
+  // zero-gallon fill-up and would be averaged into MPG.
+  gallons: string | null;
   cost_per_gallon: string | null;
   total_cost: string | null;
   currency: string;
@@ -291,7 +293,7 @@ export interface CreateFuelLogRequest {
   asset_id: string;
   performed_at: string;
   odometer_reading?: number | null;
-  gallons: string;
+  gallons?: string | null;
   cost_per_gallon?: string | null;
   total_cost?: string | null;
   currency?: string;

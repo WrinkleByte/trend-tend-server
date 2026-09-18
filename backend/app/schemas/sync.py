@@ -166,7 +166,7 @@ class FuelLogSyncData(AttributedSyncData):
     asset_id: uuid.UUID
     performed_at: date
     odometer_reading: int | None = None
-    gallons: Decimal
+    gallons: Decimal | None = None
     cost_per_gallon: Decimal | None = None
     total_cost: Decimal | None = None
     currency: str = "USD"

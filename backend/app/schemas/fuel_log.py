@@ -10,7 +10,9 @@ class FuelLogCreate(BaseModel):
     asset_id: uuid.UUID
     performed_at: date
     odometer_reading: int | None = None
-    gallons: Decimal
+    # Optional so a fuel entry can be saved with just a date and completed
+    # later -- see FuelLog.gallons.
+    gallons: Decimal | None = None
     cost_per_gallon: Decimal | None = None
     total_cost: Decimal | None = None
     currency: str = "USD"
@@ -68,7 +70,7 @@ class FuelLogResponse(BaseModel):
     asset_id: uuid.UUID
     performed_at: date
     odometer_reading: int | None
-    gallons: Decimal
+    gallons: Decimal | None
     cost_per_gallon: Decimal | None
     total_cost: Decimal | None
     currency: str

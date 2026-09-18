@@ -248,7 +248,10 @@ async def restore_backup(
                 asset_id=asset_id_map[row["asset_id"]],
                 performed_at=_parse_date(row["performed_at"]),
                 odometer_reading=row.get("odometer_reading"),
-                gallons=_parse_decimal(row["gallons"]),
+                # .get, not ["gallons"]: the column is nullable now, so a
+                # backup taken after that change can legitimately omit it and
+                # a KeyError here would fail the whole restore.
+                gallons=_parse_decimal(row.get("gallons")),
                 cost_per_gallon=_parse_decimal(row.get("cost_per_gallon")),
                 total_cost=_parse_decimal(row.get("total_cost")),
                 currency=row.get("currency", "USD"),

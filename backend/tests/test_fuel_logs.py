@@ -218,3 +218,42 @@ async def test_bulk_create_fuel_logs_rejects_another_households_asset(client, au
     assert response.status_code == 207
     results = response.json()
     assert results[0]["status"] == "error"
+
+
+# ===== gallons is optional (jot an entry down, complete it later) =====
+
+
+async def test_fuel_log_can_be_created_with_only_a_date(client, auth_headers):
+    """The only field a fuel entry genuinely requires is when it happened --
+    a user at the pump may have nothing else to hand yet."""
+    asset = await client.post(
+        "/api/v1/assets", headers=auth_headers, json={"asset_type": "vehicle", "name": "Date Only Truck"}
+    )
+    response = await client.post(
+        "/api/v1/fuel-logs",
+        headers=auth_headers,
+        json={"asset_id": asset.json()["id"], "performed_at": "2026-09-17"},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    # None, not 0: "not recorded" must stay distinguishable from a genuine
+    # zero-gallon fill-up, or every MPG average silently absorbs it.
+    assert body["gallons"] is None
+
+
+async def test_fuel_log_gallons_can_be_filled_in_later(client, auth_headers):
+    asset = await client.post(
+        "/api/v1/assets", headers=auth_headers, json={"asset_type": "vehicle", "name": "Later Truck"}
+    )
+    created = await client.post(
+        "/api/v1/fuel-logs",
+        headers=auth_headers,
+        json={"asset_id": asset.json()["id"], "performed_at": "2026-09-17"},
+    )
+    updated = await client.patch(
+        f"/api/v1/fuel-logs/{created.json()['id']}",
+        headers=auth_headers,
+        json={"gallons": "12.5"},
+    )
+    assert updated.status_code == 200
+    assert float(updated.json()["gallons"]) == 12.5

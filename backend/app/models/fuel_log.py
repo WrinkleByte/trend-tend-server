@@ -21,7 +21,11 @@ class FuelLog(SyncedEntityMixin, Base):
     asset_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("assets.id"), nullable=False, index=True)
     performed_at: Mapped[date] = mapped_column(Date, nullable=False)
     odometer_reading: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    gallons: Mapped[Decimal] = mapped_column(Numeric(8, 3), nullable=False)
+    # Nullable: an entry can be jotted down with only a date and filled in
+    # later, so "volume not recorded" has to be representable. Distinct from
+    # 0, which would mean a genuine zero-gallon fill-up and would drag the
+    # MPG average down -- consumers skip null rather than treating it as 0.
+    gallons: Mapped[Decimal | None] = mapped_column(Numeric(8, 3), nullable=True)
     cost_per_gallon: Mapped[Decimal | None] = mapped_column(Numeric(8, 3), nullable=True)
     total_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)

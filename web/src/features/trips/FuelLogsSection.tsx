@@ -24,8 +24,13 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [performedAt, setPerformedAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [odometerReading, setOdometerReading] = useState("");
-  const [gallons, setGallons] = useState("");
-  const [totalCost, setTotalCost] = useState("");
+  // One row per pump swipe. High fuel prices routinely push a single fill-up
+  // past the pump's per-transaction cash limit, so the driver swipes two or
+  // three times at the same pump -- that is still ONE fill-up, and recording
+  // it as several would break the full-to-full interval MPG depends on.
+  // Rows are summed into the single fuel log that gets saved; the individual
+  // swipes are an input aid, not stored.
+  const [swipes, setSwipes] = useState<{ gallons: string; cost: string }[]>([{ gallons: "", cost: "" }]);
   const [isFillUp, setIsFillUp] = useState(true);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
@@ -51,7 +56,7 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
     setEditingId(log.id);
     setEditPerformedAt(log.performed_at.slice(0, 10));
     setEditOdometerReading(log.odometer_reading != null ? String(log.odometer_reading) : "");
-    setEditGallons(log.gallons);
+    setEditGallons(log.gallons ?? "");
     setEditCostPerGallon(log.cost_per_gallon ?? "");
     setEditTotalCost(log.total_cost ?? "");
     setEditIsFillUp(log.is_fill_up);
@@ -89,7 +94,28 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
 
   function handleEditSubmit(event: FormEvent, id: string) {
     event.preventDefault();
-    if (editGallons) updateMutation.mutate(id);
+    // Gallons is no longer required here either -- otherwise a date-only
+    // entry could be created but never edited and re-saved.
+    updateMutation.mutate(id);
+  }
+
+  /** Sum of a column across swipes, or null when nothing was entered at all.
+   *  null (not 0) is what distinguishes "didn't record the volume" from a
+   *  genuine zero -- the backend stores null and MPG skips it. */
+  function sumSwipes(field: "gallons" | "cost"): string | null {
+    const values = swipes.map((s) => s[field].trim()).filter((v) => v !== "");
+    if (values.length === 0) return null;
+    const total = values.reduce((acc, v) => acc + (Number(v) || 0), 0);
+    // Trim float noise (0.1 + 0.2) without imposing fixed decimals on a
+    // value the user may have typed to three places.
+    return String(Number(total.toFixed(3)));
+  }
+
+  const totalGallons = sumSwipes("gallons");
+  const totalCost = sumSwipes("cost");
+
+  function updateSwipe(index: number, field: "gallons" | "cost", value: string) {
+    setSwipes((rows) => rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
   }
 
   const createMutation = useMutation({
@@ -98,14 +124,13 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
         asset_id: assetId,
         performed_at: performedAt,
         odometer_reading: odometerReading ? Number(odometerReading) : null,
-        gallons,
-        total_cost: totalCost || null,
+        gallons: totalGallons,
+        total_cost: totalCost,
         is_fill_up: isFillUp,
       }),
     onSuccess: (log) => {
       setOdometerReading("");
-      setGallons("");
-      setTotalCost("");
+      setSwipes([{ gallons: "", cost: "" }]);
       setIsFillUp(true);
       if (pendingFiles.length > 0) {
         const files = pendingFiles;
@@ -125,7 +150,10 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (gallons) createMutation.mutate();
+    // Date is the only required field -- the date input is `required` and
+    // defaults to today, so reaching here means we have one. An entry can be
+    // jotted down at the pump and completed later.
+    createMutation.mutate();
   }
 
   // Mirrors AssetDetailPage.tsx's confirm() guard (Vikunja #34) -- extended
@@ -149,21 +177,47 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
           value={odometerReading}
           onChange={(e) => setOdometerReading(e.target.value)}
         />
-        <input
-          type="number"
-          step="0.001"
-          placeholder="Gallons"
-          value={gallons}
-          onChange={(e) => setGallons(e.target.value)}
-          required
-        />
-        <input
-          type="number"
-          step="0.01"
-          placeholder="Total cost"
-          value={totalCost}
-          onChange={(e) => setTotalCost(e.target.value)}
-        />
+        {swipes.map((swipe, i) => (
+          <span key={i} className="fuel-swipe-row">
+            <input
+              type="number"
+              step="0.001"
+              placeholder={swipes.length > 1 ? `Gallons (swipe ${i + 1})` : "Gallons"}
+              value={swipe.gallons}
+              onChange={(e) => updateSwipe(i, "gallons", e.target.value)}
+            />
+            <input
+              type="number"
+              step="0.01"
+              placeholder={swipes.length > 1 ? `Cost (swipe ${i + 1})` : "Total cost"}
+              value={swipe.cost}
+              onChange={(e) => updateSwipe(i, "cost", e.target.value)}
+            />
+            {swipes.length > 1 && (
+              <button
+                type="button"
+                className="link-button"
+                aria-label={`Remove swipe ${i + 1}`}
+                onClick={() => setSwipes((rows) => rows.filter((_, r) => r !== i))}
+              >
+                &times;
+              </button>
+            )}
+          </span>
+        ))}
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => setSwipes((rows) => [...rows, { gallons: "", cost: "" }])}
+        >
+          + Another swipe
+        </button>
+        {swipes.length > 1 && (
+          <span className="fuel-swipe-total">
+            = {totalGallons ?? "—"} gal
+            {totalCost ? ` · $${totalCost}` : ""}
+          </span>
+        )}
         <label className="check-label" style={{ marginBottom: 0 }}>
           <input type="checkbox" checked={isFillUp} onChange={(e) => setIsFillUp(e.target.checked)} />
           Full tank
@@ -250,7 +304,9 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
                 <span className="record-date">{log.performed_at.slice(0, 10)}</span>
                 <span className="record-category">{log.is_fill_up ? "full tank" : "partial"}</span>
                 <span className="record-description">
-                  {log.gallons} gal
+                  {/* A null volume renders as nothing at all in JSX, which
+                      would leave a stray " gal" — say so explicitly instead. */}
+                  {log.gallons != null ? `${log.gallons} gal` : "volume not recorded"}
                   {log.odometer_reading != null ? ` at ${log.odometer_reading.toLocaleString()}` : ""}
                   {log.gas_brand ? ` • ${log.gas_brand}` : ""}
                   {log.location ? ` • ${log.location}` : ""}
