@@ -1,0 +1,64 @@
+# Production image for the backend API.
+#
+# The sibling Dockerfile is the local-development image: it installs the
+# dev extras (pytest, ruff), runs as root, and docker-compose.yml bind-mounts
+# the source over it and runs uvicorn with --reload. This is the one to
+# deploy -- see docker-compose.prod.yml at the repo root.
+#
+# Build from the backend/ directory:
+#   docker build -f Dockerfile.prod -t wrinklebyte-backend:prod .
+
+FROM python:3.11-slim AS build
+WORKDIR /src
+
+# A virtualenv rather than the system site-packages, so the runtime stage
+# can copy exactly one directory and nothing from the build toolchain.
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Every dependency here ships manylinux wheels for 3.11 (asyncpg talks the
+# Postgres wire protocol itself and needs no libpq), so no compiler is
+# installed. If a future dependency needs one, add it to THIS stage only.
+COPY pyproject.toml ./
+COPY app ./app
+# Non-editable and without [dev]: the image carries the app and its runtime
+# dependencies, not pytest/ruff or a link back to a source tree that won't
+# exist at runtime.
+RUN pip install --no-cache-dir .
+
+
+FROM python:3.11-slim AS runtime
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Fixed, unprivileged uid so a host-side volume's ownership is predictable.
+RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app \
+    && mkdir -p /data/attachments \
+    && chown app:app /data/attachments
+
+WORKDIR /app
+COPY --from=build /opt/venv /opt/venv
+# alembic/ + alembic.ini are needed at runtime: migrations run on every
+# start (below), before the server accepts traffic.
+COPY --chown=app:app alembic.ini ./
+COPY --chown=app:app alembic ./alembic
+COPY --chown=app:app app ./app
+
+USER app
+EXPOSE 8000
+
+# No curl in the slim image; Python is already here.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
+
+# Migrations first, then exec so uvicorn is PID 1's direct replacement and
+# receives SIGTERM from `docker stop` (a plain `sh -c "a && b"` leaves sh
+# as PID 1, which doesn't forward signals, so every stop waits out the
+# 10s kill timeout).
+#
+# One worker on purpose: the login/refresh rate limiter is in-process
+# memory (core/rate_limit.py), so several workers would each keep their own
+# buckets and multiply the effective limit.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

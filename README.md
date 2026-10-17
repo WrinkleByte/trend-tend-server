@@ -20,12 +20,48 @@ Native iOS and Android apps (sold separately, fully standalone-capable with opti
 - **Python 3.11+** and a local **PostgreSQL 16** for running the backend outside Docker
 - **Node.js 20+** for the web app
 
-## Quickstart (Docker)
+## Self-hosting (production)
 
-The fastest way to get the full stack running locally:
+To actually run an instance, for yourself, your household, or the mobile
+apps to sync with, use `docker-compose.prod.yml`, not the development
+stack below:
 
 ```bash
-cp backend/.env.example backend/.env
+cp .env.prod.example .env    # fill in the REQUIRED values (secrets, FRONTEND_URL)
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+- **One port.** The web container (`WEB_HOST_PORT`, default 8080) serves the
+  app and proxies `/api/` to the backend on the same origin. Postgres and the
+  backend aren't published at all. Point the mobile apps at the same URL as
+  the web app.
+- **No default secrets.** Compose refuses to start until `POSTGRES_PASSWORD`,
+  `APP_DB_PASSWORD`, `JWT_SECRET` and `FRONTEND_URL` are set, and the
+  backend refuses a JWT secret shorter than 32 bytes.
+- **Hardened images** (`backend/Dockerfile.prod`, `web/Dockerfile.prod`):
+  non-root, no dev dependencies, read-only root filesystems. Migrations run
+  automatically on each backend start.
+- **Data** lives in two named volumes, `postgres_data` and
+  `attachments_data`. Back up both.
+- **TLS:** put a reverse proxy (Caddy, Traefik, a Cloudflare tunnel, ...) in
+  front for anything reachable beyond your LAN. The stack itself speaks
+  plain HTTP.
+- The first account registered becomes the instance admin (see
+  [Administering a self-hosted instance](#administering-a-self-hosted-instance)).
+  Set up that account straight after first start, or turn off
+  self-registration afterwards.
+
+Updating: `git pull`, then the same `up -d --build`.
+
+## Quickstart (Docker, local development)
+
+The fastest way to get the full stack running locally for development. This
+stack uses published default passwords, `DEV_MODE`, and source bind-mounts
+with hot reload, so **don't expose it beyond your own machine**. Use the
+production stack above for that.
+
+```bash
+cp .env.example .env    # optional: only needed to change ports or set SMTP
 docker compose up --build
 ```
 
