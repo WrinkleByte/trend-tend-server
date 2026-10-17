@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The literal shipped as jwt_secret's default. Named so the startup guard
@@ -85,6 +85,21 @@ class Settings(BaseSettings):
     # UI — for deployments that want .env to be the sole SMTP source of
     # truth rather than a one-time default.
     smtp_force_env: bool = False
+
+    @field_validator("smtp_port", mode="before")
+    @classmethod
+    def _blank_smtp_port_is_unset(cls, value: object) -> object:
+        """Treat SMTP_PORT="" as unset rather than failing to boot.
+
+        Both compose files pass `SMTP_PORT: ${SMTP_PORT:-}`, which hands the
+        container an empty string whenever no port is configured -- the
+        normal case for an instance without email. Pydantic can't parse ""
+        as an int, so without this the backend crashed at startup unless the
+        operator happened to set a port they weren't using.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @model_validator(mode="after")
     def _reject_insecure_defaults(self) -> "Settings":

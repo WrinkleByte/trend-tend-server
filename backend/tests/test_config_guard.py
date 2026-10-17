@@ -43,3 +43,17 @@ def test_guard_is_not_bypassed_by_a_secret_that_merely_contains_the_default():
     # default string is fine, and must not be mistaken for it.
     embedded = INSECURE_DEFAULT_JWT_SECRET + "-plus-plenty-of-additional-entropy"
     assert _settings(jwt_secret=embedded, dev_mode=False).jwt_secret == embedded
+
+
+@pytest.mark.parametrize("raw", ["", "   "])
+def test_blank_smtp_port_env_var_means_unset(monkeypatch, raw):
+    # Both compose files pass `SMTP_PORT: ${SMTP_PORT:-}`, i.e. an empty
+    # string on any instance without email configured. That used to crash
+    # startup with an int-parsing error.
+    monkeypatch.setenv("SMTP_PORT", raw)
+    assert _settings(dev_mode=True).smtp_port is None
+
+
+def test_smtp_port_env_var_still_parses(monkeypatch):
+    monkeypatch.setenv("SMTP_PORT", "587")
+    assert _settings(dev_mode=True).smtp_port == 587
