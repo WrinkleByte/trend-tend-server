@@ -1,3 +1,8 @@
+# LOCAL DEVELOPMENT stack: Vite dev server, source bind-mounts, uvicorn
+# --reload, DEV_MODE, and published default passwords. Don't expose it
+# beyond your own machine. To self-host for real, use
+# docker-compose.prod.yml (see README.md's "Self-hosting" section).
+#
 # Explicit project name — otherwise Compose derives it from the working
 # directory name, which is exactly the kind of thing that silently changes
 # out from under you if that directory ever gets renamed.
@@ -6,6 +11,7 @@ name: wrinklebyte
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: wrinklebyte
       POSTGRES_PASSWORD: wrinklebyte
@@ -28,6 +34,7 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+asyncpg://wrinklebyte:wrinklebyte@postgres:5432/wrinklebyte
       # A second, non-superuser role for the app's own runtime queries --
@@ -94,6 +101,7 @@ services:
 
   web:
     build: ./web
+    restart: unless-stopped
     environment:
       # backend's Compose network name + its *internal* port — not the
       # BACKEND_HOST_PORT mapping above, which only matters from outside
