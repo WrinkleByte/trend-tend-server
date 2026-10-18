@@ -6,6 +6,7 @@ import { createMaintenanceRecordsBulk } from '../../api/maintenanceRecords';
 import type { Asset, AssetType, CreateFuelLogRequest, MaintenanceRecordCreateInput } from '../../api/types';
 import { ASSET_TYPES } from '../assets/assetTypes';
 import { StatusMessage } from "../../components/StatusMessage";
+import { categoriesForAssetType, CUSTOM_CATEGORY_VALUE } from '../schedules/maintenanceAlerts';
 
 // aCar was a product later acquired by Fuelly (Vikunja #8) -- this mirrors
 // FuellyImport.tsx's overall shape (parse -> group by vehicle -> per-group
@@ -53,24 +54,70 @@ function guessAssetType(vehicleName: string): AssetType {
   return EQUIPMENT_HINTS.some(hint => lower.includes(hint)) ? 'equipment' : 'vehicle';
 }
 
-// Web's fixed maintenance-category list (maintenanceAlerts.ts's
-// VEHICLE_CATEGORIES -- aCar imports are always vehicle/equipment, never
-// property) now mirrors mobile's full vocabulary -- these keys must
-// match values actually in that list (e.g. "filters", not "filter"). The
-// backend doesn't enforce a category enum (plain string column), but
-// guessing onto a category this app's own UI doesn't offer would be
-// confusing to edit later.
+// Same ordered keyword list as mobile's AcarBackupParser.kt -- keep the two
+// in sync. Most-specific first, so "Air Filter" -> air_filter before the
+// broader "filter" and "Brake Fluid" -> fluids before "brake". A keyword
+// only counts when the target asset type's own list (maintenanceAlerts.ts)
+// offers its category: equipment has its own list since Vikunja #554, and
+// a mower's "Filter" must not land on the vehicle-only "filters" key. No
+// match means "custom" with the real aCar name kept, not the generic
+// general_service.
 const CATEGORY_KEYWORDS: [string, string][] = [
+  ['air filter', 'air_filter'],
+  ['fuel filter', 'fuel_filter'],
+  ['spark', 'spark_plug'],
+  ['blade', 'blade_sharpening'],
+  ['sharpen', 'blade_sharpening'],
+  ['carburet', 'carburetor'],
+  ['stabiliz', 'fuel_stabilizer'],
+  ['winteriz', 'winterize'],
+  ['hydraulic', 'hydraulic_fluid'],
+  ['transmission', 'transmission_fluid'],
+  ['coolant', 'coolant'],
+  ['antifreeze', 'coolant'],
+  ['grease', 'lubrication'],
+  ['lubric', 'lubrication'],
+  ['belt', 'belt'],
   ['oil', 'oil_change'],
   ['tire', 'tires'],
+  ['fluid', 'fluids'],
+  ['brake', 'brakes'],
   ['filter', 'filters'],
+  ['batter', 'battery'],
   ['inspect', 'inspection'],
-  ['clean', 'general_service'],
+  ['electr', 'electrical'],
+  ['engine', 'engine'],
 ];
 
-function guessMaintenanceCategory(acarServiceName: string): string {
+function guessMaintenanceCategory(acarServiceName: string, assetType: string): string {
+  const allowed = categoriesForAssetType(assetType);
   const lower = acarServiceName.toLowerCase();
-  return CATEGORY_KEYWORDS.find(([keyword]) => lower.includes(keyword))?.[1] ?? 'custom';
+  return (
+    CATEGORY_KEYWORDS.find(([keyword, key]) => lower.includes(keyword) && allowed.includes(key))?.[1] ??
+    CUSTOM_CATEGORY_VALUE
+  );
+}
+
+/** Category fields for a record imported into an asset of [assetType] --
+ * done at import time, since the review step can change the type and a
+ * record can go into an existing asset of any type. Each service name is
+ * guessed on its own: the first recognized one (aCar's order) is the
+ * primary category, the rest become additional categories. Expenses
+ * (Insurance, Tolls, Tax) are never guessed. Mirrors mobile's
+ * AcarBackupParser.categorizedFor(). */
+function categorize(record: ParsedAcarMaintenanceRecord, assetType: string) {
+  const guessed = record.isExpense
+    ? []
+    : [...new Set(record.serviceNames.map(n => guessMaintenanceCategory(n, assetType)))].filter(
+        c => c !== CUSTOM_CATEGORY_VALUE,
+      );
+  const category = guessed[0] ?? CUSTOM_CATEGORY_VALUE;
+  const combinedName = record.serviceNames.length > 0 ? record.serviceNames.join(', ') : null;
+  return {
+    category,
+    custom_category: category === CUSTOM_CATEGORY_VALUE ? combinedName : null,
+    additional_categories: guessed.length > 1 ? guessed.slice(1).join(',') : null,
+  };
 }
 
 interface ParsedAcarFuelLog {
@@ -87,8 +134,9 @@ interface ParsedAcarFuelLog {
 interface ParsedAcarMaintenanceRecord {
   performedAt: string;
   odometerReading: number | null;
-  category: string;
-  customCategory: string | null;
+  // Categories are derived from these at import time -- see categorize().
+  serviceNames: string[];
+  isExpense: boolean;
   description: string | null;
   cost: number | null;
 }
@@ -194,10 +242,10 @@ function parseFillup(el: Element, unitSystem: UnitSystem): ParsedAcarFuelLog {
 // service-record and expense-record share an identical shape (date,
 // odometer, cost, notes, one-or-more type references) -- only the child
 // element name differs ("services"/"service" vs. "expenses"/"expense").
-// isExpense only controls whether a category-keyword guess is attempted
-// (aCar's expense types -- Insurance, Tolls, Tax -- aren't maintenance
-// categories, so guessing would misfile them; they always land in "custom"
-// with the real expense-type name preserved in custom_category).
+// isExpense is carried through to categorize(): aCar's expense types --
+// Insurance, Tolls, Tax -- aren't maintenance categories, so guessing
+// would misfile them; they always land in "custom" with the real
+// expense-type name preserved in custom_category.
 function parseServiceOrExpenseRecord(
   el: Element,
   groupTag: 'services' | 'expenses',
@@ -213,15 +261,13 @@ function parseServiceOrExpenseRecord(
     .filter((id): id is string => id !== null)
     .map(id => nameLookup.get(id))
     .filter((name): name is string => name !== undefined);
-  const combinedName = names.length > 0 ? names.join(', ') : null;
-  const category = !isExpense && combinedName ? guessMaintenanceCategory(combinedName) : 'custom';
   const odometer = childFloat(el, 'odometer-reading');
 
   return {
     performedAt: parseAcarDateTime(childText(el, 'date')),
     odometerReading: odometer !== null ? Math.round(distanceToMiles(odometer, unitSystem)) : null,
-    category,
-    customCategory: category === 'custom' ? combinedName : null,
+    serviceNames: names,
+    isExpense,
     description: childText(el, 'notes'),
     cost: childFloat(el, 'total-cost'),
   };
@@ -292,12 +338,11 @@ function toFuelLogRequest(assetId: string, log: ParsedAcarFuelLog): CreateFuelLo
   };
 }
 
-function toMaintenanceRequest(assetId: string, record: ParsedAcarMaintenanceRecord): MaintenanceRecordCreateInput {
+function toMaintenanceRequest(asset: Asset, record: ParsedAcarMaintenanceRecord): MaintenanceRecordCreateInput {
   return {
-    asset_id: assetId,
+    asset_id: asset.id,
     performed_at: record.performedAt,
-    category: record.category,
-    custom_category: record.customCategory,
+    ...categorize(record, asset.asset_type),
     description: record.description,
     cost: record.cost,
     odometer_reading: record.odometerReading,
@@ -370,7 +415,7 @@ export function AcarImport({ assets, onAssetsCreated }: { assets: Asset[]; onAss
         summary.errorDetails.push(...fuelResult.errorDetails);
 
         const maintenanceResult = await createMaintenanceRecordsBulk(
-          group.maintenanceRecords.map(record => toMaintenanceRequest(asset.id, record)),
+          group.maintenanceRecords.map(record => toMaintenanceRequest(asset, record)),
         );
         summary.maintenanceImported += maintenanceResult.imported;
         summary.maintenanceErrors += maintenanceResult.errors;
