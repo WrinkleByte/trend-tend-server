@@ -5,6 +5,7 @@ import { uploadPendingAttachments } from "../../api/attachments";
 import type { TripPurpose } from "../../api/types";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
 import { PendingAttachmentPicker } from "../attachments/PendingAttachmentPicker";
+import { WHOLE_NUMBER_INPUT } from "../../components/wholeNumberInput";
 
 // Fixed set plus free text — same pattern as maintenance record
 // category/custom_category. See TripLogInput.kt in tendfida-mobile's
@@ -116,15 +117,13 @@ export function TripLogsSection({ assetId }: { assetId: string }) {
           />
         )}
         <input
-          type="number"
-          step="0.1"
+          {...WHOLE_NUMBER_INPUT}
           placeholder="Start odometer"
           value={startOdometer}
           onChange={(e) => applyOdometer(e.target.value, endOdometer)}
         />
         <input
-          type="number"
-          step="0.1"
+          {...WHOLE_NUMBER_INPUT}
           placeholder="End odometer"
           value={endOdometer}
           onChange={(e) => applyOdometer(startOdometer, e.target.value)}

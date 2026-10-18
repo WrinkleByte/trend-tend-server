@@ -380,6 +380,14 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
                       value={editCategory}
                       onChange={(e) => setEditCategory(e.target.value)}
                     >
+                      {/* A record can carry a key this asset type's list no
+                          longer offers (equipment records made before
+                          Vikunja #554 used vehicle keys like "brakes").
+                          Without its own option, the select would SHOW the
+                          first option while still holding the old value. */}
+                      {!CATEGORIES.includes(editCategory) && (
+                        <option value={editCategory}>{categoryLabel(editCategory)}</option>
+                      )}
                       {CATEGORIES.map((c) => (
                         <option key={c} value={c}>
                           {categoryLabel(c)}

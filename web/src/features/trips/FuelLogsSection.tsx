@@ -6,6 +6,7 @@ import type { FuelLog } from "../../api/types";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
 import { PendingAttachmentPicker } from "../attachments/PendingAttachmentPicker";
 import { GridField } from "../../components/GridField";
+import { WHOLE_NUMBER_INPUT } from "../../components/wholeNumberInput";
 
 // Keeps the quick-add inline form to the fields people actually fill in at
 // the pump -- octane/cetane/gas_brand/location/additive/mpg/cost_per_gallon
@@ -171,8 +172,7 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
       <form className="inline-form" onSubmit={handleSubmit}>
         <input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} required />
         <input
-          type="number"
-          step="0.1"
+          {...WHOLE_NUMBER_INPUT}
           placeholder="Odometer"
           value={odometerReading}
           onChange={(e) => setOdometerReading(e.target.value)}
@@ -238,8 +238,7 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
                   <GridField label="Date" type="date" value={editPerformedAt} onChange={setEditPerformedAt} />
                   <GridField
                     label="Odometer"
-                    type="number"
-                    step="0.1"
+                    {...WHOLE_NUMBER_INPUT}
                     value={editOdometerReading}
                     onChange={setEditOdometerReading}
                   />

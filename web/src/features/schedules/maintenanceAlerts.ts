@@ -12,13 +12,12 @@ export const DUE_SOON_USAGE = 500;
 // react-refresh's "only export components" Fast Refresh rule.
 //
 // Mirrors tendfida-mobile's shared/.../domain/MaintenanceCategories.kt --
-// same VEHICLE_CATEGORIES/PROPERTY_CATEGORIES split and
+// same VEHICLE/EQUIPMENT/PROPERTY/VALUABLE split and
 // categoriesForAssetType(assetType) function, so a vehicle asset doesn't
 // offer property-only categories (fertilizing, gutter cleaning, etc.) and
 // vice versa. Previously one flat union list shown regardless of asset
-// type; equipment deliberately still gets the vehicle list here, same as
-// mobile's categoriesForAssetType (only "property"/"home_system" gets the
-// property list) -- revisit if equipment ever needs its own set.
+// type. Equipment has had its own list since Vikunja #554 (it used to get
+// the vehicle list).
 export const CUSTOM_CATEGORY_VALUE = "custom";
 
 export const VEHICLE_CATEGORIES = [
@@ -28,10 +27,24 @@ export const VEHICLE_CATEGORIES = [
   "general_service", "note", CUSTOM_CATEGORY_VALUE,
 ];
 
+// Equipment (mowers, snow blowers, generators, chainsaws, tractors...) --
+// Vikunja #554; used to fall through to VEHICLE_CATEGORIES. Keep in
+// lockstep with shared's MaintenanceCategories.kt (source of truth) and
+// iOS's MaintenanceCategories.swift.
+export const EQUIPMENT_CATEGORIES = [
+  "oil_change", "spark_plug", "air_filter", "fuel_filter", "blade_sharpening", "belt",
+  "carburetor", "fuel_stabilizer", "winterize", "lubrication", "hydraulic_fluid",
+  "battery", "tires", "test_run", "inspection", "general_service", "note", CUSTOM_CATEGORY_VALUE,
+];
+
+// Whole-house systems first, then yard (Vikunja #554 added the missing
+// household jobs).
 export const PROPERTY_CATEGORIES = [
-  "lawn_mowing", "fertilizing_n", "fertilizing_s", "fertilizing_e", "fertilizing_w",
-  "water_filter_change", "water_softener_salt", "gutter_cleaning", "pest_control",
-  "hvac_filter_change", "smoke_co_detector", "paint", "general_service", "note", CUSTOM_CATEGORY_VALUE,
+  "hvac_filter_change", "hvac_service", "water_heater_flush", "water_filter_change", "water_softener_salt",
+  "smoke_co_detector", "dryer_vent_cleaning", "plumbing", "electrical", "appliance_service",
+  "roof_inspection", "gutter_cleaning", "chimney_sweep", "septic_pumping", "sump_pump_test",
+  "pest_control", "paint", "lawn_mowing", "fertilizing_n", "fertilizing_s", "fertilizing_e",
+  "fertilizing_w", "irrigation", "general_service", "note", CUSTOM_CATEGORY_VALUE,
 ];
 
 // Categories for assetType="valuable" -- large one-off purchases (TVs,
@@ -47,6 +60,7 @@ export const VALUABLE_CATEGORIES = [
 
 export function categoriesForAssetType(assetType: string): string[] {
   if (assetType === "property" || assetType === "home_system") return PROPERTY_CATEGORIES;
+  if (assetType === "equipment") return EQUIPMENT_CATEGORIES;
   if (assetType === "valuable") return VALUABLE_CATEGORIES;
   return VEHICLE_CATEGORIES;
 }

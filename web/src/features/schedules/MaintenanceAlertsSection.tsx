@@ -12,6 +12,7 @@ import {
   type ScheduleAlert,
 } from "./maintenanceAlerts";
 import type { MaintenanceRecord } from "../../api/types";
+import { WHOLE_NUMBER_INPUT } from "../../components/wholeNumberInput";
 
 type ExpandedMode = "perform" | "existing";
 
@@ -180,7 +181,7 @@ export function MaintenanceAlertsSection({
                 <form className="inline-form" onSubmit={(e) => handleMarkPerformed(e, schedule)}>
                   <input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} required />
                   <input
-                    type="number"
+                    {...WHOLE_NUMBER_INPUT}
                     placeholder="Odometer (optional)"
                     value={odometer}
                     onChange={(e) => setOdometer(e.target.value)}

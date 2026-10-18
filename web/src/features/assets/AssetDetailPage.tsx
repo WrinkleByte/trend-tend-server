@@ -13,6 +13,7 @@ import { TripLogsSection } from "../trips/TripLogsSection";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
 import { AssetProfilePhoto } from "./AssetProfilePhoto";
 import { ASSET_TYPES } from "./assetTypes";
+import { WHOLE_NUMBER_INPUT } from "../../components/wholeNumberInput";
 
 export function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -234,8 +235,7 @@ export function AssetDetailPage() {
                 />
                 <GridField
                   label="Current mileage"
-                  type="number"
-                  min="0"
+                  {...WHOLE_NUMBER_INPUT}
                   value={form.vehicle_details?.current_mileage ?? ""}
                   placeholder="0"
                   onChange={(v) =>

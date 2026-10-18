@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type HTMLAttributes } from "react";
 
 export function GridField({
   label,
@@ -7,6 +7,7 @@ export function GridField({
   min,
   max,
   step,
+  inputMode,
   placeholder,
   onChange,
 }: {
@@ -16,6 +17,7 @@ export function GridField({
   min?: number | string;
   max?: number | string;
   step?: number | string;
+  inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   placeholder?: string;
   onChange: (v: string) => void;
 }) {
@@ -29,6 +31,7 @@ export function GridField({
         min={min}
         max={max}
         step={step}
+        inputMode={inputMode}
         placeholder={placeholder}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
