@@ -65,17 +65,50 @@ export function categoriesForAssetType(assetType: string): string[] {
   return VEHICLE_CATEGORIES;
 }
 
-/** Display text for a category key -- web has no per-category label
- * overrides the way mobile's categoryLabel() does (e.g. "TPMS Sensors",
- * "Front Differential Service"); a plain underscore-to-space swap is the
- * existing convention here. Centralized as a function (rather than each
- * call site doing its own `.replace("_", " ")`) specifically because
- * `.replace` with a string (not regex) argument only replaces the *first*
- * occurrence -- every inline call site had this bug for any category with
- * more than one underscore, invisible until "title_and_registration"
- * became the first one to actually have two. */
+// Mirrors categoryLabelOverrides in MaintenanceCategories.kt / .swift.
+// tendfida-mobile's scripts/check-category-parity.py compares all three.
+const CATEGORY_LABEL_OVERRIDES: Record<string, string> = {
+  fertilizing_n: "Fertilizing (North)",
+  fertilizing_s: "Fertilizing (South)",
+  fertilizing_e: "Fertilizing (East)",
+  fertilizing_w: "Fertilizing (West)",
+  hvac_filter_change: "HVAC Filter Change",
+  smoke_co_detector: "Smoke/CO Detector",
+  differential_front: "Front Differential Service",
+  differential_rear: "Rear Differential Service",
+  tpms_sensors: "TPMS Sensors",
+  title_and_registration: "Title & Registration",
+  // Vikunja #554 (equipment + home)
+  hvac_service: "HVAC Tune-Up",
+  irrigation: "Irrigation / Sprinklers",
+  winterize: "Winterize / Storage Prep",
+  carburetor: "Carburetor Service",
+  belt: "Belt Replacement",
+  lubrication: "Lubrication / Grease",
+  test_run: "Exercise / Test Run",
+  [CUSTOM_CATEGORY_VALUE]: "Other (Custom)",
+};
+
+/** Display text for a category key, same as mobile's categoryLabel(): an
+ * override if there is one, otherwise underscores to spaces and each word
+ * capitalized ("oil_change" -> "Oil Change"). Display only -- schedule
+ * matching compares keys, never labels. */
 export function categoryLabel(category: string): string {
-  return category.replaceAll("_", " ");
+  return (
+    CATEGORY_LABEL_OVERRIDES[category] ??
+    category
+      .replaceAll("_", " ")
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ")
+  );
+}
+
+/** A record's label: its custom text when the category is "custom",
+ * otherwise categoryLabel(). Mirrors mobile's displayCategory(). */
+export function displayCategory(category: string, customCategory: string | null): string {
+  if (category === CUSTOM_CATEGORY_VALUE && customCategory) return customCategory;
+  return categoryLabel(category);
 }
 
 export type AlertSeverity = "overdue" | "due_soon";

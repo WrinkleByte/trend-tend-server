@@ -4,7 +4,7 @@ import { listMaintenanceSchedules, updateMaintenanceSchedule } from "../../api/m
 import { createMaintenanceRecord, listMaintenanceRecords } from "../../api/maintenanceRecords";
 import {
   categoriesForAssetType,
-  categoryLabel,
+  displayCategory,
   computeAlerts,
   CUSTOM_CATEGORY_VALUE,
   normalizeForMatch,
@@ -201,7 +201,7 @@ export function MaintenanceAlertsSection({
                         onClick={() => clearViaExistingMutation.mutate({ scheduleId: schedule.id, record })}
                         disabled={clearViaExistingMutation.isPending}
                       >
-                        {record.performed_at} — {categoryLabel(record.category)}
+                        {record.performed_at} — {displayCategory(record.category, record.custom_category)}
                         {record.description ? `: ${record.description}` : ""}
                       </button>
                     </li>

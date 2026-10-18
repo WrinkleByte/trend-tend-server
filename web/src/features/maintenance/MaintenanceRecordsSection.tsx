@@ -11,6 +11,7 @@ import {
   categoriesForAssetType,
   categoryLabel,
   CUSTOM_CATEGORY_VALUE,
+  displayCategory,
   recordMatchesSchedule,
 } from "../schedules/maintenanceAlerts";
 import type { MaintenanceRecord, MaintenanceSchedule } from "../../api/types";
@@ -18,9 +19,16 @@ import { uploadPendingAttachments } from "../../api/attachments";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
 import { PendingAttachmentPicker } from "../attachments/PendingAttachmentPicker";
 import { GridField } from "../../components/GridField";
+import { WHOLE_NUMBER_INPUT } from "../../components/wholeNumberInput";
 
 export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: string; assetType: string }) {
   const CATEGORIES = categoriesForAssetType(assetType);
+  // Same gating and labels as mobile's record form: only vehicles and
+  // equipment carry a reading, and equipment's is engine hours. Web has no
+  // unit-system setting, so this is the stored value as-is (miles), same
+  // as FuelLogsSection's odometer field.
+  const tracksUsage = assetType === "vehicle" || assetType === "equipment";
+  const usageLabel = assetType === "equipment" ? "Hours" : "Odometer";
   const queryClient = useQueryClient();
   const { data: records, isLoading } = useQuery({
     queryKey: ["maintenance-records", assetId],
@@ -47,6 +55,7 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
   const [newAdditionalCategoryName, setNewAdditionalCategoryName] = useState("");
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
+  const [odometerReading, setOdometerReading] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   function toggleAdditionalCategory(c: string) {
@@ -80,6 +89,7 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
   const [newEditAdditionalCategoryName, setNewEditAdditionalCategoryName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editCost, setEditCost] = useState("");
+  const [editOdometerReading, setEditOdometerReading] = useState("");
   const [editPerformedBy, setEditPerformedBy] = useState("");
   const [editOilViscosity, setEditOilViscosity] = useState("");
   const [editOilFormulation, setEditOilFormulation] = useState("");
@@ -98,6 +108,7 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
     );
     setEditDescription(record.description ?? "");
     setEditCost(record.cost ?? "");
+    setEditOdometerReading(record.odometer_reading != null ? String(record.odometer_reading) : "");
     setEditPerformedBy(record.performed_by ?? "");
     setEditOilViscosity(record.oil_viscosity ?? "");
     setEditOilFormulation(record.oil_formulation ?? "");
@@ -117,6 +128,7 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
           editAdditionalCategories.size > 0 ? Array.from(editAdditionalCategories).join(",") : null,
         description: editDescription || null,
         cost: editCost ? Number(editCost) : null,
+        odometer_reading: editOdometerReading ? Number(editOdometerReading) : null,
         performed_by: editPerformedBy || null,
         // Nulled out (not just hidden) when the category no longer
         // matches -- otherwise a value left over from before the user
@@ -169,10 +181,12 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
         additional_categories: additionalCategories.size > 0 ? Array.from(additionalCategories).join(",") : null,
         description: description || null,
         cost: cost ? Number(cost) : null,
+        odometer_reading: tracksUsage && odometerReading ? Number(odometerReading) : null,
       }),
     onSuccess: (record) => {
       setDescription("");
       setCost("");
+      setOdometerReading("");
       setAdditionalCategories(new Set());
       if (pendingFiles.length > 0) {
         const files = pendingFiles;
@@ -235,8 +249,8 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
   // left as a latent gap like the other unguarded deletes in this app. This
   // is the exact entity type that prompted the follow-up (an accidental
   // single-click delete on this same section).
-  function handleDelete(recordId: string, performedAt: string, category: string) {
-    const label = categoryLabel(category);
+  function handleDelete(recordId: string, performedAt: string, category: string, customCategory: string | null) {
+    const label = displayCategory(category, customCategory);
     if (window.confirm(`Permanently delete this ${label} record from ${performedAt.slice(0, 10)}? This cannot be undone.`)) {
       deleteMutation.mutate(recordId);
     }
@@ -267,6 +281,15 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
           value={cost}
           onChange={(e) => setCost(e.target.value)}
         />
+        {tracksUsage && (
+          <input
+            {...WHOLE_NUMBER_INPUT}
+            placeholder={usageLabel}
+            aria-label={usageLabel}
+            value={odometerReading}
+            onChange={(e) => setOdometerReading(e.target.value)}
+          />
+        )}
         <button type="submit" disabled={createMutation.isPending}>
           Add record
         </button>
@@ -459,6 +482,16 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
                     />
                   </div>
                   <GridField label="Cost" type="number" step="0.01" value={editCost} onChange={setEditCost} />
+                  {/* Kept for any asset that already has a reading, so
+                      editing can't hide (and keep) a stale value. */}
+                  {(tracksUsage || record.odometer_reading != null) && (
+                    <GridField
+                      label={usageLabel}
+                      {...WHOLE_NUMBER_INPUT}
+                      value={editOdometerReading}
+                      onChange={setEditOdometerReading}
+                    />
+                  )}
                   <GridField label="Performed by" value={editPerformedBy} onChange={setEditPerformedBy} />
                   {/* Structured oil/fluid fields, meaningful only for
                       certain categories -- mirrors the exact category sets
@@ -506,8 +539,13 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
             <li key={record.id}>
               <div className="record-row">
                 <span className="record-date">{record.performed_at}</span>
-                <span className="record-category">{categoryLabel(record.category)}</span>
-                <span className="record-description">{record.description || "—"}</span>
+                <span className="record-category">{displayCategory(record.category, record.custom_category)}</span>
+                <span className="record-description">
+                  {record.description || "—"}
+                  {record.odometer_reading != null
+                    ? ` · ${assetType === "equipment" ? `${record.odometer_reading.toLocaleString()} hrs` : `at ${record.odometer_reading.toLocaleString()}`}`
+                    : ""}
+                </span>
                 <span className="record-cost">{record.cost != null ? `$${record.cost}` : ""}</span>
                 <div className="record-actions">
                   <button type="button" onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}>
@@ -519,7 +557,7 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
                   <button
                     type="button"
                     className="danger"
-                    onClick={() => handleDelete(record.id, record.performed_at, record.category)}
+                    onClick={() => handleDelete(record.id, record.performed_at, record.category, record.custom_category)}
                   >
                     Delete
                   </button>
