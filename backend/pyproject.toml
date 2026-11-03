@@ -2,6 +2,7 @@
 name = "wrinklebyte-backend"
 version = "1.0.0"
 description = "WrinkleByte backend API — FastAPI + PostgreSQL"
+license = "AGPL-3.0-only"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
@@ -47,7 +48,7 @@ asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]  # 77+ for the SPDX `license` string (PEP 639)
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

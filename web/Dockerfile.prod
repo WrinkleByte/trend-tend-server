@@ -40,7 +40,7 @@ LABEL org.opencontainers.image.title="WrinkleByte web" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.vendor="WrinkleByte LLC" \
       org.opencontainers.image.url="https://wrinklebyte.com" \
-      org.opencontainers.image.licenses="LicenseRef-WrinkleByte-Noncommercial"
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 
 # Non-root. nginx's own worker processes already drop privileges, but the
 # master running as root is a needless capability for a static file server.

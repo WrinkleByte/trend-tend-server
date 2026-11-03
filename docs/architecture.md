@@ -188,7 +188,7 @@ See [`pwa-offline.md`](pwa-offline.md) for the full offline/PWA design. In short
 
 Two repos:
 
-- **`tendfida`** (this repo) — public, source-available under a noncommercial license (see root `LICENSE`). Monorepo containing `backend/` and `web/`, kept together because they share a tight OpenAPI contract and release together via one `docker-compose up` for self-hosters.
+- **`tendfida`** (this repo) — public, open source under AGPL-3.0-only (see root `LICENSE`). Monorepo containing `backend/` and `web/`, kept together because they share a tight OpenAPI contract and release together via one `docker-compose up` for self-hosters.
 - **`tendfida-mobile`** — private, commercial. Contains `shared/` (KMP module), `iosApp/` (SwiftUI), `androidApp/` (Compose), release automation.
 
 Mobile and backend interact **only** over the versioned sync contract in Section 3 — no cross-repo code imports. The OpenAPI schema should be published as a versioned artifact mobile CI can pin against, so a backend change can't silently break a mobile build.

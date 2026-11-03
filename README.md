@@ -2,7 +2,7 @@
 
 Track maintenance for your home, vehicles, and equipment (lawn mowers, snow blowers, HVAC systems, and more) — service history, recurring reminders, and costs, all in one place.
 
-This repository contains the **open-source backend and web app**. It is free for personal, non-commercial use. Business use requires a separate commercial license — see [LICENSE](LICENSE).
+This repository contains the **open-source backend and web app**, licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only). Anyone can run it, study it, change it, and share it — including businesses.
 
 Native iOS and Android apps (sold separately, fully standalone-capable with optional sync to a self-hosted instance of this backend) live in a companion private repository (`tendfida-mobile`). See that repo's [`docs/ios-build-and-test.md`](../tendfida-mobile/docs/ios-build-and-test.md) for the mobile build/test guide.
 
@@ -134,4 +134,19 @@ As of this scaffold: the backend's Alembic migration applies cleanly to Postgres
 
 ## License
 
-See [LICENSE](LICENSE). Free for personal use; business/commercial use requires a paid license — contact the author.
+Copyright © 2026 WrinkleByte LLC. The backend and web app are licensed
+under the **GNU Affero General Public License, version 3 only**
+(`AGPL-3.0-only`) — see [LICENSE](LICENSE). In short: you may use, run,
+modify, and redistribute this code, including commercially. If you
+distribute a modified version, or let other people use a modified
+version over a network (for example, as a hosted service), you must make
+your modified source code available to them under the same license.
+
+The **names and logos** "WrinkleByte" and "Trend & Tend" are not covered
+by the code license — see [TRADEMARKS.md](TRADEMARKS.md). The native
+iOS/Android apps are separate, proprietary products and are not part of
+this repository.
+
+Contributions are welcome under the terms in
+[CONTRIBUTING.md](CONTRIBUTING.md), which require signing the
+[Contributor License Agreement](CLA.md).
