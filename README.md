@@ -33,9 +33,11 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 That pulls the released images (`wrinklebyte/wrinklebyte-backend` and
-`wrinklebyte/wrinklebyte-web`, for amd64 and arm64) at the version pinned by
-`WRINKLEBYTE_VERSION`. To build from this source tree instead, use
-`up -d --build`.
+`wrinklebyte/wrinklebyte-web` on Docker Hub, for amd64 and arm64) at the
+version pinned by `WRINKLEBYTE_VERSION`. The identical images are also on
+the GitHub Container Registry; to pull from there instead, set
+`WRINKLEBYTE_IMAGE_PREFIX=ghcr.io/wrinklebyte` in `.env`. To build from this
+source tree instead, use `up -d --build`.
 
 - **One port.** The web container (`WEB_HOST_PORT`, default 8080) serves the
   app and proxies `/api/` to the backend on the same origin. Postgres and the

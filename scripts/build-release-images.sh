@@ -4,13 +4,17 @@
 #
 # Usage:
 #   scripts/build-release-images.sh            # build for this machine's arch, load locally
-#   scripts/build-release-images.sh --push     # build amd64 + arm64 and push to the registry
+#   scripts/build-release-images.sh --push     # build amd64 + arm64 and push to every registry
 #
-# The image names come from WRINKLEBYTE_IMAGE_PREFIX (default "wrinklebyte",
-# i.e. docker.io/wrinklebyte/...), the same variable docker-compose.prod.yml
-# reads, so what this pushes is exactly what `compose pull` fetches.
+# Every release goes to BOTH Docker Hub (docker.io/wrinklebyte/...) and the
+# GitHub Container Registry (ghcr.io/wrinklebyte/...), the same image under
+# each name. Docker Hub is the default docker-compose.prod.yml pulls from;
+# GHCR sits next to the source for anyone forking it, and has no anonymous
+# pull rate limit. Override the list with WRINKLEBYTE_PUBLISH_PREFIXES
+# (space-separated) to publish elsewhere, e.g. a fork's own namespace.
 #
-# --push needs `docker login` to that registry first, and a buildx builder
+# --push needs `docker login` to each registry first (for GHCR:
+# `docker login ghcr.io` with a token that has write:packages), and a buildx builder
 # that can target both architectures: one-time setup on an amd64 box is
 #   docker run --privileged --rm tonistiigi/binfmt --install arm64
 #   docker buildx create --name wrinklebyte-multiarch --use
@@ -54,7 +58,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 COMMIT="$(git rev-parse --short HEAD)"
 
-PREFIX="${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}"
+read -r -a PREFIXES <<< "${WRINKLEBYTE_PUBLISH_PREFIXES:-wrinklebyte ghcr.io/wrinklebyte}"
 
 if $PUSH; then
     PLATFORM_ARGS=(--platform linux/amd64,linux/arm64 --push)
@@ -63,23 +67,29 @@ else
 fi
 
 for component in backend web; do
-    image="$PREFIX/wrinklebyte-$component"
-    echo "==> $image:$VERSION ($COMMIT)"
+    # One build, tagged under every registry, so the copies are
+    # byte-identical rather than separate builds that merely share a name.
+    tags=()
+    for prefix in "${PREFIXES[@]}"; do
+        tags+=(--tag "$prefix/wrinklebyte-$component:$VERSION" --tag "$prefix/wrinklebyte-$component:latest")
+    done
+    echo "==> wrinklebyte-$component:$VERSION ($COMMIT) -> ${PREFIXES[*]}"
     docker buildx build \
         "${PLATFORM_ARGS[@]}" \
         --file "$component/Dockerfile.prod" \
         --build-arg "VERSION=$VERSION" \
         --label "org.opencontainers.image.revision=$COMMIT" \
-        --tag "$image:$VERSION" \
-        --tag "$image:latest" \
+        "${tags[@]}" \
         "$component"
 done
 
 echo
 if $PUSH; then
-    echo "Pushed $PREFIX/wrinklebyte-{backend,web}:{$VERSION,latest} for amd64 + arm64."
+    for prefix in "${PREFIXES[@]}"; do
+        echo "Pushed $prefix/wrinklebyte-{backend,web}:{$VERSION,latest} for amd64 + arm64."
+    done
     echo "Tag the commit too:  git tag v$VERSION $COMMIT"
 else
-    echo "Built $PREFIX/wrinklebyte-{backend,web}:$VERSION locally. Smoke-test with:"
-    echo "  scripts/smoke-test-prod.sh"
+    echo "Built wrinklebyte-{backend,web}:$VERSION locally under: ${PREFIXES[*]}"
+    echo "Smoke-test with:  scripts/smoke-test-prod.sh"
 fi
