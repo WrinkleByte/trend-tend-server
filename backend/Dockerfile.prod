@@ -29,6 +29,16 @@ RUN pip install --no-cache-dir .
 
 FROM python:3.11-slim AS runtime
 
+# OCI metadata. VERSION is passed by scripts/build-release-images.sh; a plain
+# `docker compose build` leaves it at "dev".
+ARG VERSION=dev
+LABEL org.opencontainers.image.title="WrinkleByte backend" \
+      org.opencontainers.image.description="Trend & Tend sync server and API (FastAPI). Self-hosted; see docker-compose.prod.yml." \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.vendor="WrinkleByte LLC" \
+      org.opencontainers.image.url="https://wrinklebyte.com" \
+      org.opencontainers.image.licenses="LicenseRef-WrinkleByte-Noncommercial"
+
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1

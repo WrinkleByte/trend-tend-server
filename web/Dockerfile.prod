@@ -32,6 +32,16 @@ RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime
 
+# OCI metadata. VERSION is passed by scripts/build-release-images.sh; a plain
+# `docker compose build` leaves it at "dev".
+ARG VERSION=dev
+LABEL org.opencontainers.image.title="WrinkleByte web" \
+      org.opencontainers.image.description="Trend & Tend web app, served by nginx, which also proxies /api/ to the backend." \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.vendor="WrinkleByte LLC" \
+      org.opencontainers.image.url="https://wrinklebyte.com" \
+      org.opencontainers.image.licenses="LicenseRef-WrinkleByte-Noncommercial"
+
 # Non-root. nginx's own worker processes already drop privileges, but the
 # master running as root is a needless capability for a static file server.
 # The alpine image ships an `nginx` user (uid 101) already.

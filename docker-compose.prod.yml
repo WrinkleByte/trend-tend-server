@@ -1,7 +1,16 @@
 # Production stack for self-hosting WrinkleByte.
 #
 #   cp .env.prod.example .env      # then fill in every REQUIRED value
+#   docker compose -f docker-compose.prod.yml pull     # released images
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Or build the images from this source tree instead of pulling them:
 #   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Upgrading: set WRINKLEBYTE_VERSION in .env to the new release (or leave it
+# on a release you trust), then `pull` and `up -d` again. Migrations run
+# automatically when the backend starts. Back up the postgres_data and
+# attachments_data volumes first.
 #
 # docker-compose.yml (no .prod) is the LOCAL DEVELOPMENT stack -- Vite dev
 # server, source bind-mounts, uvicorn --reload, DEV_MODE, published default
@@ -43,6 +52,7 @@ services:
       retries: 10
 
   backend:
+    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/wrinklebyte-backend:${WRINKLEBYTE_VERSION:-1.0.0}
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
@@ -88,6 +98,7 @@ services:
         condition: service_healthy
 
   web:
+    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/wrinklebyte-web:${WRINKLEBYTE_VERSION:-1.0.0}
     build:
       context: ./web
       dockerfile: Dockerfile.prod

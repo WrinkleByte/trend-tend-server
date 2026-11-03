@@ -28,8 +28,14 @@ stack below:
 
 ```bash
 cp .env.prod.example .env    # fill in the REQUIRED values (secrets, FRONTEND_URL)
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
+
+That pulls the released images (`wrinklebyte/wrinklebyte-backend` and
+`wrinklebyte/wrinklebyte-web`, for amd64 and arm64) at the version pinned by
+`WRINKLEBYTE_VERSION`. To build from this source tree instead, use
+`up -d --build`.
 
 - **One port.** The web container (`WEB_HOST_PORT`, default 8080) serves the
   app and proxies `/api/` to the backend on the same origin. Postgres and the
@@ -51,7 +57,15 @@ docker compose -f docker-compose.prod.yml up -d --build
   Set up that account straight after first start, or turn off
   self-registration afterwards.
 
-Updating: `git pull`, then the same `up -d --build`.
+Updating: back up both volumes, set `WRINKLEBYTE_VERSION` in `.env` to the
+new release, then `pull` and `up -d` again (or `git pull` and `up -d --build`
+when building from source). `GET /health` on the backend reports the version
+that is actually running.
+
+**Releasing (maintainers):** bump the version in `backend/pyproject.toml`,
+`web/package.json` and the `WRINKLEBYTE_VERSION` default in
+`docker-compose.prod.yml`, commit, then run `scripts/smoke-test-prod.sh --build`
+followed by `scripts/build-release-images.sh --push`.
 
 ## Quickstart (Docker, local development)
 
