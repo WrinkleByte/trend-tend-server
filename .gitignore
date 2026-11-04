@@ -50,3 +50,11 @@ Fuelly Export.csv
 # differently-named one (tmSearchHistory...) showed up alongside the first
 # (tmSearchResults...); worth checking what's writing these.
 tmSearch*.xlsx
+
+# Internal notes kept out of the public repo: AI-assistant instructions
+# and the private backlog. They stay on disk locally.
+CLAUDE.md
+**/CLAUDE.md
+AGENTS.md
+TASKS.md
+WEB_APP_HANDOFF.md

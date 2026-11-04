@@ -388,7 +388,7 @@ async def unlink_attachment(
     # attachment-record links live via GET /attachments?record_id=..., not
     # from a locally-cached, sync-propagated copy of this join table, so
     # there's no stale-cache/tombstone-propagation concern for this specific
-    # table the way there is for the tables root CLAUDE.md's soft-delete
+    # table the way there is for the tables docs/development.md's soft-delete
     # invariant actually targets. If a client ever starts calling this
     # (e.g. an "unlink photo from record" UI), revisit whether that
     # assumption still holds before relying on it.

@@ -4,7 +4,7 @@ Track maintenance for your home, vehicles, and equipment (lawn mowers, snow blow
 
 This repository contains the **open-source backend and web app**, licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only). Anyone can run it, study it, change it, and share it — including businesses.
 
-Native iOS and Android apps (sold separately, fully standalone-capable with optional sync to a self-hosted instance of this backend) live in a companion private repository (`tendfida-mobile`). See that repo's [`docs/ios-build-and-test.md`](../tendfida-mobile/docs/ios-build-and-test.md) for the mobile build/test guide.
+The native iOS and Android apps (sold separately through the App Store and Google Play, and fully usable without a server) are proprietary and not part of this repository. They sync with this server over the protocol described in [`docs/architecture.md`](docs/architecture.md). Developer notes and architectural invariants: [`docs/development.md`](docs/development.md).
 
 ## Repository layout
 
@@ -126,11 +126,6 @@ Both fall back to a warning (not a failure) if the relevant toolchain isn't set 
 
 - **Backend**: `cd backend && pytest` — runs against a real (disposable, auto-created/dropped) PostgreSQL database. See [`backend/README.md`](backend/README.md) for details.
 - **Web**: `cd web && npm run build` (type-checks and builds, including the PWA service worker) — see [`web/README.md`](web/README.md) for the offline/PWA-specific verification checklist.
-- **Mobile**: see the companion `tendfida-mobile` repo's [`docs/ios-build-and-test.md`](../tendfida-mobile/docs/ios-build-and-test.md) and `BUILD.md`.
-
-## Verified status
-
-As of this scaffold: the backend's Alembic migration applies cleanly to Postgres, its full pytest suite passes, and the live server responds correctly over HTTP. The web app type-checks and builds successfully, including PWA artifacts (service worker, manifest). The mobile (`tendfida-mobile`) Kotlin/Swift source has **not** been compiler-verified — it requires a Mac with Xcode and a JDK 17+ / Android SDK toolchain not available in the environment this was scaffolded in. See that repo's `BUILD.md` for what's outstanding.
 
 ## License
 

@@ -56,7 +56,7 @@ class AttributedSyncData(BaseModel):
     the authenticated Principal instead — it is present here purely so
     _serialize_row includes it on pull, since that function derives the wire
     shape from these same schemas (the allowlist invariant in
-    ../../CLAUDE.md). Nested detail payloads (VehicleDetailsSyncData and
+    docs/development.md). Nested detail payloads (VehicleDetailsSyncData and
     friends) deliberately don't inherit it: they have no sync envelope of
     their own and ride along inside their parent asset.
     """

@@ -18,7 +18,7 @@ from app.models.sync_device import SyncDevice
 from app.models.trip_log import TripLog, TripLogAttachment
 
 # Every SyncedEntityMixin table a household can hold. Adding a new entity
-# type (mirroring fuel_log, per the root CLAUDE.md invariant) means adding
+# type (mirroring fuel_log, per the docs/development.md invariant) means adding
 # it here too, or both wipe and delete silently stop covering it.
 _SYNCED_ENTITY_MODELS = (MaintenanceRecord, MaintenanceSchedule, FuelLog, TripLog, Asset, Attachment)
 
@@ -60,9 +60,8 @@ async def wipe_household_data(db: AsyncSession, household_id: uuid.UUID, device_
     hard delete here would be invisible to them — sync only ever tells a
     client about a deletion via the deleted_at tombstone on a row it can
     still see; a row that's just gone from the table teaches it nothing,
-    and a paired phone would keep showing the wiped data indefinitely. See
-    tendfida-mobile's TASKS.md Design Notes for the full tombstone
-    propagation walkthrough this depends on.
+    and a paired phone would keep showing the wiped data indefinitely. See the
+    "Soft delete only" invariant in docs/development.md.
 
     Attachment blob files are left in place — same accepted storage-leak
     tradeoff as a normal single attachment delete (see attachments.py's

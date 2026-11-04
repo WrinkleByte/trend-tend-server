@@ -17,6 +17,6 @@ tests/
 .env.*
 # macOS metadata files from the Mac side of the SMB share. A `._*` file in
 # alembic/versions/ is imported as a migration and crashes startup with
-# "source code string cannot contain null bytes" (see backend/CLAUDE.md).
+# "source code string cannot contain null bytes" (a macOS resource-fork artefact).
 **/._*
 **/.DS_Store
