@@ -6,7 +6,7 @@
 # deploy -- see docker-compose.prod.yml at the repo root.
 #
 # Build from the backend/ directory:
-#   docker build -f Dockerfile.prod -t wrinklebyte-backend:prod .
+#   docker build -f Dockerfile.prod -t trend-tend-api:prod .
 
 FROM python:3.11-slim AS build
 WORKDIR /src
@@ -32,11 +32,12 @@ FROM python:3.11-slim AS runtime
 # OCI metadata. VERSION is passed by scripts/build-release-images.sh; a plain
 # `docker compose build` leaves it at "dev".
 ARG VERSION=dev
-LABEL org.opencontainers.image.title="WrinkleByte backend" \
+LABEL org.opencontainers.image.title="Trend & Tend Server (API)" \
       org.opencontainers.image.description="Trend & Tend sync server and API (FastAPI). Self-hosted; see docker-compose.prod.yml." \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.vendor="WrinkleByte LLC" \
       org.opencontainers.image.url="https://wrinklebyte.com" \
+      org.opencontainers.image.source="https://github.com/wrinklebyte/trend-tend-server" \
       org.opencontainers.image.licenses="AGPL-3.0-only"
 
 ENV PATH="/opt/venv/bin:$PATH" \

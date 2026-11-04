@@ -1,4 +1,4 @@
-# WrinkleByte
+# Trend & Tend Server
 
 Track maintenance for your home, vehicles, and equipment (lawn mowers, snow blowers, HVAC systems, and more) — service history, recurring reminders, and costs, all in one place.
 
@@ -32,8 +32,8 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-That pulls the released images (`wrinklebyte/wrinklebyte-backend` and
-`wrinklebyte/wrinklebyte-web` on Docker Hub, for amd64 and arm64) at the
+That pulls the released images (`wrinklebyte/trend-tend-api` and
+`wrinklebyte/trend-tend-web` on Docker Hub, for amd64 and arm64) at the
 version pinned by `WRINKLEBYTE_VERSION`. The identical images are also on
 the GitHub Container Registry; to pull from there instead, set
 `WRINKLEBYTE_IMAGE_PREFIX=ghcr.io/wrinklebyte` in `.env`. To build from this

@@ -66,14 +66,22 @@ else
     PLATFORM_ARGS=(--load)
 fi
 
+image_name() {
+    case "$1" in
+        backend) echo trend-tend-api ;;
+        web) echo trend-tend-web ;;
+    esac
+}
+
 for component in backend web; do
+    image=$(image_name "$component")
     # One build, tagged under every registry, so the copies are
     # byte-identical rather than separate builds that merely share a name.
     tags=()
     for prefix in "${PREFIXES[@]}"; do
-        tags+=(--tag "$prefix/wrinklebyte-$component:$VERSION" --tag "$prefix/wrinklebyte-$component:latest")
+        tags+=(--tag "$prefix/$image:$VERSION" --tag "$prefix/$image:latest")
     done
-    echo "==> wrinklebyte-$component:$VERSION ($COMMIT) -> ${PREFIXES[*]}"
+    echo "==> $image:$VERSION ($COMMIT) -> ${PREFIXES[*]}"
     docker buildx build \
         "${PLATFORM_ARGS[@]}" \
         --file "$component/Dockerfile.prod" \
@@ -86,10 +94,10 @@ done
 echo
 if $PUSH; then
     for prefix in "${PREFIXES[@]}"; do
-        echo "Pushed $prefix/wrinklebyte-{backend,web}:{$VERSION,latest} for amd64 + arm64."
+        echo "Pushed $prefix/trend-tend-{api,web}:{$VERSION,latest} for amd64 + arm64."
     done
     echo "Tag the commit too:  git tag v$VERSION $COMMIT"
 else
-    echo "Built wrinklebyte-{backend,web}:$VERSION locally under: ${PREFIXES[*]}"
+    echo "Built trend-tend-{api,web}:$VERSION locally under: ${PREFIXES[*]}"
     echo "Smoke-test with:  scripts/smoke-test-prod.sh"
 fi

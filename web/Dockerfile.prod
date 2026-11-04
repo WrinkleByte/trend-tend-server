@@ -8,7 +8,7 @@
 # unusable performance.
 #
 # Build from the web/ directory:
-#   docker build -f Dockerfile.prod -t wrinklebyte-web:prod .
+#   docker build -f Dockerfile.prod -t trend-tend-web:prod .
 #
 # The API base is baked in at BUILD time, not runtime -- Vite inlines
 # import.meta.env at build. The default assumes the reverse proxy in
@@ -35,11 +35,12 @@ FROM nginx:1.27-alpine AS runtime
 # OCI metadata. VERSION is passed by scripts/build-release-images.sh; a plain
 # `docker compose build` leaves it at "dev".
 ARG VERSION=dev
-LABEL org.opencontainers.image.title="WrinkleByte web" \
+LABEL org.opencontainers.image.title="Trend & Tend Server (web app)" \
       org.opencontainers.image.description="Trend & Tend web app, served by nginx, which also proxies /api/ to the backend." \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.vendor="WrinkleByte LLC" \
       org.opencontainers.image.url="https://wrinklebyte.com" \
+      org.opencontainers.image.source="https://github.com/wrinklebyte/trend-tend-server" \
       org.opencontainers.image.licenses="AGPL-3.0-only"
 
 # Non-root. nginx's own worker processes already drop privileges, but the
