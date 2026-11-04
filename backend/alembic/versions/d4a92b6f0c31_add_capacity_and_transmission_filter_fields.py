@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add capacity fields and transmission filter part number to maintenance_records and vehicle_details
 
 Revision ID: d4a92b6f0c31

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Stops the docker-compose stack, rebuilds images (picks up code changes
 # and any edits to the root .env — see docker-compose.yml/.env.example),
 # and starts it back up in the background.

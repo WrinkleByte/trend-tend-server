@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 async def test_create_api_token_returns_raw_token_once(client, auth_headers):
     response = await client.post("/api/v1/api-tokens", headers=auth_headers, json={"name": "iPhone"})
     assert response.status_code == 201

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useMemo, useRef, useState } from 'react';
 import { createAsset } from '../../api/assets';
 import { createFuelLogsBulk } from '../../api/fuelLogs';

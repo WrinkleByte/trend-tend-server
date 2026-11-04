@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Baseline security response headers (2026-08-19 review, S7).
 
 Defence-in-depth, not the primary control for anything: the attachment

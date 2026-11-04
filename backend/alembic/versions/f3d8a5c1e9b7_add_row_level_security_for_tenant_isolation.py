@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add row-level security for tenant isolation (Vikunja #44)
 
 Tenant isolation today is entirely structural: every household-scoped

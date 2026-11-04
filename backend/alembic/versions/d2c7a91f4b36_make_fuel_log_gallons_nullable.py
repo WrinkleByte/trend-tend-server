@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """make fuel_log.gallons nullable so an entry can be saved with only a date
 
 Revision ID: d2c7a91f4b36

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add instance_settings.public_api_url for correct mobile pairing QR codes
 
 Revision ID: 4591a286a5fb

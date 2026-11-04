@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add refresh_tokens for rotation with reuse detection
 
 Revision ID: 7f5c78942e3e

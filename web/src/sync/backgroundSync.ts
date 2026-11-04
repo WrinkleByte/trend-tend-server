@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Registers a Background Sync API tag on Chromium/Android where supported.
  * iOS Safari has no Background Sync API at all — see docs/pwa-offline.md —

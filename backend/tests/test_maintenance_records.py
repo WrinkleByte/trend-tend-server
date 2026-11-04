@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Maintenance records API (2026-08-19 review, D3 / Vikunja #37).
 
 Records had no dedicated test file despite being the entity the whole product

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add oil/filter/fluid structured service fields to maintenance_records and vehicle_details
 
 Revision ID: c8f1a5d3e207

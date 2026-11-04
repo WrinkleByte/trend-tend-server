@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add updated_by_user_id to every synced entity, and assets.owner_user_id
 
 Revision ID: c3f8b2d41e07

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Attributes for every odometer / engine-hours input (Vikunja #342): whole
 // numbers only, the same rule as the mobile apps. The backend stores these
 // as integers and rejects a fractional value outright, so an input with

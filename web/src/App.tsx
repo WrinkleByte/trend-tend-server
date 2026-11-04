@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AssetDetailPage } from "./features/assets/AssetDetailPage";
 import { AssetsPage } from "./features/assets/AssetsPage";

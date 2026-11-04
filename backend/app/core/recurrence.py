@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Canonical due-date/usage calculation for MaintenanceSchedule.
 
 This module is the single source of truth for "when is this next due /

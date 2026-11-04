@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 async def test_create_and_get_vehicle_asset(client, auth_headers):
     response = await client.post(
         "/api/v1/assets",

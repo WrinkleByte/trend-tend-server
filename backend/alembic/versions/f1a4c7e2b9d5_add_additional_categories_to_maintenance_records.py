@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add additional_categories to maintenance_records
 
 Comma-joined category keys beyond the record's single primary `category`,

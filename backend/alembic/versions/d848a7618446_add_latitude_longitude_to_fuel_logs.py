@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add latitude/longitude to fuel_logs
 
 Vikunja #100 (mobile): the fill-up's real-world coordinates, captured

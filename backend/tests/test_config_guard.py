@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Startup guard against insecure configuration (2026-08-19 review, S2).
 
 The backend must refuse to boot with the published default JWT secret. These

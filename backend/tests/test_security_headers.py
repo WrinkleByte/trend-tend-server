@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Proves the global security-headers middleware (Vikunja #209) is actually
 wired up and doesn't just exist in isolation -- app/core/security_headers.py
 had no test coverage at all before this, despite being the second of the

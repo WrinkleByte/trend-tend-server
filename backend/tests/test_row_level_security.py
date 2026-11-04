@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Proves Postgres RLS actually restricts rows at the database level
 (Vikunja #44) -- independent of, not a duplicate of, test_household_isolation.py's
 coverage, which proves the ORM-level household_scoped_query()/

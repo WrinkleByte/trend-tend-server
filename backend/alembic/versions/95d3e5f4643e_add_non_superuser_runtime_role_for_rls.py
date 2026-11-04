@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add non-superuser runtime role for RLS enforcement (Vikunja #44)
 
 f3d8a5c1e9b7 laid down RLS policies on the household-scoped tables but

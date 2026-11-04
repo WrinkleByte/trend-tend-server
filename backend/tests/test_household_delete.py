@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from sqlalchemy import select
 
 from app.models.asset import Asset, VehicleDetails

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Production image for the web PWA (2026-08-19 review, D2).
 #
 # The sibling Dockerfile runs `npm run dev` and is the local-development

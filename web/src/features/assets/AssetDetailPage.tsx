@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";

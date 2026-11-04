@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 async def _register(client, email: str, household_name: str) -> dict:
     response = await client.post(
         "/api/v1/auth/register",

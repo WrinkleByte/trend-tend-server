@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Manually reset a user's password directly in the database.
 
 For exactly the situation that motivated this: an admin locked out with no

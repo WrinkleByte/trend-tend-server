@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Maintenance schedules API (2026-08-19 review, D3 / Vikunja #37).
 
 These had zero dedicated tests, which is notable because schedules carry the

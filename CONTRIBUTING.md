@@ -28,6 +28,10 @@ too. Email support@wrinklebyte.com first.
   `docker-compose.yml`) and `.venv/bin/ruff check .` must pass.
 - Web: `npm run build` and `npm run lint` in `web/` must pass.
 - Keep pull requests focused on one change, and describe what and why.
+- Start every new source file with the two-line SPDX header the other
+  files use (`SPDX-FileCopyrightText: 2026 WrinkleByte LLC` and
+  `SPDX-License-Identifier: AGPL-3.0-only`, in that file type's comment
+  syntax). Check with `docker run --rm -v "$PWD":/data fsfe/reuse lint`.
 
 ## License
 

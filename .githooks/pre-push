@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # The slow checks (full test suites + build) that pre-commit deliberately
 # skips — pushes are much less frequent than commits, so the extra time is
 # worth it here. Runs unconditionally (not scoped to changed files) since

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add instance_settings.allow_self_registration to let admins close signups
 
 Revision ID: b7d1e94c2a08

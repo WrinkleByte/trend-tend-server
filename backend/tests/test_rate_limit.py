@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Rate limiter internals (2026-08-19 review, S11).
 
 The limiter's own behaviour (429 after N) is exercised through the auth

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # LOCAL DEVELOPMENT stack: Vite dev server, source bind-mounts, uvicorn
 # --reload, DEV_MODE, and published default passwords. Don't expose it
 # beyond your own machine. To self-host for real, use

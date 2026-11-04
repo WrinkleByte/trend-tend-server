@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useEffect, useState } from "react";
 
 // Pure local UI preference — mirrors mobile's AppSettingsKeys.assetPhotosEnabled

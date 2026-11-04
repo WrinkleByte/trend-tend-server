@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from datetime import date
 
 from app.core.recurrence import ScheduleState, compute_due_status

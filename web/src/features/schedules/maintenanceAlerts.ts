@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { MaintenanceRecord, MaintenanceSchedule } from "../../api/types";
 
 // Ports tendfida-mobile's shared/src/commonMain/kotlin/com/wrinklebyte/domain/MaintenanceAlertCalculator.kt.

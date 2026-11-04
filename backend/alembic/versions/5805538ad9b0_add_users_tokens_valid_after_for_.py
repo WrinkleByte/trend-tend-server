@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add users.tokens_valid_after for session invalidation
 
 Revision ID: 5805538ad9b0

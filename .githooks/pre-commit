@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Fast checks only (lint/type-check, not the full test suites — those run in
 # pre-push instead) so commits stay quick. Scoped to whichever of
 # backend/web actually has staged changes, so a web-only commit doesn't

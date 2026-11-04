@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add row-level security for maintenance_categories
 
 Mirrors f3d8a5c1e9b7_add_row_level_security_for_tenant_isolation.py's

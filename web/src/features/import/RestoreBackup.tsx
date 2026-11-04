@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useRef, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { restoreBackup, type RestoreConflict, type RestoreSummary } from '../../api/restore';

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add fuel_log_attachments and trip_log_attachments
 
 Revision ID: bb8a9a04ee17

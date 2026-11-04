@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useState } from 'react';
 import JSZip from 'jszip';
 import { fetchAllAttachmentBlobs, gatherExportData } from '../../api/export';

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Maintenance categories API -- a household's remembered custom
 service-type names (Vikunja #92 follow-up). Pure CRUD, no cross-table
 references, so no verify_owned_reference coverage needed; cross-tenant

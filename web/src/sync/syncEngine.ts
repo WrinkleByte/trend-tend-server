@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Phase 4 component (see docs/architecture.md Sections 3 & 7): orchestrates
  * pull -> apply -> collect-outbox -> push -> resolve against the same

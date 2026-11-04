@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Keep the build context to what the images actually COPY. Without this,
 # local venvs, attachment data and caches are sent to the Docker daemon on
 # every build, and a stray file could end up baked into an image.

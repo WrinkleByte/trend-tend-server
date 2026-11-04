@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add plate_style to vehicle_details
 
 Vikunja #103: which stylized plate design to draw when

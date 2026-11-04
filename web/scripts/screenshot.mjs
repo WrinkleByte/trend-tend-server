@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Captures one PNG of this app's dev server via Playwright — for attaching
 // visual evidence to a Vikunja "Needs Review" card, not a visual-regression
 // suite. Spins up `vite` itself so it can run unattended (no separately

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add maintenance_schedules.dismissed_at for cross-device alert dismissal sync
 
 Revision ID: a1c3d8f6b2e4

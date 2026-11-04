@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 async def test_register_creates_user_and_household(client):
     response = await client.post(
         "/api/v1/auth/register",

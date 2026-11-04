@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # One-time (per clone) setup: installs this repo's tracked hooks
 # (.githooks/) into .git/hooks/, where git actually looks for them.
 # .git/hooks/ itself isn't version-controlled, so the hooks need to live

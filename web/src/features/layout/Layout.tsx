@@ -1,8 +1,12 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { getCurrentHousehold } from "../../api/households";
 import { useAuthStore } from "../../auth/authStore";
+import { LegalNotice } from "../../components/LegalNotice";
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
   return isActive ? "active" : undefined;
@@ -101,6 +105,7 @@ export function Layout() {
       <main className="app-content" id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
+      <LegalNotice />
     </div>
   );
 }

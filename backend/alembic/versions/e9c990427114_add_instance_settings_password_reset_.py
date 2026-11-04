@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """add instance_settings, password_reset_tokens, user admin flag
 
 Revision ID: e9c990427114

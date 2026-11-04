@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { getAttachment, fetchAttachmentBlob, listAttachments } from "./attachments";
 import { listAssets } from "./assets";
 import { listFuelLogs } from "./fuelLogs";

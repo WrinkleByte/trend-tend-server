@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listAssets } from '../../api/assets';
 import { AcarImport } from './AcarImport';

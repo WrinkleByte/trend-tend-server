@@ -1,4 +1,7 @@
 #!/usr/bin/env sh
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Manual password reset, run *inside* the backend container.
 #
 # From the host (docker compose project directory), for an interactive

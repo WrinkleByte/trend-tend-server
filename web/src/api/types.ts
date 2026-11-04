@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Mirrors the FastAPI Pydantic response schemas field-for-field (snake_case,
 // as sent over the wire) — see backend/app/schemas/*.py. Deliberately
 // hand-written rather than generated for now; see ../../README.md.

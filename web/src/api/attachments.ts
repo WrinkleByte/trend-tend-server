@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { apiFetch, apiFetchBlob, apiUpload } from "./client";
 import { getAsset } from "./assets";
 import type { Asset, Attachment } from "./types";

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Brings up docker-compose.prod.yml from nothing -- fresh volumes, freshly
 # generated secrets -- and checks it the way a new self-hoster would meet
 # it: the web app loads, /api/ reaches the backend through nginx, the first

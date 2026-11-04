@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { login } from "../../api/auth";
@@ -5,6 +8,7 @@ import { ApiError } from "../../api/client";
 import { useAuthStore } from "../../auth/authStore";
 import { StatusMessage } from "../../components/StatusMessage";
 import { useSetupStatus } from "./useSetupStatus";
+import { LegalNotice } from "../../components/LegalNotice";
 
 export function LoginPage() {
   const { data: setupStatus } = useSetupStatus();
@@ -62,6 +66,7 @@ export function LoginPage() {
           </p>
         )}
       </form>
+      <LegalNotice />
     </div>
   );
 }

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Builds the two production images (backend, web) for a release, tagged
 # with the version from backend/pyproject.toml plus "latest".
 #
