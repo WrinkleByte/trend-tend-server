@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Build context for the all-in-one image (aio/Dockerfile), the only image
+# built from the repo root. backend/ and web/ keep their own .dockerignore
+# files for their own images; those don't apply here, so their exclusions
+# are repeated below.
+
+.git
+.github
+docs
+LICENSES
+**/.env
+**/.env.*
+**/._*
+**/.DS_Store
+*.broken-uid1001
+
+backend/.venv
+backend/venv
+backend/data
+backend/tests
+backend/**/__pycache__
+backend/**/*.pyc
+backend/.pytest_cache
+backend/.ruff_cache
+backend/*.egg-info
+
+web/node_modules
+web/dist
+web/dev-dist
+web/*.broken-uid1001
