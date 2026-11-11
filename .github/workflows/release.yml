@@ -156,9 +156,16 @@ jobs:
           for prefix in "$DOCKERHUB_PREFIX" "$GHCR_PREFIX"; do
             refs=()
             for f in "$DIGESTS_DIR"/*; do refs+=("$prefix/$IMAGE@$(cat "$f")"); done
+            # The per-arch images carry OCI labels, but GHCR reads the
+            # multi-arch index to link a package to its repo, so repeat
+            # the important ones as index annotations.
             docker buildx imagetools create \
               --tag "$prefix/$IMAGE:$VERSION" \
               --tag "$prefix/$IMAGE:latest" \
+              --annotation "index:org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+              --annotation "index:org.opencontainers.image.licenses=AGPL-3.0-only" \
+              --annotation "index:org.opencontainers.image.version=$VERSION" \
+              --annotation "index:org.opencontainers.image.revision=${GITHUB_SHA}" \
               "${refs[@]}"
           done
       - name: Verify both architectures are published
