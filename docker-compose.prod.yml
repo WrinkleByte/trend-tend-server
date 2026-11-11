@@ -55,7 +55,7 @@ services:
       retries: 10
 
   backend:
-    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/trend-tend-api:${WRINKLEBYTE_VERSION:-1.0.0}
+    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/trend-tend-api:${WRINKLEBYTE_VERSION:-1.0.1}
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
@@ -101,7 +101,7 @@ services:
         condition: service_healthy
 
   web:
-    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/trend-tend-web:${WRINKLEBYTE_VERSION:-1.0.0}
+    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/trend-tend-web:${WRINKLEBYTE_VERSION:-1.0.1}
     build:
       context: ./web
       dockerfile: Dockerfile.prod
