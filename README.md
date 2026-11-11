@@ -75,8 +75,13 @@ that is actually running.
 
 **Releasing (maintainers):** bump the version in `backend/pyproject.toml`,
 `web/package.json` and the `WRINKLEBYTE_VERSION` default in
-`docker-compose.prod.yml`, commit, then run `scripts/smoke-test-prod.sh --build`
-followed by `scripts/build-release-images.sh --push`.
+`docker-compose.prod.yml`, commit, merge to `main` once CI is green, then
+push a tag: `git tag vX.Y.Z && git push github vX.Y.Z`. The
+[`Release images`](.github/workflows/release.yml) workflow checks the tag
+matches all three versions, builds both images natively on amd64 and arm64
+runners, and publishes them to Docker Hub and GHCR (one-time setup is in that
+file's header). `scripts/build-release-images.sh --push` does the same from a
+maintainer's machine and remains the manual fallback.
 
 ## Quickstart (Docker, local development)
 
@@ -118,9 +123,13 @@ The first account ever registered on an instance automatically becomes its **ins
 
 Locked out, or need to act before any admin exists? `backend/scripts/reset-password.sh` resets a user's password directly against the database, no email required — see [`backend/README.md`](backend/README.md#admin-operations) for usage and for the direct-database fallback to promote the very first admin on a fresh instance.
 
-## Local CI (git hooks)
+## CI
 
-This repo isn't pushed to GitHub yet, so there's no Actions-based CI — instead, `scripts/setup-git-hooks.sh` installs local git hooks (tracked in `.githooks/`, copied into `.git/hooks/` since that directory itself isn't version-controlled) that gate commits/pushes:
+Every pull request and push to `main` runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml): `ruff`, Alembic migrations against an empty database, the full `pytest` suite against Postgres, `oxlint` + type-check + PWA build, a gitleaks secret scan of the full history, REUSE licensing compliance, and `scripts/smoke-test-prod.sh --build`.
+
+### Local git hooks
+
+The same fast checks can also run before you commit or push, so failures show up before CI. `scripts/setup-git-hooks.sh` installs local git hooks (tracked in `.githooks/`, copied into `.git/hooks/` since that directory itself isn't version-controlled) that gate commits/pushes:
 
 ```bash
 scripts/setup-git-hooks.sh   # one-time, per clone
@@ -129,7 +138,7 @@ scripts/setup-git-hooks.sh   # one-time, per clone
 - **`pre-commit`** — fast checks only (`ruff` for backend, `oxlint` + `tsc` for web), scoped to whichever of `backend/`/`web/` you actually staged changes in.
 - **`pre-push`** — the full backend `pytest` suite and web `npm run build` (type-check + PWA build), unconditionally, since pushes are much less frequent than commits.
 
-Both fall back to a warning (not a failure) if the relevant toolchain isn't set up yet (no `backend/.venv`, no `web/node_modules`) rather than blocking you outright. Bypass either with `--no-verify` if you really need to. Once this repo does move to GitHub, the same checks belong in an Actions workflow — the hooks aren't meant to be the permanent answer, just what covers local-only development for now.
+Both prefer the running docker-compose stack, then a local `backend/.venv` / `web/node_modules`, and fail if neither can run the check (set `SKIP_HOOK_TOOLING=1` to accept the risk). Bypass either with `--no-verify` if you really need to; CI still runs everything on the pull request.
 
 ## Testing
 

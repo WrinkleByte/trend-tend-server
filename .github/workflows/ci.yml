@@ -1,0 +1,129 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Checks every pull request and every push to main. Same ground the local
+# .githooks cover (ruff, pytest, oxlint, tsc, web build), plus what the
+# hooks never did: migrations applied to an empty database, a secret scan,
+# REUSE licensing compliance, and the production-stack smoke test.
+#
+# Third-party actions are pinned to full commit SHAs (tag in the trailing
+# comment) so a moved or compromised tag can't change what runs here.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    name: Backend (ruff, migrations, pytest)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wrinklebyte
+          POSTGRES_PASSWORD: wrinklebyte
+          POSTGRES_DB: wrinklebyte
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wrinklebyte"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://wrinklebyte:wrinklebyte@localhost:5432/wrinklebyte
+      # Throwaway CI-only values. DEV_MODE lets app/config.py accept a
+      # non-production secret; nothing here is reachable from outside the
+      # runner.
+      DEV_MODE: "true"
+      JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-real-0123456789
+      APP_DB_PASSWORD: ci-only-app-runtime-password
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Ruff
+        run: ruff check app tests
+      - name: Migrations apply cleanly to an empty database
+        run: alembic upgrade head
+      - name: Pytest
+        run: pytest -q
+
+  web:
+    name: Web (oxlint, tsc, build)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check and build
+        run: npm run build
+
+  licensing:
+    name: REUSE compliance
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6.0.0
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # The CLI image directly, not gitleaks-action: the action requires a
+      # paid licence key for repositories owned by an organization.
+      - name: gitleaks (full history)
+        run: >
+          docker run --rm -v "$PWD:/repo:ro"
+          -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*'
+          zricethezav/gitleaks:v8.21.2
+          git /repo --redact --no-banner --exit-code 1
+
+  smoke:
+    name: Production stack smoke test
+    needs: [backend, web]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build images and run a full first-run flow
+        run: scripts/smoke-test-prod.sh --build
