@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 WrinkleByte LLC
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# Builds the two production images (backend, web) for a release, tagged
+# Builds the three production images (API, web, all-in-one) for a release, tagged
 # with the version from backend/pyproject.toml plus "latest".
 #
 # Usage:
@@ -73,10 +73,16 @@ image_name() {
     case "$1" in
         backend) echo trend-tend-api ;;
         web) echo trend-tend-web ;;
+        aio) echo trend-tend-server ;;
     esac
 }
 
-for component in backend web; do
+# The all-in-one image needs both backend/ and web/, so it builds from the
+# repo root with aio/Dockerfile; the other two build from their own folder.
+context_dir() { [[ "$1" == aio ]] && echo . || echo "$1"; }
+dockerfile() { [[ "$1" == aio ]] && echo aio/Dockerfile || echo "$1/Dockerfile.prod"; }
+
+for component in backend web aio; do
     image=$(image_name "$component")
     # One build, tagged under every registry, so the copies are
     # byte-identical rather than separate builds that merely share a name.
@@ -87,20 +93,20 @@ for component in backend web; do
     echo "==> $image:$VERSION ($COMMIT) -> ${PREFIXES[*]}"
     docker buildx build \
         "${PLATFORM_ARGS[@]}" \
-        --file "$component/Dockerfile.prod" \
+        --file "$(dockerfile "$component")" \
         --build-arg "VERSION=$VERSION" \
         --label "org.opencontainers.image.revision=$COMMIT" \
         "${tags[@]}" \
-        "$component"
+        "$(context_dir "$component")"
 done
 
 echo
 if $PUSH; then
     for prefix in "${PREFIXES[@]}"; do
-        echo "Pushed $prefix/trend-tend-{api,web}:{$VERSION,latest} for amd64 + arm64."
+        echo "Pushed $prefix/trend-tend-{api,web,server}:{$VERSION,latest} for amd64 + arm64."
     done
     echo "Tag the commit too:  git tag v$VERSION $COMMIT"
 else
-    echo "Built trend-tend-{api,web}:$VERSION locally under: ${PREFIXES[*]}"
-    echo "Smoke-test with:  scripts/smoke-test-prod.sh"
+    echo "Built trend-tend-{api,web,server}:$VERSION locally under: ${PREFIXES[*]}"
+    echo "Smoke-test with:  scripts/smoke-test-prod.sh  and  scripts/smoke-test-aio.sh ${PREFIXES[0]}/trend-tend-server:$VERSION"
 fi

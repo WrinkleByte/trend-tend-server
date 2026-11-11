@@ -4,7 +4,8 @@
 # Checks every pull request and every push to main. Same ground the local
 # .githooks cover (ruff, pytest, oxlint, tsc, web build), plus what the
 # hooks never did: migrations applied to an empty database, a secret scan,
-# REUSE licensing compliance, and the production-stack smoke test.
+# REUSE licensing compliance, and smoke tests of both the production
+# Compose stack and the all-in-one image.
 #
 # Third-party actions are pinned to full commit SHAs (tag in the trailing
 # comment) so a moved or compromised tag can't change what runs here.
@@ -127,3 +128,14 @@ jobs:
           persist-credentials: false
       - name: Build images and run a full first-run flow
         run: scripts/smoke-test-prod.sh --build
+
+  smoke-aio:
+    name: All-in-one image smoke test
+    needs: [backend, web]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the image, first run, restart, clean shutdown
+        run: scripts/smoke-test-aio.sh

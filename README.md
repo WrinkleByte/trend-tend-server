@@ -23,8 +23,53 @@ The native iOS and Android apps (sold separately through the App Store and Googl
 ## Self-hosting (production)
 
 To actually run an instance, for yourself, your household, or the mobile
-apps to sync with, use `docker-compose.prod.yml`, not the development
-stack below:
+apps to sync with, use one of the two options below, not the development
+stack further down. Both run the same server and work on amd64 and arm64
+(Raspberry Pi, Apple silicon, most NAS boxes).
+
+### Option 1: one container (quickest)
+
+`wrinklebyte/trend-tend-server` bundles PostgreSQL, the API and the web app:
+
+```bash
+docker run -d --name trend-tend --restart unless-stopped \
+  -p 8080:8080 \
+  -e FRONTEND_URL=http://<your-host>:8080 \
+  -v trend-tend:/data \
+  wrinklebyte/trend-tend-server
+```
+
+Open `FRONTEND_URL` in a browser and create the first account; it becomes
+the instance admin. Point the mobile apps at the same address.
+
+- **`FRONTEND_URL`** is the address people use to reach the server. It goes
+  into password-reset and invite emails and the mobile pairing code. Use your
+  HTTPS address if you put a reverse proxy in front.
+- **Everything lives in `/data`**: the database, attachments, and
+  `secrets.env`, which holds the database passwords and the login-signing
+  key, generated on first start. Nothing listens except port 8080.
+- **Back up** by stopping the container and archiving the volume, which
+  captures all three together:
+  ```bash
+  docker stop trend-tend
+  docker run --rm -v trend-tend:/data -v "$PWD":/backup alpine \
+    tar czf /backup/trend-tend-$(date +%F).tgz -C /data .
+  docker start trend-tend
+  ```
+- **Update**: back up, then `docker pull wrinklebyte/trend-tend-server`,
+  remove the container and run the same `docker run` again. Migrations run
+  automatically. Pin a version tag (for example `:1.0.1`) instead of the
+  default `latest` if you'd rather choose when to update.
+- **Settings** such as SMTP are environment variables (the `SMTP_*` names in
+  [`.env.prod.example`](.env.prod.example)) or the admin settings page.
+- The image runs PostgreSQL 16. If a future release changes that, it will
+  say so in its release notes, and the container refuses to start on a
+  mismatched database rather than touch it.
+
+### Option 2: separate containers (Docker Compose)
+
+For running PostgreSQL as its own container, which also makes it possible
+to manage the database separately, use `docker-compose.prod.yml`:
 
 ```bash
 cp .env.prod.example .env    # fill in the REQUIRED values (secrets, FRONTEND_URL)
@@ -69,8 +114,8 @@ that is actually running.
 `docker-compose.prod.yml`, commit, merge to `main` once CI is green, then
 push a tag: `git tag vX.Y.Z && git push github vX.Y.Z`. The
 [`Release images`](.github/workflows/release.yml) workflow checks the tag
-matches all three versions, builds both images natively on amd64 and arm64
-runners, and publishes them to Docker Hub and GHCR (one-time setup is in that
+matches all three versions, builds all three images (API, web, all-in-one)
+natively on amd64 and arm64 runners, and publishes them to Docker Hub and GHCR (one-time setup is in that
 file's header). `scripts/build-release-images.sh --push` does the same from a
 maintainer's machine and remains the manual fallback.
 
