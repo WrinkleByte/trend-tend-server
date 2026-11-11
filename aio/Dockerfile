@@ -1,20 +1,19 @@
 # SPDX-FileCopyrightText: 2026 WrinkleByte LLC
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# All-in-one image: PostgreSQL + the API + the web app (nginx) in one
-# container, for self-hosters who want a single `docker run`:
+# The Trend & Tend Server image (wrinklebyte/trend-tend-server): the API and
+# the web app (nginx) in one container, plus a built-in PostgreSQL for
+# self-hosters who want a single `docker run`:
 #
 #   docker run -d --name trend-tend -p 8080:8080 \
 #     -e FRONTEND_URL=http://<your-host>:8080 \
 #     -v trend-tend:/data wrinklebyte/trend-tend-server
 #
-# Everything persistent lives in /data: the database, attachments and the
-# secrets generated on first start. See aio/README.md.
-#
-# The two-image stack (docker-compose.prod.yml) stays the option for anyone
-# who wants Postgres managed separately. Both are built from the same
-# sources; this file reuses backend/Dockerfile.prod's and
-# web/Dockerfile.prod's build steps and web/nginx.conf.
+# Set DATABASE_URL and it uses that PostgreSQL instead and starts none of
+# its own; docker-compose.prod.yml runs it that way next to the official
+# postgres image. Everything else persistent lives in /data: attachments,
+# generated secrets, and (built-in mode) the database. See
+# aio/entrypoint.sh and the README's Self-hosting section.
 #
 # Build from the REPO ROOT (it needs both backend/ and web/):
 #   docker build -f aio/Dockerfile -t trend-tend-server:dev .
@@ -52,16 +51,17 @@ FROM postgres:${PG_MAJOR}-bookworm AS runtime
 ARG PG_MAJOR
 
 ARG VERSION=dev
-LABEL org.opencontainers.image.title="Trend & Tend Server (all-in-one)" \
-      org.opencontainers.image.description="Trend & Tend self-hosted server in one container: PostgreSQL, the sync API and the web app." \
+LABEL org.opencontainers.image.title="Trend & Tend Server" \
+      org.opencontainers.image.description="Trend & Tend self-hosted server: the sync API and web app, with a built-in PostgreSQL or your own." \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.vendor="WrinkleByte LLC" \
       org.opencontainers.image.url="https://wrinklebyte.com" \
       org.opencontainers.image.source="https://github.com/wrinklebyte/trend-tend-server" \
       org.opencontainers.image.licenses="AGPL-3.0-only"
 
-# tini as PID 1: reaps zombies and forwards signals to the entrypoint, which
-# then stops nginx, the API and Postgres in order.
+# tini as PID 1 (started by the entrypoint after dropping root): reaps
+# zombies and forwards signals to the entrypoint, which then stops nginx,
+# the API and Postgres in order.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 nginx-light tini \
     && rm -rf /var/lib/apt/lists/* \
@@ -80,6 +80,7 @@ WORKDIR /app
 COPY --chown=postgres:postgres backend/alembic.ini ./
 COPY --chown=postgres:postgres backend/alembic ./alembic
 COPY --chown=postgres:postgres backend/app ./app
+COPY --chown=postgres:postgres backend/scripts/__init__.py backend/scripts/reset_password.py ./scripts/
 COPY --from=web /app/dist /usr/share/nginx/html
 
 # The web image's server block, unchanged except that the API is on
@@ -91,15 +92,16 @@ RUN sed -i 's#proxy_pass http://backend:8000;#proxy_pass http://127.0.0.1:8000;#
     && grep -q 'proxy_pass http://127.0.0.1:8000;' /etc/nginx/trend-tend-site.conf
 COPY aio/nginx.conf /etc/nginx/nginx.conf
 COPY --chmod=755 aio/entrypoint.sh /usr/local/bin/trend-tend-entrypoint
+COPY --chmod=755 aio/reset-password.sh /usr/local/bin/trend-tend-reset-password
 
-# Everything runs as the image's unprivileged postgres user (uid 999):
-# Postgres refuses to run as root anyway, nginx listens on 8080, and /data
-# ends up owned by one predictable uid.
-USER postgres
+# The entrypoint starts as root only to fix ownership under /data, then
+# drops to the image's unprivileged postgres user (uid 999) via gosu for
+# everything it runs: Postgres refuses root anyway, nginx listens on 8080,
+# and /data ends up owned by one predictable uid.
 VOLUME ["/data"]
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD ["python3", "-c", "import urllib.request,sys; ok=all(urllib.request.urlopen(u, timeout=4).status == 200 for u in ('http://127.0.0.1:8000/health','http://127.0.0.1:8080/')); sys.exit(0 if ok else 1)"]
 
-ENTRYPOINT ["tini", "--", "trend-tend-entrypoint"]
+ENTRYPOINT ["trend-tend-entrypoint"]

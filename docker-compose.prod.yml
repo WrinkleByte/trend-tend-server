@@ -1,34 +1,41 @@
 # SPDX-FileCopyrightText: 2026 WrinkleByte LLC
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# Production stack for self-hosting WrinkleByte.
+# Production stack for self-hosting Trend & Tend Server with PostgreSQL in
+# its own container (the official postgres image). The simplest install is
+# a single `docker run` of the same server image with its built-in database
+# instead; see the README's Self-hosting section.
 #
 #   cp .env.prod.example .env      # then fill in every REQUIRED value
-#   docker compose -f docker-compose.prod.yml pull     # released images
+#   docker compose -f docker-compose.prod.yml pull     # released image
 #   docker compose -f docker-compose.prod.yml up -d
 #
-# Or build the images from this source tree instead of pulling them:
+# Or build the server image from this source tree instead of pulling it:
 #   docker compose -f docker-compose.prod.yml up -d --build
 #
 # Upgrading: set WRINKLEBYTE_VERSION in .env to the new release (or leave it
-# on a release you trust), then `pull` and `up -d` again. Migrations run
-# automatically when the backend starts. Back up the postgres_data and
-# attachments_data volumes first.
+# unset for this file's default), then `pull` and `up -d --remove-orphans`.
+# Migrations run automatically when the server starts. Back up the
+# postgres_data, attachments_data and server_data volumes first.
+#
+# Coming from 1.0.x (separate backend and web containers): replace this
+# file, keep the same .env and volumes, then `pull` and
+# `up -d --remove-orphans`. The old backend/web containers are removed and
+# the server container takes over the same data.
 #
 # docker-compose.yml (no .prod) is the LOCAL DEVELOPMENT stack -- Vite dev
 # server, source bind-mounts, uvicorn --reload, DEV_MODE, published default
 # passwords. Never expose that one to a network you don't trust.
 #
 # What's different here:
-#   * One published port. nginx in the web container serves the app and
-#     proxies /api/ to the backend on the same origin, so Postgres and the
-#     backend are reachable only on the internal Compose network. The
-#     mobile apps pair against that same URL (they call <url>/api/v1/...).
-#   * No defaults for secrets. Compose refuses to start (":?" below) until
-#     each one is set, and the backend's own startup guard (app/config.py)
-#     rejects a short or default JWT_SECRET.
-#   * Images are built from the Dockerfile.prod files: non-root, no dev
-#     dependencies, no source mounts.
+#   * One published port. The server container serves the web app and the
+#     API on the same origin; Postgres is reachable only on the internal
+#     Compose network. The mobile apps pair against that same URL.
+#   * Secrets: POSTGRES_PASSWORD must be set (Compose refuses to start
+#     without it). APP_DB_PASSWORD and JWT_SECRET may be set in .env; if
+#     not, the server generates them once and keeps them in server_data.
+#   * Non-root (after fixing volume ownership at start), read-only root
+#     filesystem, no new privileges.
 #
 # Put TLS in front of WEB_HOST_PORT (Caddy, Traefik, a Cloudflare tunnel,
 # ...) for anything reachable beyond your own LAN.
@@ -54,30 +61,25 @@ services:
       timeout: 5s
       retries: 10
 
-  backend:
-    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/trend-tend-api:${WRINKLEBYTE_VERSION:-1.0.1}
+  server:
+    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/trend-tend-server:${WRINKLEBYTE_VERSION:-1.1.0}
     build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: aio/Dockerfile
     restart: unless-stopped
+    ports:
+      - "${WEB_HOST_PORT:-8080}:8080"
     environment:
-      # Bootstrap (superuser) role: used only to run migrations at startup.
+      # Setting DATABASE_URL is what makes the server use this postgres
+      # service instead of starting its own. This is the bootstrap role,
+      # used for migrations; the API itself queries as the non-superuser
+      # wrinklebyte_app role so row-level security applies.
       DATABASE_URL: postgresql+asyncpg://wrinklebyte:${POSTGRES_PASSWORD}@postgres:5432/wrinklebyte
-      # Non-superuser role the app queries as, so the Postgres row-level
-      # security policies actually apply (Vikunja #44). The migration that
-      # creates `wrinklebyte_app` reads APP_DB_PASSWORD on first upgrade;
-      # both lines must use the same value.
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
-      RUNTIME_DATABASE_URL: postgresql+asyncpg://wrinklebyte_app:${APP_DB_PASSWORD}@postgres:5432/wrinklebyte
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-}
       # DEV_MODE deliberately absent.
       FRONTEND_URL: ${FRONTEND_URL:?set FRONTEND_URL in .env}
-      # Same origin as the web app, since nginx proxies /api/. Seeds the
-      # mobile-pairing QR code on first boot only; changeable later in the
-      # web app's instance settings.
-      PUBLIC_API_URL: ${PUBLIC_API_URL:-${FRONTEND_URL}}
-      STORAGE_BACKEND: local_disk
-      STORAGE_LOCAL_ROOT: /data/attachments
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-}
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
@@ -87,12 +89,14 @@ services:
       SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
       SMTP_FORCE_ENV: ${SMTP_FORCE_ENV:-false}
     volumes:
+      # Generated secrets (when not set in .env) live here.
+      - server_data:/data
+      # Same volume name as 1.0.x's backend container, so an upgrade keeps
+      # every attachment.
       - attachments_data:/data/attachments
     read_only: true
     tmpfs:
-      # Large uploads are spooled here before reaching the attachment
-      # volume. Mode is explicit: a tmpfs mount is root-owned 0755 by
-      # default, which the unprivileged app user can't write to.
+      # nginx pid and buffers, upload spooling, mktemp.
       - /tmp:mode=1777
     security_opt:
       - no-new-privileges:true
@@ -100,29 +104,7 @@ services:
       postgres:
         condition: service_healthy
 
-  web:
-    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/trend-tend-web:${WRINKLEBYTE_VERSION:-1.0.1}
-    build:
-      context: ./web
-      dockerfile: Dockerfile.prod
-    restart: unless-stopped
-    ports:
-      - "${WEB_HOST_PORT:-8080}:8080"
-    read_only: true
-    tmpfs:
-      # nginx writes its pid file and proxy/body buffers; everything else
-      # in the image is read-only.
-      # Owned by the image's `nginx` user (uid/gid 101), which the master
-      # process runs as; root-owned defaults make nginx exit at startup.
-      - /run:uid=101,gid=101
-      - /var/cache/nginx:uid=101,gid=101
-      - /tmp:mode=1777
-    security_opt:
-      - no-new-privileges:true
-    depends_on:
-      backend:
-        condition: service_healthy
-
 volumes:
   postgres_data:
   attachments_data:
+  server_data:

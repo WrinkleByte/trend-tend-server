@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 WrinkleByte LLC
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# Builds the three production images (API, web, all-in-one) for a release, tagged
+# Builds the release image (trend-tend-server) for a release, tagged
 # with the version from backend/pyproject.toml plus "latest".
 #
 # Usage:
@@ -64,49 +64,37 @@ COMMIT="$(git rev-parse --short HEAD)"
 read -r -a PREFIXES <<< "${WRINKLEBYTE_PUBLISH_PREFIXES:-wrinklebyte ghcr.io/wrinklebyte}"
 
 if $PUSH; then
+    # shellcheck disable=SC2054  # one --platform value listing both arches
     PLATFORM_ARGS=(--platform linux/amd64,linux/arm64 --push)
 else
     PLATFORM_ARGS=(--load)
 fi
 
-image_name() {
-    case "$1" in
-        backend) echo trend-tend-api ;;
-        web) echo trend-tend-web ;;
-        aio) echo trend-tend-server ;;
-    esac
-}
-
-# The all-in-one image needs both backend/ and web/, so it builds from the
-# repo root with aio/Dockerfile; the other two build from their own folder.
-context_dir() { [[ "$1" == aio ]] && echo . || echo "$1"; }
-dockerfile() { [[ "$1" == aio ]] && echo aio/Dockerfile || echo "$1/Dockerfile.prod"; }
-
-for component in backend web aio; do
-    image=$(image_name "$component")
-    # One build, tagged under every registry, so the copies are
-    # byte-identical rather than separate builds that merely share a name.
-    tags=()
-    for prefix in "${PREFIXES[@]}"; do
-        tags+=(--tag "$prefix/$image:$VERSION" --tag "$prefix/$image:latest")
-    done
-    echo "==> $image:$VERSION ($COMMIT) -> ${PREFIXES[*]}"
-    docker buildx build \
-        "${PLATFORM_ARGS[@]}" \
-        --file "$(dockerfile "$component")" \
-        --build-arg "VERSION=$VERSION" \
-        --label "org.opencontainers.image.revision=$COMMIT" \
-        "${tags[@]}" \
-        "$(context_dir "$component")"
+# One image since 1.1.0 (trend-tend-api and trend-tend-web were folded into
+# it). It needs both backend/ and web/, so it builds from the repo root.
+image=trend-tend-server
+# One build, tagged under every registry, so the copies are
+# byte-identical rather than separate builds that merely share a name.
+tags=()
+for prefix in "${PREFIXES[@]}"; do
+    tags+=(--tag "$prefix/$image:$VERSION" --tag "$prefix/$image:latest")
 done
+echo "==> $image:$VERSION ($COMMIT) -> ${PREFIXES[*]}"
+docker buildx build \
+    "${PLATFORM_ARGS[@]}" \
+    --file aio/Dockerfile \
+    --build-arg "VERSION=$VERSION" \
+    --label "org.opencontainers.image.revision=$COMMIT" \
+    "${tags[@]}" \
+    .
 
 echo
 if $PUSH; then
     for prefix in "${PREFIXES[@]}"; do
-        echo "Pushed $prefix/trend-tend-{api,web,server}:{$VERSION,latest} for amd64 + arm64."
+        echo "Pushed $prefix/trend-tend-server:{$VERSION,latest} for amd64 + arm64."
     done
     echo "Tag the commit too:  git tag v$VERSION $COMMIT"
 else
-    echo "Built trend-tend-{api,web,server}:$VERSION locally under: ${PREFIXES[*]}"
-    echo "Smoke-test with:  scripts/smoke-test-prod.sh  and  scripts/smoke-test-aio.sh ${PREFIXES[0]}/trend-tend-server:$VERSION"
+    echo "Built trend-tend-server:$VERSION locally under: ${PREFIXES[*]}"
+    echo "Smoke-test with:  scripts/smoke-test-aio.sh ${PREFIXES[0]}/trend-tend-server:$VERSION  and  scripts/smoke-test-prod.sh"
 fi
