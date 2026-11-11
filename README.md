@@ -6,6 +6,15 @@ This repository contains the **open-source backend and web app**, licensed under
 
 The native iOS and Android apps (sold separately through the App Store and Google Play, and fully usable without a server) are proprietary and not part of this repository. They sync with this server over the protocol described in [`docs/architecture.md`](docs/architecture.md). Developer notes and architectural invariants: [`docs/development.md`](docs/development.md).
 
+## Help and more
+
+- **Product overview and the mobile apps:** [wrinklebyte.com/products](https://wrinklebyte.com/products.html)
+- **Common questions:** [Trend & Tend FAQ](https://wrinklebyte.com/trend-tend-faq.html)
+- **Get help:** [wrinklebyte.com/help](https://wrinklebyte.com/help.html)
+- **Bug reports and feature requests for the server or web app:** [GitHub issues](https://github.com/wrinklebyte/trend-tend-server/issues)
+- **How your data is handled:** [Trend & Tend privacy model](https://wrinklebyte.com/trend-tend-privacy.html)
+- **Ready-to-run images:** [Docker Hub](https://hub.docker.com/r/wrinklebyte/trend-tend-api) and [GHCR](https://github.com/orgs/wrinklebyte/packages?repo_name=trend-tend-server); see [Self-hosting](#self-hosting-production) below
+
 ## Repository layout
 
 - `backend/` — FastAPI + PostgreSQL API server
