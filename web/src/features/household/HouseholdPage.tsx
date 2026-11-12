@@ -3,6 +3,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { assignApiToken } from "../../api/apiTokens";
 import {
   addAppOnlyMember,
   createInvite,
@@ -23,7 +24,17 @@ import { PairingCodeReveal } from "../settings/PairingCodeReveal";
  * pair a new phone or tablet as this member, or revoke a lost one. Pairing
  * a device for someone means it syncs as them -- the point for a family
  * where not everyone wants a web account (Vikunja #165). */
-function MemberDevices({ member, isSelf }: { member: HouseholdMember; isSelf: boolean }) {
+function MemberDevices({
+  member,
+  isSelf,
+  members,
+  myUserId,
+}: {
+  member: HouseholdMember;
+  isSelf: boolean;
+  members: HouseholdMember[];
+  myUserId: string | undefined;
+}) {
   const queryClient = useQueryClient();
   const queryKey = ["member-api-tokens", member.user_id];
   const { data: tokens } = useQuery({ queryKey, queryFn: () => listMemberApiTokens(member.user_id) });
@@ -43,6 +54,17 @@ function MemberDevices({ member, isSelf }: { member: HouseholdMember; isSelf: bo
     mutationFn: (tokenId: string) => revokeMemberApiToken(member.user_id, tokenId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
+  // Move a device to someone else, including back to yourself: the key's
+  // device becomes theirs on its next sync, no re-pairing.
+  const [assignTarget, setAssignTarget] = useState<Record<string, string>>({});
+  const assignMutation = useMutation({
+    mutationFn: ({ tokenId, userId }: { tokenId: string; userId: string }) => assignApiToken(tokenId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["member-api-tokens"] });
+      queryClient.invalidateQueries({ queryKey: ["api-tokens"] });
+    },
+  });
+  const assignable = members.filter((m) => m.user_id !== member.user_id);
 
   const active = tokens?.filter((t) => !t.revoked_at) ?? [];
   return (
@@ -54,6 +76,7 @@ function MemberDevices({ member, isSelf }: { member: HouseholdMember; isSelf: bo
           onDone={() => setJustCreated(null)}
         />
       )}
+      {assignMutation.isError && <StatusMessage>{(assignMutation.error as Error).message}</StatusMessage>}
       <form
         className="inline-form"
         onSubmit={(event: FormEvent) => {
@@ -76,6 +99,29 @@ function MemberDevices({ member, isSelf }: { member: HouseholdMember; isSelf: bo
             <li key={token.id}>
               <span>{token.name}</span>
               <span>{token.last_used_at ? `Last synced ${token.last_used_at}` : "Not used yet"}</span>
+              {assignable.length > 0 && (
+                <span className="token-assign">
+                  <select
+                    aria-label={`Move ${token.name} to`}
+                    value={assignTarget[token.id] ?? ""}
+                    onChange={(e) => setAssignTarget({ ...assignTarget, [token.id]: e.target.value })}
+                  >
+                    <option value="">Assign to&hellip;</option>
+                    {assignable.map((m) => (
+                      <option key={m.user_id} value={m.user_id}>
+                        {m.user_id === myUserId ? `Me (${m.display_name})` : m.display_name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!assignTarget[token.id] || assignMutation.isPending}
+                    onClick={() => assignMutation.mutate({ tokenId: token.id, userId: assignTarget[token.id] })}
+                  >
+                    Assign
+                  </button>
+                </span>
+              )}
               <button type="button" className="danger" onClick={() => revokeMutation.mutate(token.id)}>
                 Revoke
               </button>
@@ -200,7 +246,12 @@ export function HouseholdPage() {
               </button>
             )}
             {isOwner && openDevicesFor === member.user_id && (
-              <MemberDevices member={member} isSelf={member.user_id === household?.my_user_id} />
+              <MemberDevices
+                member={member}
+                isSelf={member.user_id === household?.my_user_id}
+                members={members ?? []}
+                myUserId={household?.my_user_id}
+              />
             )}
           </li>
         ))}
