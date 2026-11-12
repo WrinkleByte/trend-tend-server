@@ -3,14 +3,9 @@
 
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { QRCodeSVG } from "qrcode.react";
 import { createApiToken, deleteApiToken, listApiTokens, revokeApiToken } from "../../api/apiTokens";
-import { getInstanceSettings } from "../../api/instanceSettings";
+import { PairingCodeReveal } from "./PairingCodeReveal";
 import { PairingUrlSection } from "./PairingUrlSection";
-
-function buildPairingPayload(server: string, token: string): string {
-  return JSON.stringify({ v: 1, server, token });
-}
 
 /** The "API Tokens" settings category — pairing-URL config plus token
  * generate/list/revoke/delete. Was the whole /settings page before the
@@ -19,15 +14,6 @@ function buildPairingPayload(server: string, token: string): string {
 export function ApiTokensPage() {
   const queryClient = useQueryClient();
   const { data: tokens, isLoading } = useQuery({ queryKey: ["api-tokens"], queryFn: listApiTokens });
-  // 403s for a non-instance-admin generating their own token (this feature
-  // isn't admin-gated) -- React Query just leaves `data` undefined rather
-  // than throwing, so this falls through to the window.location.origin
-  // fallback below exactly like "not configured" does.
-  const { data: instanceSettings } = useQuery({
-    queryKey: ["instance-settings"],
-    queryFn: getInstanceSettings,
-    retry: false,
-  });
   const [name, setName] = useState("");
   const [justCreated, setJustCreated] = useState<string | null>(null);
 
@@ -66,20 +52,7 @@ export function ApiTokensPage() {
           code below — in the app&rsquo;s sync settings.
         </p>
 
-        {justCreated && (
-          <div className="token-reveal">
-            <p>Copy this token now — it won&rsquo;t be shown again.</p>
-            <code>{justCreated}</code>
-            <p>Or scan this code from the mobile app&rsquo;s pairing screen:</p>
-            <QRCodeSVG
-              value={buildPairingPayload(instanceSettings?.public_api_url || window.location.origin, justCreated)}
-              size={200}
-            />
-            <button type="button" onClick={() => setJustCreated(null)}>
-              Done
-            </button>
-          </div>
-        )}
+        {justCreated && <PairingCodeReveal token={justCreated} onDone={() => setJustCreated(null)} />}
 
         <form className="inline-form" onSubmit={handleSubmit}>
           <input placeholder="Token name, e.g. My iPhone" value={name} onChange={(e) => setName(e.target.value)} />
@@ -92,7 +65,12 @@ export function ApiTokensPage() {
         <ul className="token-list">
           {tokens?.map((token) => (
             <li key={token.id}>
-              <span>{token.name}</span>
+              <span>
+                {token.name}
+                {token.created_by_name && (
+                  <span className="token-created-by"> (set up by {token.created_by_name})</span>
+                )}
+              </span>
               <span>
                 {token.revoked_at
                   ? "Revoked"

@@ -3,6 +3,8 @@
 
 import { apiFetch } from "./client";
 import type {
+  ApiTokenCreated,
+  ApiTokenSummary,
   CreatedHouseholdInvite,
   Household,
   HouseholdInvite,
@@ -17,6 +19,32 @@ export function getCurrentHousehold(): Promise<Household> {
 
 export function listMembers(): Promise<HouseholdMember[]> {
   return apiFetch("/households/members");
+}
+
+/** Adds a family member who won't have a web login of their own (owner only).
+ * With an email, they can later use "Forgot password" to get one. */
+export function addAppOnlyMember(
+  displayName: string,
+  email: string | null,
+  role: "owner" | "member" = "member",
+): Promise<HouseholdMember> {
+  return apiFetch("/households/members", {
+    method: "POST",
+    body: JSON.stringify({ display_name: displayName, email: email || null, role }),
+  });
+}
+
+/** A pairing key for another member (owner only): a device paired with it syncs as them. */
+export function createMemberApiToken(userId: string, name: string): Promise<ApiTokenCreated> {
+  return apiFetch(`/households/members/${userId}/api-tokens`, { method: "POST", body: JSON.stringify({ name }) });
+}
+
+export function listMemberApiTokens(userId: string): Promise<ApiTokenSummary[]> {
+  return apiFetch(`/households/members/${userId}/api-tokens`);
+}
+
+export function revokeMemberApiToken(userId: string, tokenId: string): Promise<void> {
+  return apiFetch(`/households/members/${userId}/api-tokens/${tokenId}`, { method: "DELETE" });
 }
 
 export function removeMember(userId: string): Promise<void> {

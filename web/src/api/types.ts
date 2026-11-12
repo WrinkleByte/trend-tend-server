@@ -213,6 +213,10 @@ export interface ApiTokenSummary {
   last_used_at: string | null;
   expires_at: string | null;
   revoked_at: string | null;
+  /** Set when a household owner or instance admin made this key for its
+   * user (e.g. to pair a family member's phone); null for your own keys. */
+  created_by_user_id?: string | null;
+  created_by_name?: string | null;
 }
 
 export interface ApiTokenCreated extends ApiTokenSummary {
@@ -229,14 +233,18 @@ export interface Household {
   settings: Record<string, unknown>;
   created_at: string;
   my_role: HouseholdRole;
+  my_user_id: string;
 }
 
 export interface HouseholdMember {
   user_id: string;
+  /** "" for an app-only member added without an email address. */
   email: string;
   display_name: string;
   role: HouseholdRole;
   joined_at: string;
+  /** False for an app-only member: no web sign-in; the owner pairs their devices. */
+  has_login: boolean;
 }
 
 export interface HouseholdInvite {

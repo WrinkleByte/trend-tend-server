@@ -72,6 +72,9 @@ async def delete_user_data(db: AsyncSession, user_id: uuid.UUID) -> None:
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
     await db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user_id))
     await db.execute(delete(ApiToken).where(ApiToken.user_id == user_id))
+    # Keys this user made for other people stay (they belong to, and work
+    # for, those people); only the "created by" pointer goes.
+    await db.execute(update(ApiToken).where(ApiToken.created_by_user_id == user_id).values(created_by_user_id=None))
     await db.execute(delete(SyncDevice).where(SyncDevice.user_id == user_id))
     await db.execute(delete(HouseholdInvite).where(HouseholdInvite.created_by_user_id == user_id))
     await db.execute(
