@@ -3,7 +3,7 @@
 
 [project]
 name = "wrinklebyte-backend"
-version = "1.0.1"
+version = "1.1.0"
 description = "WrinkleByte backend API — FastAPI + PostgreSQL"
 license = "AGPL-3.0-only"
 requires-python = ">=3.11"

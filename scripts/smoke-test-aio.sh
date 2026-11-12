@@ -2,9 +2,11 @@
 # SPDX-FileCopyrightText: 2026 WrinkleByte LLC
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# Smoke test for the all-in-one image (aio/Dockerfile), run the way a new
+# Smoke test for the server image (aio/Dockerfile) in its single-container
+# mode, with the built-in database, run the way a new
 # self-hoster would meet it: one `docker run` on an empty volume. Checks
-# the same first-run flow as smoke-test-prod.sh, plus what is specific to
+# the same first-run flow as smoke-test-prod.sh (the Compose mode), plus
+# what is specific to
 # a single container holding its own database:
 #   - secrets are generated on first start and are not world-readable
 #   - data and the generated secrets survive a container restart

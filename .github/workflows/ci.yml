@@ -4,8 +4,8 @@
 # Checks every pull request and every push to main. Same ground the local
 # .githooks cover (ruff, pytest, oxlint, tsc, web build), plus what the
 # hooks never did: migrations applied to an empty database, a secret scan,
-# REUSE licensing compliance, and smoke tests of both the production
-# Compose stack and the all-in-one image.
+# REUSE licensing compliance, and smoke tests of the server image in both
+# modes: on its own (built-in database) and in the Compose stack.
 #
 # Third-party actions are pinned to full commit SHAs (tag in the trailing
 # comment) so a moved or compromised tag can't change what runs here.
@@ -119,7 +119,7 @@ jobs:
           git /repo --redact --no-banner --exit-code 1
 
   smoke:
-    name: Production stack smoke test
+    name: Compose stack smoke test (server + postgres)
     needs: [backend, web]
     runs-on: ubuntu-24.04
     steps:
@@ -130,7 +130,7 @@ jobs:
         run: scripts/smoke-test-prod.sh --build
 
   smoke-aio:
-    name: All-in-one image smoke test
+    name: Single-container smoke test (built-in database)
     needs: [backend, web]
     runs-on: ubuntu-24.04
     steps:

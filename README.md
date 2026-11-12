@@ -13,7 +13,7 @@ The native iOS and Android apps (sold separately through the App Store and Googl
 - **Get help:** [wrinklebyte.com/help](https://wrinklebyte.com/help.html)
 - **Bug reports and feature requests for the server or web app:** [GitHub issues](https://github.com/wrinklebyte/trend-tend-server/issues)
 - **How your data is handled:** [Trend & Tend privacy model](https://wrinklebyte.com/trend-tend-privacy.html)
-- **Ready-to-run images:** [Docker Hub](https://hub.docker.com/r/wrinklebyte/trend-tend-api) and [GHCR](https://github.com/orgs/wrinklebyte/packages?repo_name=trend-tend-server); see [Self-hosting](#self-hosting-production) below
+- **Ready-to-run image:** [Docker Hub](https://hub.docker.com/r/wrinklebyte/trend-tend-server) and [GHCR](https://github.com/orgs/wrinklebyte/packages?repo_name=trend-tend-server); see [Self-hosting](#self-hosting-production) below
 
 ## Repository layout
 
@@ -33,12 +33,13 @@ The native iOS and Android apps (sold separately through the App Store and Googl
 
 To actually run an instance, for yourself, your household, or the mobile
 apps to sync with, use one of the two options below, not the development
-stack further down. Both run the same server and work on amd64 and arm64
-(Raspberry Pi, Apple silicon, most NAS boxes).
+stack further down. Both run the same image, `wrinklebyte/trend-tend-server`,
+on amd64 and arm64 (Raspberry Pi, Apple silicon, most NAS boxes).
 
 ### Option 1: one container (quickest)
 
-`wrinklebyte/trend-tend-server` bundles PostgreSQL, the API and the web app:
+`wrinklebyte/trend-tend-server` runs the API and the web app, with a
+built-in PostgreSQL:
 
 ```bash
 docker run -d --name trend-tend --restart unless-stopped \
@@ -67,7 +68,7 @@ the instance admin. Point the mobile apps at the same address.
   ```
 - **Update**: back up, then `docker pull wrinklebyte/trend-tend-server`,
   remove the container and run the same `docker run` again. Migrations run
-  automatically. Pin a version tag (for example `:1.0.1`) instead of the
+  automatically. Pin a version tag (for example `:1.1.0`) instead of the
   default `latest` if you'd rather choose when to update.
 - **Settings** such as SMTP are environment variables (the `SMTP_*` names in
   [`.env.prod.example`](.env.prod.example)) or the admin settings page.
@@ -75,56 +76,73 @@ the instance admin. Point the mobile apps at the same address.
   say so in its release notes, and the container refuses to start on a
   mismatched database rather than touch it.
 
-### Option 2: separate containers (Docker Compose)
+### Option 2: PostgreSQL in its own container (Docker Compose)
 
-For running PostgreSQL as its own container, which also makes it possible
-to manage the database separately, use `docker-compose.prod.yml`:
+The same server image can use a separate PostgreSQL instead of its built-in
+one: set `DATABASE_URL` and it starts no database of its own.
+`docker-compose.prod.yml` runs it that way next to the official `postgres`
+image, which keeps PostgreSQL upgrades and database backups on their usual
+path:
 
 ```bash
-cp .env.prod.example .env    # fill in the REQUIRED values (secrets, FRONTEND_URL)
+cp .env.prod.example .env    # set POSTGRES_PASSWORD and FRONTEND_URL
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-That pulls the released images (`wrinklebyte/trend-tend-api` and
-`wrinklebyte/trend-tend-web` on Docker Hub, for amd64 and arm64) at the
-version pinned by `WRINKLEBYTE_VERSION`. The identical images are also on
-the GitHub Container Registry; to pull from there instead, set
-`WRINKLEBYTE_IMAGE_PREFIX=ghcr.io/wrinklebyte` in `.env`. To build from this
+That pulls `wrinklebyte/trend-tend-server` at the version pinned by
+`WRINKLEBYTE_VERSION` (the identical image is on GHCR; set
+`WRINKLEBYTE_IMAGE_PREFIX=ghcr.io/wrinklebyte` to use it). To build from this
 source tree instead, use `up -d --build`.
 
-- **One port.** The web container (`WEB_HOST_PORT`, default 8080) serves the
-  app and proxies `/api/` to the backend on the same origin. Postgres and the
-  backend aren't published at all. Point the mobile apps at the same URL as
-  the web app.
-- **No default secrets.** Compose refuses to start until `POSTGRES_PASSWORD`,
-  `APP_DB_PASSWORD`, `JWT_SECRET` and `FRONTEND_URL` are set, and the
-  backend refuses a JWT secret shorter than 32 bytes.
-- **Hardened images** (`backend/Dockerfile.prod`, `web/Dockerfile.prod`):
-  non-root, no dev dependencies, read-only root filesystems. Migrations run
-  automatically on each backend start.
-- **Data** lives in two named volumes, `postgres_data` and
-  `attachments_data`. Back up both.
+- **One port** (`WEB_HOST_PORT`, default 8080) serves the app and the API on
+  the same origin; PostgreSQL isn't published at all. Point the mobile apps
+  at the same URL as the web app.
+- **Secrets:** Compose refuses to start until `POSTGRES_PASSWORD` and
+  `FRONTEND_URL` are set. `APP_DB_PASSWORD` and `JWT_SECRET` are optional:
+  left unset, the server generates them once and keeps them in its
+  `server_data` volume.
+- **Hardened:** non-root, read-only root filesystem, no new privileges.
+  Migrations run automatically on each start.
+- **Data** lives in three named volumes: `postgres_data`, `attachments_data`
+  and `server_data`. Back up all three.
+- **Your own PostgreSQL** works the same way: point `DATABASE_URL`
+  (`postgresql+asyncpg://...`) at a database named `wrinklebyte`, owned by a
+  role named `wrinklebyte` that may create roles. The server adds a
+  `wrinklebyte_app` role for its own queries, so row-level security applies.
+
+Updating: back up the volumes, set `WRINKLEBYTE_VERSION` in `.env` to the
+new release (or remove it to use this file's default), then `pull` and
+`up -d --remove-orphans`.
+
+**Coming from 1.0.x**, which ran separate `trend-tend-api` and
+`trend-tend-web` containers: replace `docker-compose.prod.yml` with the new
+one, keep your `.env` and volumes as they are, then `pull` and
+`up -d --remove-orphans`. The old containers are removed and the server
+takes over the same database and attachments. The `trend-tend-api` and
+`trend-tend-web` images are no longer published after 1.0.1.
+
+### Either option
+
 - **TLS:** put a reverse proxy (Caddy, Traefik, a Cloudflare tunnel, ...) in
-  front for anything reachable beyond your LAN. The stack itself speaks
+  front for anything reachable beyond your LAN. The server itself speaks
   plain HTTP.
 - The first account registered becomes the instance admin (see
   [Administering a self-hosted instance](#administering-a-self-hosted-instance)).
   Set up that account straight after first start, or turn off
   self-registration afterwards.
-
-Updating: back up both volumes, set `WRINKLEBYTE_VERSION` in `.env` to the
-new release, then `pull` and `up -d` again (or `git pull` and `up -d --build`
-when building from source). `GET /health` on the backend reports the version
-that is actually running.
+- **Locked out** before email is set up? Reset a password from inside the
+  container: `docker exec -it trend-tend trend-tend-reset-password --list`,
+  then `... trend-tend-reset-password user@example.com` (with Compose:
+  `docker compose -f docker-compose.prod.yml exec server trend-tend-reset-password ...`).
 
 **Releasing (maintainers):** bump the version in `backend/pyproject.toml`,
 `web/package.json` and the `WRINKLEBYTE_VERSION` default in
 `docker-compose.prod.yml`, commit, merge to `main` once CI is green, then
 push a tag: `git tag vX.Y.Z && git push github vX.Y.Z`. The
 [`Release images`](.github/workflows/release.yml) workflow checks the tag
-matches all three versions, builds all three images (API, web, all-in-one)
-natively on amd64 and arm64 runners, and publishes them to Docker Hub and GHCR (one-time setup is in that
+matches all three versions, builds the `trend-tend-server` image natively on
+amd64 and arm64 runners, and publishes it to Docker Hub and GHCR (one-time setup is in that
 file's header). `scripts/build-release-images.sh --push` does the same from a
 maintainer's machine and remains the manual fallback.
 

@@ -2,14 +2,17 @@
 # SPDX-FileCopyrightText: 2026 WrinkleByte LLC
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# Brings up docker-compose.prod.yml from nothing -- fresh volumes, freshly
-# generated secrets -- and checks it the way a new self-hoster would meet
-# it: the web app loads, /api/ reaches the backend through nginx, the first
-# account can register, and an authenticated sync call succeeds. Tears
-# everything down (including its volumes) afterwards, pass or fail.
+# Brings up docker-compose.prod.yml (the server image against the official
+# postgres image) from nothing -- fresh volumes, only the REQUIRED .env
+# values, so the server has to generate the rest -- and checks it the way a
+# new self-hoster would meet it: the web app loads, /api/ reaches the API,
+# the first account can register, an authenticated call succeeds, the
+# server really uses the separate database, and data and logins survive a
+# restart of the stack. Tears everything down (including its volumes)
+# afterwards, pass or fail.
 #
 # Usage:
-#   scripts/smoke-test-prod.sh            # use the images as already built/pulled
+#   scripts/smoke-test-prod.sh            # use the image as already built/pulled
 #   scripts/smoke-test-prod.sh --build    # build from this source tree first
 #
 # Runs as its own Compose project on its own port, so it never touches a
@@ -29,8 +32,6 @@ BUILD_ARGS=()
 secret() { python3 -c "import secrets; print(secrets.token_urlsafe(48))"; }
 cat > "$ENV_FILE" <<ENV
 POSTGRES_PASSWORD=$(secret)
-APP_DB_PASSWORD=$(secret)
-JWT_SECRET=$(secret)
 FRONTEND_URL=$BASE
 WEB_HOST_PORT=$PORT
 ENV
@@ -40,8 +41,8 @@ compose() { docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f docker-compos
 cleanup() {
     status=$?
     if [[ $status -ne 0 ]]; then
-        echo "--- backend logs (last 40 lines) ---"
-        compose logs --tail 40 backend || true
+        echo "--- server logs (last 60 lines) ---"
+        compose logs --tail 60 server || true
     fi
     compose down -v --remove-orphans >/dev/null 2>&1 || true
     rm -f "$ENV_FILE"
@@ -62,8 +63,12 @@ health="$(curl -fsS "$BASE/api/v1/auth/setup-status")" || fail "setup-status unr
 echo "    setup-status: $health"
 echo "$health" | grep -q '"setup_complete":false' || fail "fresh instance should report setup incomplete"
 
-version="$(compose exec -T backend python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health').read().decode())")"
-echo "    backend /health: $version"
+version="$(compose exec -T server python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health').read().decode())")"
+echo "    /health: $version"
+
+echo "==> uses the postgres service, not a built-in database"
+compose logs server | grep -q "external database" || fail "server did not start in external-database mode"
+[[ "$(compose exec -T server sh -c 'test -e /data/postgres && echo yes || echo no')" == no ]] || fail "server created a built-in database"
 
 echo "==> first account (becomes instance admin)"
 token="$(curl -fsS -X POST "$BASE/api/v1/auth/register" \
@@ -77,5 +82,12 @@ curl -fsS "$BASE/api/v1/assets" -H "Authorization: Bearer $token" >/dev/null || 
 echo "==> security headers"
 curl -fsSI "$BASE/" | grep -qi "content-security-policy" || fail "missing Content-Security-Policy on /"
 
+echo "==> restart keeps data, generated secrets and logins"
+compose restart >/dev/null
+compose up -d --wait --wait-timeout 180 >/dev/null
+curl -fsS "$BASE/api/v1/auth/setup-status" | grep -q '"setup_complete":true' || fail "instance forgot its setup after restart"
+curl -fsS "$BASE/api/v1/assets" -H "Authorization: Bearer $token" >/dev/null \
+    || fail "a token issued before the restart was rejected (generated JWT secret not persisted?)"
+
 echo
-echo "PASS: production stack came up clean and served a full first-run flow."
+echo "PASS: Compose stack (server + postgres) served a full first-run flow and survived a restart."

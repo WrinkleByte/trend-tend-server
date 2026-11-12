@@ -20,8 +20,10 @@ PWA offline design: [`pwa-offline.md`](pwa-offline.md).
 - Backend: `cd backend && .venv/bin/pytest` (needs the Postgres from
   `docker-compose.yml`). Lint: `.venv/bin/ruff check .`.
 - Web: `cd web && npm run build`, `npm run lint` (oxlint), `npx tsc --noEmit`.
-- Production images: `scripts/smoke-test-prod.sh --build` builds them and runs a
-  first-run flow against them.
+- Production image (`aio/Dockerfile`, published as `trend-tend-server`):
+  `scripts/smoke-test-aio.sh` builds it and tests it on its own (built-in
+  database); `scripts/smoke-test-prod.sh --build` tests it in the Compose
+  stack next to the official postgres image.
 - `scripts/setup-git-hooks.sh` installs pre-commit hooks that run the linters.
 
 ## Architectural invariants
