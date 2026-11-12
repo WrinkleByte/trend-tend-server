@@ -8,12 +8,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_principal
-from app.core.api_token_issuing import issue_api_token
+from app.core.api_token_issuing import (
+    issue_api_token,
+    notify_key_issued_for_you,
+    require_membership,
+)
 from app.db.session import get_db
 from app.models.api_token import ApiToken
+from app.models.household import HouseholdRole
 from app.models.mixins import utcnow
 from app.models.user import User
 from app.schemas.api_token import (
+    ApiTokenAssign,
     ApiTokenCreate,
     ApiTokenCreateResponse,
     ApiTokenResponse,
@@ -121,3 +127,44 @@ async def delete_api_token(
         )
     await db.delete(token)
     await db.commit()
+
+
+@router.patch("/{token_id}", response_model=ApiTokenResponse)
+async def assign_api_token(
+    token_id: uuid.UUID,
+    payload: ApiTokenAssign,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> ApiTokenResponse:
+    """Move an existing key to another member of the household (Vikunja #165):
+    a phone already paired with the owner's key becomes Kate's phone without
+    re-pairing. The key isn't tied to a device server-side, and the apps
+    re-read "who am I" (households/me's my_user_id) on every sync, so the
+    device acts as the new user from its next sync on.
+
+    Owner only, for any key in the household: letting a member hand their
+    own key to someone else would leave them holding a working copy that
+    acts as that person. Recorded the same way as a key made for someone
+    (created_by = the owner, unless it's assigned back to the owner
+    themselves), and the new holder is emailed if they have a real address.
+    """
+    if principal.role != HouseholdRole.OWNER:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the household owner can do this")
+    token = (
+        await db.execute(
+            select(ApiToken).where(ApiToken.id == token_id, ApiToken.household_id == principal.household_id)
+        )
+    ).scalar_one_or_none()
+    if token is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "API token not found")
+    if token.revoked_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This key is revoked; make a new one instead.")
+    await require_membership(db, principal.household_id, payload.user_id)
+
+    if token.user_id != payload.user_id:
+        token.user_id = payload.user_id
+        token.created_by_user_id = None if payload.user_id == principal.user_id else principal.user_id
+        await db.commit()
+        await db.refresh(token)
+        await notify_key_issued_for_you(db, token)
+    return (await token_responses(db, [token]))[0]

@@ -48,6 +48,12 @@ class MemberApiTokenCreate(BaseModel):
     expires_at: datetime | None = None
 
 
+class ApiTokenAssign(BaseModel):
+    """Move an existing key to another member of the household (owner only)."""
+
+    user_id: uuid.UUID
+
+
 class AdminApiTokenCreate(MemberApiTokenCreate):
     # A key belongs to one household; the user must be a member of it.
     household_id: uuid.UUID

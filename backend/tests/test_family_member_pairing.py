@@ -222,3 +222,68 @@ async def test_only_instance_admins_use_the_admin_key_endpoint(client, auth_head
         json={"name": "x", "household_id": bob_me["id"]},
     )
     assert response.status_code == 403
+
+
+async def test_owner_assigns_own_key_to_member(client, auth_headers):
+    kate = await _add_member(client, auth_headers, display_name="Kate")
+    key = (await client.post("/api/v1/api-tokens", headers=auth_headers, json={"name": "iPad"})).json()
+
+    response = await client.patch(
+        f"/api/v1/api-tokens/{key['id']}", headers=auth_headers, json={"user_id": kate["user_id"]}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["created_by_name"] == "Alice"
+
+    # The same raw key now acts as Kate, no re-pairing.
+    me = (await client.get("/api/v1/households/me", headers=_headers(key["token"]))).json()
+    assert me["my_user_id"] == kate["user_id"]
+
+    mine = (await client.get("/api/v1/api-tokens", headers=auth_headers)).json()
+    assert key["id"] not in [t["id"] for t in mine]
+    hers = (
+        await client.get(f"/api/v1/households/members/{kate['user_id']}/api-tokens", headers=auth_headers)
+    ).json()
+    assert [t["id"] for t in hers] == [key["id"]]
+
+
+async def test_assigning_back_to_the_owner_clears_created_by(client, auth_headers):
+    kate = await _add_member(client, auth_headers, display_name="Kate")
+    owner_id = (await client.get("/api/v1/households/me", headers=auth_headers)).json()["my_user_id"]
+    key = await _member_key(client, auth_headers, kate["user_id"])
+
+    response = await client.patch(f"/api/v1/api-tokens/{key['id']}", headers=auth_headers, json={"user_id": owner_id})
+    assert response.status_code == 200
+    assert response.json()["created_by_user_id"] is None
+
+
+async def test_member_cannot_assign_keys(client, auth_headers):
+    kate = await _add_member(client, auth_headers, display_name="Kate")
+    owner_id = (await client.get("/api/v1/households/me", headers=auth_headers)).json()["my_user_id"]
+    kate_key = await _member_key(client, auth_headers, kate["user_id"])
+    response = await client.patch(
+        f"/api/v1/api-tokens/{kate_key['id']}", headers=_headers(kate_key["token"]), json={"user_id": owner_id}
+    )
+    assert response.status_code == 403
+
+
+async def test_cannot_assign_to_a_non_member_or_a_revoked_or_foreign_key(client, auth_headers):
+    bob = await _register(client, "bob@example.com", "Bob's House", "Bob")
+    bob_headers = _headers(bob["access_token"])
+    bob_id = (await client.get("/api/v1/households/me", headers=bob_headers)).json()["my_user_id"]
+    kate = await _add_member(client, auth_headers, display_name="Kate")
+    key = (await client.post("/api/v1/api-tokens", headers=auth_headers, json={"name": "iPad"})).json()
+
+    to_outsider = await client.patch(f"/api/v1/api-tokens/{key['id']}", headers=auth_headers, json={"user_id": bob_id})
+    assert to_outsider.status_code == 404
+
+    bob_key = (await client.post("/api/v1/api-tokens", headers=bob_headers, json={"name": "phone"})).json()
+    foreign = await client.patch(
+        f"/api/v1/api-tokens/{bob_key['id']}", headers=auth_headers, json={"user_id": kate["user_id"]}
+    )
+    assert foreign.status_code == 404
+
+    await client.delete(f"/api/v1/api-tokens/{key['id']}", headers=auth_headers)
+    revoked = await client.patch(
+        f"/api/v1/api-tokens/{key['id']}", headers=auth_headers, json={"user_id": kate["user_id"]}
+    )
+    assert revoked.status_code == 409
