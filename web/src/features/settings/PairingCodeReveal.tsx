@@ -44,7 +44,21 @@ export function PairingCodeReveal({
       )}
       <code>{token}</code>
       {!forName && <p>Or scan this code from the mobile app&rsquo;s pairing screen:</p>}
-      <QRCodeSVG value={buildPairingPayload(server, token)} size={200} />
+      {/* marginSize 4 = the white "quiet zone" the QR spec requires around
+          the code. qrcode.react v4 defaults it to 0, so the code sat flush on
+          the dark panel with no edge to find: Android's ML Kit scanner failed
+          on it completely while the iPhone's scanner tolerated it. Explicit
+          black-on-white so a dark theme can't invert it, and larger, since
+          the payload (server URL + token) makes a dense code. */}
+      <QRCodeSVG
+        value={buildPairingPayload(server, token)}
+        size={260}
+        marginSize={4}
+        bgColor="#ffffff"
+        fgColor="#000000"
+        level="M"
+        title="Pairing QR code"
+      />
       <button type="button" onClick={onDone}>
         Done
       </button>
