@@ -4,7 +4,7 @@
 """add assets.sale_price and assets.sale_date, recorded when an asset is retired
 
 Revision ID: b7e3f9a2c415
-Revises: d2c7a91f4b36
+Revises: a4e8c2f61d93
 Create Date: 2026-11-13 00:00:00.000000
 
 """
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'b7e3f9a2c415'
-down_revision: Union[str, None] = 'd2c7a91f4b36'
+down_revision: Union[str, None] = 'a4e8c2f61d93'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
