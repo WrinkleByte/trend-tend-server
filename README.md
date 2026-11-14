@@ -68,7 +68,7 @@ the instance admin. Point the mobile apps at the same address.
   ```
 - **Update**: back up, then `docker pull wrinklebyte/trend-tend-server`,
   remove the container and run the same `docker run` again. Migrations run
-  automatically. Pin a version tag (for example `:1.1.0`) instead of the
+  automatically. Pin a version tag (for example `:1.2.0`) instead of the
   default `latest` if you'd rather choose when to update.
 - **Settings** such as SMTP are environment variables (the `SMTP_*` names in
   [`.env.prod.example`](.env.prod.example)) or the admin settings page.
