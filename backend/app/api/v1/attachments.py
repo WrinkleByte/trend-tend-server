@@ -345,7 +345,14 @@ async def get_attachment_blob(
     attachment = await _get_owned_attachment(db, principal, attachment_id)
     if attachment.storage_backend == StorageBackendType.S3:
         return RedirectResponse(storage.url_for(attachment.storage_key))
-    data = await storage.get(attachment.storage_key)
+    try:
+        data = await storage.get(attachment.storage_key)
+    except FileNotFoundError:
+        # The row exists but its file doesn't (lost volume, partial restore,
+        # a database copied without its attachments). A 404 says "not here"
+        # and lets clients show a placeholder; an unhandled error here was a
+        # 500 that the mobile apps (before their own fix) crashed on.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file is missing")
     return _blob_response(data, attachment)
 
 
