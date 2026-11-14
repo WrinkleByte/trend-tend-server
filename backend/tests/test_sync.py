@@ -959,3 +959,27 @@ async def test_explicit_null_clears_the_sale(client, auth_headers):
     assert data["status"] == "active"
     assert data["sale_price"] is None
     assert data["sale_date"] is None
+
+
+async def test_negative_sale_price_push_is_rejected(client, auth_headers):
+    device = await _register_device(client, auth_headers, "App")
+    response = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device,
+            "changes": [
+                {
+                    "entity_type": "asset",
+                    "id": str(uuid.uuid4()),
+                    "base_version": 0,
+                    "client_updated_at": "2026-11-14T00:00:00Z",
+                    "data": {"asset_type": "vehicle", "name": "Wagon", "status": "archived", "sale_price": "-5.00"},
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    result = response.json()["results"][0]
+    assert result["status"] == "rejected"
+    assert result["reason"] == "validation_error"

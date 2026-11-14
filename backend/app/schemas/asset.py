@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.asset import AssetStatus, AssetType
 
@@ -69,7 +69,7 @@ class AssetCreate(BaseModel):
     notes: str | None = None
     purchase_date: date | None = None
     purchase_cost: Decimal | None = None
-    sale_price: Decimal | None = None
+    sale_price: Decimal | None = Field(default=None, ge=0)
     sale_date: date | None = None
     # Optional owner within the household — powers the client-side "only show
     # my stuff" filter. Not a permission: see Asset.owner_user_id. Verified to
@@ -91,7 +91,7 @@ class AssetUpdate(BaseModel):
     # an explicit null clears, leaving the key out leaves it unchanged
     # (update_asset checks model_fields_set). Un-retiring an asset, or
     # correcting a sale entered by mistake, needs that.
-    sale_price: Decimal | None = None
+    sale_price: Decimal | None = Field(default=None, ge=0)
     sale_date: date | None = None
     # None means "leave unchanged" here, same as every other field on this
     # partial-update schema — so there is deliberately no way to *clear* an

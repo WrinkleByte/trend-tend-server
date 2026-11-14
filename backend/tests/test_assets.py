@@ -319,3 +319,21 @@ async def test_sale_price_set_and_cleared_through_rest(client, auth_headers):
     )
     assert cleared.json()["sale_price"] is None
     assert cleared.json()["sale_date"] is None
+
+
+async def test_negative_sale_price_is_rejected(client, auth_headers):
+    created = await client.post(
+        "/api/v1/assets",
+        headers=auth_headers,
+        json={"asset_type": "vehicle", "name": "Wagon", "status": "archived", "sale_price": "-5.00"},
+    )
+    assert created.status_code == 422
+
+    created = await client.post("/api/v1/assets", headers=auth_headers, json={"asset_type": "vehicle", "name": "Wagon"})
+    asset_id = created.json()["id"]
+    patched = await client.patch(f"/api/v1/assets/{asset_id}", headers=auth_headers, json={"sale_price": "-5.00"})
+    assert patched.status_code == 422
+    # Zero is a real answer (scrapped for nothing), not an error.
+    patched = await client.patch(f"/api/v1/assets/{asset_id}", headers=auth_headers, json={"sale_price": "0"})
+    assert patched.status_code == 200
+    assert patched.json()["sale_price"] == "0.00"

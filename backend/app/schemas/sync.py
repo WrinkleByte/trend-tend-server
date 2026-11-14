@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.asset import AssetStatus, AssetType
 from app.models.attachment import StorageBackendType
@@ -140,7 +140,7 @@ class AssetSyncData(AttributedSyncData):
     # (model_fields_set) -- an old app saving an asset must not wipe a sale
     # price a newer one recorded. Newer clients always send both, null
     # included, so clearing one still syncs.
-    sale_price: Decimal | None = None
+    sale_price: Decimal | None = Field(default=None, ge=0)
     sale_date: date | None = None
     # Client-settable, unlike the inherited updated_by_user_id — assigning an
     # asset to a household member is a normal edit. _apply_change verifies the
