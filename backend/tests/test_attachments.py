@@ -485,3 +485,21 @@ async def test_cannot_link_another_households_attachment_or_record(client, auth_
         "/api/v1/attachments", headers=auth_headers, params={"record_id": record_id}
     )
     assert [a["id"] for a in still_linked.json()] == [attachment_id]
+
+
+async def test_blob_whose_file_is_missing_is_404_not_500(client, auth_headers):
+    from app.storage.factory import get_storage_backend
+
+    record_id = await _create_record(client, auth_headers)
+    upload = await client.post(
+        f"/api/v1/attachments?record_id={record_id}",
+        headers=auth_headers,
+        files={"file": ("car.jpg", b"\xff\xd8\xff", "image/jpeg")},
+    )
+    assert upload.status_code == 201
+    key = upload.json()["url"].rsplit("/blob/", 1)[1]
+    await get_storage_backend().delete(key)
+
+    blob = await client.get(f"/api/v1/attachments/{upload.json()['id']}/blob", headers=auth_headers)
+    assert blob.status_code == 404
+    assert blob.json()["detail"] == "Attachment file is missing"
