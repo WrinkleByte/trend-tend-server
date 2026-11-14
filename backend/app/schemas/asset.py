@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.asset import AssetStatus, AssetType
 
@@ -69,6 +69,8 @@ class AssetCreate(BaseModel):
     notes: str | None = None
     purchase_date: date | None = None
     purchase_cost: Decimal | None = None
+    sale_price: Decimal | None = Field(default=None, ge=0)
+    sale_date: date | None = None
     # Optional owner within the household — powers the client-side "only show
     # my stuff" filter. Not a permission: see Asset.owner_user_id. Verified to
     # be a member of this household by the endpoint before it's stored.
@@ -85,6 +87,12 @@ class AssetUpdate(BaseModel):
     status: AssetStatus | None = None
     purchase_date: date | None = None
     purchase_cost: Decimal | None = None
+    # Unlike the fields around them, these two can be cleared: sending
+    # an explicit null clears, leaving the key out leaves it unchanged
+    # (update_asset checks model_fields_set). Un-retiring an asset, or
+    # correcting a sale entered by mistake, needs that.
+    sale_price: Decimal | None = Field(default=None, ge=0)
+    sale_date: date | None = None
     # None means "leave unchanged" here, same as every other field on this
     # partial-update schema — so there is deliberately no way to *clear* an
     # owner through this field alone. AssetUpdate has no other nullable-to-
@@ -106,6 +114,8 @@ class AssetResponse(BaseModel):
     status: AssetStatus
     purchase_date: date | None
     purchase_cost: Decimal | None
+    sale_price: Decimal | None = None
+    sale_date: date | None = None
     # Set via POST /attachments?asset_id=..., cleared via
     # DELETE /assets/{id}/photo -- not settable directly through
     # AssetCreate/AssetUpdate, same reasoning as record_id on the

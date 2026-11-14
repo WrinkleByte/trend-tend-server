@@ -159,6 +159,12 @@ def _serialize_row(entity_type: str, obj, detail: object | None = None) -> dict:
     return base
 
 
+
+# Columns newer than the oldest clients still in use. On update, each is
+# written only when the pushed payload actually carries the key -- see the
+# comment at its use in _apply_change, and AssetSyncData.sale_price.
+_ADDED_LATER_FIELDS = frozenset({"sale_price", "sale_date"})
+
 async def _fetch_asset_detail(db: AsyncSession, asset: Asset) -> object | None:
     """Single-row counterpart to pull()'s batched detail fetch, for
     _apply_change's conflict-response path where only one asset's detail is
@@ -624,6 +630,12 @@ async def _apply_change(
                 new_version, server_updated_at = 1, row.updated_at
             else:
                 for field, value in base_data.items():
+                    # Fields added after clients shipped: an older app
+                    # leaves the key out entirely, which must not erase what
+                    # a newer one recorded (full-row semantics would
+                    # otherwise turn "I don't know this field" into null).
+                    if field in _ADDED_LATER_FIELDS and field not in parsed.model_fields_set:
+                        continue
                     setattr(existing, field, value)
                 existing.updated_by_device_id = device_id
                 existing.updated_by_user_id = principal.user_id

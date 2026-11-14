@@ -61,6 +61,9 @@ export interface Asset {
   status: AssetStatus;
   purchase_date: string | null;
   purchase_cost: number | null;
+  // What it sold for and when, recorded when retired. Both optional.
+  sale_price: number | null;
+  sale_date: string | null;
   // Set via POST /attachments?asset_id=..., cleared via
   // DELETE /assets/{id}/photo — not part of AssetCreateInput, same
   // reasoning as the backend's AssetCreate/AssetUpdate schemas.
@@ -91,6 +94,10 @@ export interface AssetCreateInput {
   status?: AssetStatus;
   purchase_date?: string | null;
   purchase_cost?: number | null;
+  // Unlike most fields here, null clears these and an absent key leaves
+  // them alone (backend AssetUpdate checks which keys were sent).
+  sale_price?: number | null;
+  sale_date?: string | null;
   owner_user_id?: string | null;
   vehicle_details?: Partial<VehicleDetails> | null;
   equipment_details?: Partial<EquipmentDetails> | null;

@@ -119,6 +119,8 @@ async def create_asset(
         notes=payload.notes,
         purchase_date=payload.purchase_date,
         purchase_cost=payload.purchase_cost,
+        sale_price=payload.sale_price,
+        sale_date=payload.sale_date,
         owner_user_id=payload.owner_user_id,
         updated_by_device_id=principal.device_id,
         updated_by_user_id=principal.user_id,
@@ -178,6 +180,10 @@ async def update_asset(
         value = getattr(payload, field)
         if value is not None:
             setattr(asset, field, value)
+    # Clearable: an explicit null clears, an absent key leaves it alone.
+    for field in ("sale_price", "sale_date"):
+        if field in payload.model_fields_set:
+            setattr(asset, field, getattr(payload, field))
     asset.updated_by_device_id = principal.device_id
     asset.updated_by_user_id = principal.user_id
     asset.version += 1
