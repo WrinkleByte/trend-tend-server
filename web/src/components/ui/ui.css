@@ -1,0 +1,380 @@
+/* SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+ * SPDX-License-Identifier: AGPL-3.0-only */
+
+/* Shared building blocks (components/ui/): page header, tabs, stat tiles,
+   row lists, empty state. New pages should be assembled from these rather
+   than adding page-specific layout rules. */
+
+.icon {
+  flex: none;
+}
+
+/* ---- Page header ---- */
+
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  margin: 0;
+}
+
+.page-subtitle {
+  margin-top: 6px;
+  color: var(--text);
+}
+
+.page-trail {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.page-trail a {
+  text-decoration: none;
+}
+
+.page-trail a:hover {
+  text-decoration: underline;
+}
+
+/* ---- Tabs that are links ---- */
+
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tab-nav a:hover {
+  color: var(--text-h);
+}
+
+.tab-nav a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tab-badge {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ---- Stat tiles ---- */
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-alt);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.stat-tile:hover {
+  border-color: var(--accent-border);
+}
+
+.stat-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value small {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stat-note {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.stat-tile-alert {
+  border-color: #dc2626;
+}
+
+.stat-tile-alert .stat-value {
+  color: #dc2626;
+}
+
+/* ---- Row lists (a list of things you can open) ---- */
+
+.row-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.row-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.row-link:hover {
+  background: var(--accent-bg);
+}
+
+.row-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+}
+
+.row-main strong {
+  color: var(--text-h);
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-meta {
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-meta-overdue {
+  color: #dc2626;
+}
+
+.row-meta-due_soon {
+  color: var(--accent);
+}
+
+.row-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.row-dot-overdue {
+  background: #dc2626;
+}
+
+.row-dot-due_soon {
+  background: var(--amber);
+}
+
+.quiet-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.panel-subheading {
+  margin: 22px 0 4px;
+  font-size: 12.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.empty-state {
+  padding: 36px 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.empty-state strong {
+  color: var(--text-h);
+  font-size: 17px;
+}
+
+.empty-state p {
+  margin-top: 8px;
+}
+
+/* ---- Home ---- */
+
+.home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.home-grid .panel {
+  margin-bottom: 0;
+}
+
+@media (max-width: 1000px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- Settings sidebar groups ---- */
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-group + .settings-group {
+  margin-top: 14px;
+}
+
+.settings-group-label {
+  padding: 0 16px 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.settings-sidebar a {
+  text-decoration: none;
+}
+
+/* ---- Asset page ---- */
+
+/* `hidden` alone loses to .asset-body's own display rule. */
+.asset-body[hidden] {
+  display: none;
+}
+
+.asset-detail-page .asset-header {
+  margin-bottom: 16px;
+}
+
+.asset-bottom .stat-row {
+  margin-bottom: 0;
+}
+
+@media (max-width: 700px) {
+  .settings-group {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .settings-group + .settings-group {
+    margin-top: 6px;
+  }
+
+  .settings-group-label {
+    flex-basis: 100%;
+    padding-left: 4px;
+  }
+
+  .stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .stat-value {
+    font-size: 21px;
+  }
+}
+
+/* ---- Phone-width overflow fixes ---- */
+
+/* A file picker is as wide as its button plus the file name, which is
+   wider than a phone screen. */
+input[type="file"] {
+  max-width: 100%;
+}
+
+@media (max-width: 700px) {
+  /* The fuel form's swipe row is an unwrapping inline-flex; let its inputs
+     shrink to the screen instead of pushing the page sideways. */
+  .fuel-swipe-row {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .fuel-swipe-row input {
+    flex: 1 1 120px;
+    min-width: 0;
+  }
+
+  .inline-form > input,
+  .inline-form > select {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 700px) {
+  /* Names matter more than one-line rows on a phone: let them wrap. */
+  .row-main strong {
+    white-space: normal;
+  }
+}

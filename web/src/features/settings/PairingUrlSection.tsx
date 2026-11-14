@@ -47,13 +47,10 @@ export function PairingUrlSection() {
   return (
     <section className="panel">
       <span className="panel-eyebrow">Instance admin</span>
-      <h2>Mobile Pairing URL</h2>
+      <h2>Server address for phones</h2>
       <p>
-        The address a phone can actually reach this server at — used to build the QR code below on the API Tokens
-        section. Leave blank if the web app and API share the same address (the default production setup); set it
-        explicitly if they&rsquo;re on different ports or hosts, such as this project&rsquo;s local dev/self-hosted
-        docker-compose stack (web and API published on different ports) — otherwise the QR code points a pairing
-        phone at the wrong service.
+        The address phones use to reach this server. It goes into the pairing QR code below. Leave it blank if
+        phones reach the server at the same address as this page; set it if they need a different host or port.
       </p>
       <form className="settings-form" onSubmit={handleSubmit}>
         <label>

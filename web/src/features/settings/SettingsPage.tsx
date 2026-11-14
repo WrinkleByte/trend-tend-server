@@ -1,62 +1,41 @@
 // SPDX-FileCopyrightText: 2026 WrinkleByte LLC
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useState } from "react";
-import { AdminHouseholdsSection } from "./AdminHouseholdsSection";
-import { ApiTokensPage } from "./ApiTokensPage";
-import { DangerZoneSection } from "./DangerZoneSection";
-import { DisplaySection } from "./DisplaySection";
-import { InstanceSettingsSection } from "./InstanceSettingsSection";
-import { RegistrationSection } from "./RegistrationSection";
-import { UserManagementSection } from "./UserManagementSection";
+import { NavLink, Navigate, useParams } from "react-router-dom";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { DEFAULT_SETTINGS_SECTION, SETTINGS_GROUPS } from "./sections";
+import { useIsInstanceAdmin } from "./useIsInstanceAdmin";
 
-const CATEGORIES = [
-  { id: "smtp", label: "SMTP" },
-  { id: "registration", label: "Registration" },
-  { id: "households", label: "Households" },
-  { id: "users", label: "User Management" },
-  { id: "api-tokens", label: "API Tokens" },
-  { id: "display", label: "Display" },
-  { id: "danger-zone", label: "Danger Zone" },
-] as const;
-
-type CategoryId = (typeof CATEGORIES)[number]["id"];
-
-/** Settings page shell — a left-hand category sidebar replacing what used
- * to be one long-scrolling page (SMTP config, households, user
- * management, API tokens, display preferences all stacked on top of each
- * other). Each category's own section component still self-hides on a
- * 403 (non-instance-admin) exactly as it did before this split — this
- * shell only decides which one is showing, it doesn't add its own
- * permission gating. */
+/** Settings shell: a grouped sidebar where every section has its own
+ * address (/settings/<section>), so sections can be linked and the back
+ * button works. The "Server" group is listed only for instance admins;
+ * its sections still hide themselves on a 403, so reaching one by typing
+ * the address shows nothing rather than an error. */
 export function SettingsPage() {
-  const [active, setActive] = useState<CategoryId>("smtp");
+  const { section } = useParams<{ section: string }>();
+  const isAdmin = useIsInstanceAdmin();
+
+  const groups = SETTINGS_GROUPS.filter((group) => !group.adminOnly || isAdmin);
+  const active = SETTINGS_GROUPS.flatMap((group) => group.sections).find((s) => s.id === section);
+  if (!active) return <Navigate to={`/settings/${DEFAULT_SETTINGS_SECTION}`} replace />;
 
   return (
     <div>
-      <h1>Settings</h1>
+      <PageHeader title="Settings" />
       <div className="settings-layout">
-        <nav className="settings-sidebar">
-          {CATEGORIES.map((category) => (
-            <button
-              key={category.id}
-              type="button"
-              className={category.id === active ? "active" : ""}
-              onClick={() => setActive(category.id)}
-            >
-              {category.label}
-            </button>
+        <nav className="settings-sidebar" aria-label="Settings sections">
+          {groups.map((group) => (
+            <div key={group.label} className="settings-group">
+              <span className="settings-group-label">{group.label}</span>
+              {group.sections.map((s) => (
+                <NavLink key={s.id} to={`/settings/${s.id}`} className={({ isActive }) => (isActive ? "active" : undefined)}>
+                  {s.label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
-        <div className="settings-content">
-          {active === "smtp" && <InstanceSettingsSection />}
-          {active === "registration" && <RegistrationSection />}
-          {active === "households" && <AdminHouseholdsSection />}
-          {active === "users" && <UserManagementSection />}
-          {active === "api-tokens" && <ApiTokensPage />}
-          {active === "display" && <DisplaySection />}
-          {active === "danger-zone" && <DangerZoneSection />}
-        </div>
+        <div className="settings-content">{active.element}</div>
       </div>
     </div>
   );

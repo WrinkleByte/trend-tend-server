@@ -40,7 +40,6 @@ export function ImportPage() {
 
   return (
     <div className="page-narrow">
-      <h1>Import</h1>
       <RestoreBackup onRestored={() => invalidateAllHouseholdData(queryClient)} />
       <FuellyImport
         assets={assets}

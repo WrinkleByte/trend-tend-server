@@ -1,0 +1,256 @@
+/* SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+ * SPDX-License-Identifier: AGPL-3.0-only */
+
+/* The signed-in app shell (features/layout/Layout.tsx).
+   Desktop: fixed sidebar + content. At 860px and below the sidebar is
+   replaced by a slim top bar and a bottom tab bar. */
+
+.shell {
+  --sidebar-width: 236px;
+  --tabbar-height: 60px;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-height: 100svh;
+  text-align: left;
+  background: var(--bg);
+}
+
+.shell-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 14px 16px;
+  background: linear-gradient(180deg, var(--navy-top), var(--navy-bottom));
+  color: var(--cream);
+  overflow-y: auto;
+}
+
+.shell-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 4px 10px 18px;
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.2;
+  color: var(--cream);
+  text-decoration: none;
+}
+
+.shell-brand img {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.shell-brand small {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #b9c2d4;
+  margin-top: 2px;
+}
+
+.shell-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shell-nav-account {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(244, 241, 234, 0.14);
+}
+
+.shell-nav a,
+.shell-nav button,
+.shell-sheet a,
+.shell-sheet button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #c3cbdb;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.shell-nav a:hover,
+.shell-nav button:hover,
+.shell-sheet a:hover,
+.shell-sheet button:hover {
+  background: rgba(244, 241, 234, 0.08);
+  color: var(--cream);
+}
+
+.shell-nav a.active,
+.shell-sheet a.active {
+  background: rgba(242, 169, 59, 0.16);
+  color: var(--amber);
+}
+
+.shell-nav a:focus-visible,
+.shell-nav button:focus-visible,
+.shell-tabbar a:focus-visible,
+.shell-tabbar button:focus-visible,
+.shell-sheet a:focus-visible,
+.shell-sheet button:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.shell-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100svh;
+}
+
+/* Phone-only pieces: hidden until the breakpoint below. */
+.shell-topbar,
+.shell-tabbar,
+.shell-sheet,
+.shell-sheet-backdrop {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .shell {
+    display: block;
+    padding-bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .shell-sidebar {
+    display: none;
+  }
+
+  .shell-main {
+    min-height: 0;
+  }
+
+  .shell-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    background: linear-gradient(180deg, var(--navy-top), var(--navy-bottom));
+    color: var(--cream);
+  }
+
+  .shell-topbar .shell-brand {
+    padding: 0;
+    font-size: 16px;
+  }
+
+  .shell-topbar .shell-brand img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .shell-topbar-household {
+    font-size: 13px;
+    color: #b9c2d4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .shell-tabbar {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 30;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    height: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--navy-bottom);
+    border-top: 1px solid rgba(244, 241, 234, 0.12);
+  }
+
+  /* Higher specificity than App.css's phone-width `button` padding bump. */
+  .shell-tabbar a,
+  .shell-tabbar button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    padding: 6px 2px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: #aab4c8;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .shell-tabbar a.active,
+  .shell-tabbar button.active {
+    color: var(--amber);
+  }
+
+  .shell-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  .shell-sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: fixed;
+    inset: auto 0 calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px)) 0;
+    z-index: 25;
+    padding: 14px 12px 12px;
+    border-radius: 18px 18px 0 0;
+    background: var(--navy-top);
+    box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.3);
+  }
+
+  .shell-sheet a,
+  .shell-sheet button {
+    padding: 13px 12px;
+    font-size: 15.5px;
+  }
+
+  .shell-sheet-title {
+    padding: 2px 12px 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #b9c2d4;
+  }
+}
+
+/* The global button rule gives hovered/pressed buttons a filled amber
+   background, which swallows the tab bar's icon and label. */
+.shell-tabbar button:hover,
+.shell-tabbar button.active,
+.shell-tabbar button:active {
+  background: transparent;
+}

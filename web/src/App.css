@@ -1,112 +1,8 @@
 /* SPDX-FileCopyrightText: 2026 WrinkleByte LLC
  * SPDX-License-Identifier: AGPL-3.0-only */
 
-/* Layout */
-.app-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 100svh;
-  text-align: left;
-  background: var(--bg);
-}
-
-.app-nav {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 14px 32px;
-  background: linear-gradient(180deg, var(--navy-top), var(--navy-bottom));
-  color: var(--cream);
-}
-
-.app-nav .brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 18px;
-  color: var(--cream);
-  text-decoration: none;
-}
-
-.app-nav .brand img {
-  width: 28px;
-  height: 28px;
-}
-
-.household-name {
-  color: #b9c2d4;
-  font-size: 14px;
-  padding-left: 8px;
-  border-left: 1px solid rgba(244, 241, 234, 0.2);
-}
-
-.app-nav nav {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-
-.app-nav nav a {
-  color: #b9c2d4;
-  font-weight: 600;
-  font-size: 14px;
-  text-decoration: none;
-  padding: 6px 0;
-  border-bottom: 2px solid transparent;
-}
-
-.app-nav nav a:hover {
-  color: var(--cream);
-}
-
-.app-nav nav a.active {
-  color: var(--amber);
-  border-bottom-color: var(--amber);
-}
-
-.app-nav nav button {
-  background: transparent;
-  border: 1px solid rgba(244, 241, 234, 0.3);
-  color: #b9c2d4;
-  font-size: 14px;
-  padding: 6px 14px;
-}
-
-.app-nav nav button:hover {
-  border-color: var(--cream);
-  color: var(--cream);
-}
-
-/* Mobile nav (hamburger + slide-out drawer) -- inert on desktop (hidden/
-   not rendered above the ≤700px breakpoint below), where the existing
-   .app-nav-links row above is what's actually shown. */
-.mobile-nav-toggle {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-}
-
-.mobile-nav-toggle span {
-  display: block;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--cream);
-}
-
-.mobile-nav-backdrop,
-.mobile-nav-drawer {
-  display: none;
-}
-
+/* Layout: the app shell (sidebar, top bar, bottom tab bar) lives in
+   features/layout/shell.css. */
 .app-content {
   width: 100%;
   max-width: var(--content-max);
@@ -154,7 +50,7 @@
   top: 24px;
 }
 
-.settings-sidebar button {
+.settings-sidebar a {
   text-align: left;
   background: transparent;
   border: none;
@@ -167,12 +63,12 @@
   cursor: pointer;
 }
 
-.settings-sidebar button:hover {
+.settings-sidebar a:hover {
   background: var(--accent-bg);
   color: var(--text-h);
 }
 
-.settings-sidebar button.active {
+.settings-sidebar a.active {
   border-left-color: var(--accent);
   background: var(--accent-bg);
   color: var(--accent);
@@ -195,13 +91,13 @@
     width: 100%;
   }
 
-  .settings-sidebar button {
+  .settings-sidebar a {
     border-left: none;
     border-bottom: 3px solid transparent;
     border-radius: var(--radius-md) var(--radius-md) 0 0;
   }
 
-  .settings-sidebar button.active {
+  .settings-sidebar a.active {
     border-bottom-color: var(--accent);
   }
 }
@@ -1208,79 +1104,6 @@ ul {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
-  }
-
-  /* Nav: hamburger + drawer replace the horizontal link row, which has
-     nowhere to go at this width (brand + household name + 5 links +
-     Log out on one unwrapping flex row). */
-  .app-nav {
-    padding: 12px 16px;
-  }
-
-  /* .app-nav .app-nav-links (not the bare .app-nav-links class alone):
-     the existing desktop rule this overrides is `.app-nav nav { display:
-     flex; ... }` (App.css:41-46), specificity 1 class + 1 element. A
-     lone `.app-nav-links { display: none; }` here has *lower*
-     specificity than that (1 class only) and loses regardless of
-     source order/media-query nesting -- confirmed as the actual cause
-     of the nav overflowing and dragging the whole page into horizontal
-     scroll on a phone. */
-  .app-nav .app-nav-links,
-  .app-nav > .household-name {
-    display: none;
-  }
-
-  .mobile-nav-toggle {
-    display: flex;
-  }
-
-  .mobile-nav-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    border: none;
-    padding: 0;
-    z-index: 100;
-  }
-
-  .mobile-nav-drawer {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 260px;
-    max-width: 80vw;
-    padding: 20px 16px;
-    background: var(--navy-bottom);
-    z-index: 101;
-    overflow-y: auto;
-  }
-
-  .mobile-nav-drawer a,
-  .mobile-nav-drawer button {
-    padding: 12px 8px;
-    font-size: 16px;
-    color: #b9c2d4;
-    text-decoration: none;
-    background: transparent;
-    border: none;
-    text-align: left;
-  }
-
-  .mobile-nav-drawer a.active {
-    color: var(--amber);
-  }
-
-  .mobile-nav-drawer .household-name {
-    display: block;
-    border-left: none;
-    padding: 0 8px 12px;
-    margin-bottom: 8px;
-    border-bottom: 1px solid rgba(244, 241, 234, 0.2);
   }
 
   /* Touch targets: every input/select/textarea/button in the app shares
