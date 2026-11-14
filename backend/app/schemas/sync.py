@@ -135,6 +135,13 @@ class AssetSyncData(AttributedSyncData):
     status: AssetStatus = AssetStatus.ACTIVE
     purchase_date: date | None = None
     purchase_cost: Decimal | None = None
+    # Added in 1.2. Clients older than that don't send these keys at all, so
+    # _apply_change only writes them when they are present in the payload
+    # (model_fields_set) -- an old app saving an asset must not wipe a sale
+    # price a newer one recorded. Newer clients always send both, null
+    # included, so clearing one still syncs.
+    sale_price: Decimal | None = None
+    sale_date: date | None = None
     # Client-settable, unlike the inherited updated_by_user_id — assigning an
     # asset to a household member is a normal edit. _apply_change verifies the
     # id names an actual member of the pushing household before storing it.

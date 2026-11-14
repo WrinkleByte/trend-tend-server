@@ -287,3 +287,35 @@ async def test_attribution_follows_whoever_edited_last(client, auth_headers):
     )
     assert updated.status_code == 200
     assert updated.json()["updated_by_user_id"] == erin_id
+
+
+async def test_sale_price_set_and_cleared_through_rest(client, auth_headers):
+    created = await client.post(
+        "/api/v1/assets",
+        headers=auth_headers,
+        json={"asset_type": "vehicle", "name": "Wagon", "purchase_cost": "20000.00"},
+    )
+    asset_id = created.json()["id"]
+    assert created.json()["sale_price"] is None
+
+    sold = await client.patch(
+        f"/api/v1/assets/{asset_id}",
+        headers=auth_headers,
+        json={"status": "archived", "sale_price": "8500.00", "sale_date": "2026-10-01"},
+    )
+    assert sold.status_code == 200
+    assert sold.json()["sale_price"] == "8500.00"
+    assert sold.json()["sale_date"] == "2026-10-01"
+
+    # Leaving the keys out leaves the sale alone...
+    renamed = await client.patch(f"/api/v1/assets/{asset_id}", headers=auth_headers, json={"name": "Old Wagon"})
+    assert renamed.json()["sale_price"] == "8500.00"
+
+    # ...and an explicit null clears it.
+    cleared = await client.patch(
+        f"/api/v1/assets/{asset_id}",
+        headers=auth_headers,
+        json={"status": "active", "sale_price": None, "sale_date": None},
+    )
+    assert cleared.json()["sale_price"] is None
+    assert cleared.json()["sale_date"] is None

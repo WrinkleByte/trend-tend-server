@@ -45,6 +45,13 @@ class Asset(SyncedEntityMixin, Base):
     status: Mapped[AssetStatus] = mapped_column(String(20), default=AssetStatus.ACTIVE, nullable=False)
     purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     purchase_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # What the asset sold for and when, recorded when it is retired. Both
+    # optional and independent of status: an asset can be retired without
+    # being sold (scrapped, given away), and a sale price can be filled in
+    # later. Clients net it out of total cost of ownership and stop the
+    # per-year figure at sale_date.
+    sale_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    sale_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Whose asset this is, within the household. A view filter only, NOT a
     # permission: every member can still see and edit every asset, and the
     # household remains the sole tenant boundary (no RLS or

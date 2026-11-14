@@ -854,3 +854,108 @@ async def test_push_accepts_an_owner_who_is_a_member(client, auth_headers):
     pull = await client.post("/api/v1/sync/pull", headers=auth_headers, json={"device_id": reader})
     change = next(c for c in pull.json()["changes"] if c["id"] == asset_id)
     assert change["data"]["owner_user_id"] == bob_id
+
+
+async def _push_asset(client, auth_headers, device_id, asset_id, base_version, data):
+    response = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_id,
+            "changes": [
+                {
+                    "entity_type": "asset",
+                    "id": asset_id,
+                    "base_version": base_version,
+                    "client_updated_at": "2026-11-13T00:00:00Z",
+                    "data": data,
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    result = response.json()["results"][0]
+    assert result["status"] == "accepted", result
+    return result
+
+
+async def _pulled_asset(client, auth_headers, device_id, asset_id) -> dict:
+    pull = await client.post("/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_id})
+    return next(c for c in pull.json()["changes"] if c["id"] == asset_id)["data"]
+
+
+async def test_sale_price_and_date_sync_via_push_and_pull(client, auth_headers):
+    new_app = await _register_device(client, auth_headers, "New App")
+    other = await _register_device(client, auth_headers, "Other")
+    asset_id = str(uuid.uuid4())
+    await _push_asset(
+        client,
+        auth_headers,
+        new_app,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Sold Wagon",
+            "status": "archived",
+            "purchase_cost": "20000.00",
+            "sale_price": "8500.00",
+            "sale_date": "2026-10-01",
+        },
+    )
+    data = await _pulled_asset(client, auth_headers, other, asset_id)
+    assert data["sale_price"] == "8500.00"
+    assert data["sale_date"] == "2026-10-01"
+
+
+async def test_older_client_omitting_sale_fields_does_not_erase_them(client, auth_headers):
+    """An app from before 1.2 doesn't know sale_price/sale_date and leaves
+    them out of its full-row push. Full-row semantics would turn that into
+    null; the server keeps the stored values instead."""
+    new_app = await _register_device(client, auth_headers, "New App")
+    old_app = await _register_device(client, auth_headers, "Old App")
+    asset_id = str(uuid.uuid4())
+    full = {
+        "asset_type": "vehicle",
+        "name": "Sold Wagon",
+        "status": "archived",
+        "sale_price": "8500.00",
+        "sale_date": "2026-10-01",
+    }
+    first = await _push_asset(client, auth_headers, new_app, asset_id, 0, full)
+
+    # The old app renames it, knowing nothing about the sale.
+    await _push_asset(
+        client,
+        auth_headers,
+        old_app,
+        asset_id,
+        first["new_version"],
+        {"asset_type": "vehicle", "name": "Sold Wagon (renamed)", "status": "archived"},
+    )
+    data = await _pulled_asset(client, auth_headers, new_app, asset_id)
+    assert data["name"] == "Sold Wagon (renamed)"
+    assert data["sale_price"] == "8500.00"
+    assert data["sale_date"] == "2026-10-01"
+
+
+async def test_explicit_null_clears_the_sale(client, auth_headers):
+    """Un-retiring, or correcting a sale entered by mistake: a client that
+    knows the fields sends null and the server clears them."""
+    device = await _register_device(client, auth_headers, "New App")
+    other = await _register_device(client, auth_headers, "Other")
+    asset_id = str(uuid.uuid4())
+    sold = {"asset_type": "vehicle", "name": "Wagon", "status": "archived", "sale_price": "100.00", "sale_date": "2026-10-01"}
+    first = await _push_asset(client, auth_headers, device, asset_id, 0, sold)
+    await _push_asset(
+        client,
+        auth_headers,
+        device,
+        asset_id,
+        first["new_version"],
+        {"asset_type": "vehicle", "name": "Wagon", "status": "active", "sale_price": None, "sale_date": None},
+    )
+    data = await _pulled_asset(client, auth_headers, other, asset_id)
+    assert data["status"] == "active"
+    assert data["sale_price"] is None
+    assert data["sale_date"] is None
