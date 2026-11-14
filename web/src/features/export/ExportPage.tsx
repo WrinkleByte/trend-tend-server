@@ -105,7 +105,6 @@ export function ExportPage() {
 
   return (
     <div className="page-narrow">
-      <h1>Export</h1>
       <p>Download every record in your household — assets, fuel logs, service history, and maintenance schedules.</p>
 
       <section className="panel" style={{ marginTop: '20px' }}>

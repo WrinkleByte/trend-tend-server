@@ -3,109 +3,135 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { getCurrentHousehold } from "../../api/households";
+import { FEATURES } from "../../app/features";
+import type { NavEntry } from "../../app/featureTypes";
 import { useAuthStore } from "../../auth/authStore";
 import { LegalNotice } from "../../components/LegalNotice";
+import { Icon } from "../../components/ui/Icon";
 
-function navLinkClass({ isActive }: { isActive: boolean }) {
-  return isActive ? "active" : undefined;
+const NAV: NavEntry[] = FEATURES.flatMap((feature) => (feature.nav ? [feature.nav] : []));
+const PRIMARY = NAV.filter((entry) => entry.placement === "primary");
+const ACCOUNT = NAV.filter((entry) => entry.placement === "account");
+
+function NavItem({ entry }: { entry: NavEntry }) {
+  const { pathname } = useLocation();
+  const alsoActive = entry.alsoActiveUnder != null && pathname.startsWith(entry.alsoActiveUnder);
+  return (
+    <NavLink
+      to={entry.to}
+      end={entry.end}
+      className={({ isActive }) => (isActive || alsoActive ? "active" : undefined)}
+    >
+      <Icon name={entry.icon} />
+      <span>{entry.label}</span>
+    </NavLink>
+  );
 }
 
+/** The signed-in app shell. Desktop: a fixed sidebar with the everyday pages
+ * at the top and the occasional ones (import/export, settings, log out) at
+ * the bottom. Phone: a slim top bar plus a bottom tab bar within thumb
+ * reach, whose "More" tab opens a sheet with the occasional ones. Both are
+ * built from the feature registry, so a new feature shows up in each
+ * without touching this file. Which of the two is visible is decided purely
+ * by shell.css's breakpoint. */
 export function Layout() {
   const clear = useAuthStore((s) => s.clear);
   const { data: household } = useQuery({ queryKey: ["household"], queryFn: getCurrentHousehold });
-  // Mobile-only slide-out drawer (see App.css's ≤700px block) — the
-  // hamburger button that toggles this is itself hidden above that
-  // width, so this state is simply unused/inert on desktop rather than
-  // needing its own width check here.
-  const [showingMobileNav, setShowingMobileNav] = useState(false);
+  const [showingMore, setShowingMore] = useState(false);
+  const location = useLocation();
 
-  // Escape-to-close. If the viewport is resized past the breakpoint
-  // while the drawer is open (e.g. a tablet rotated to landscape),
-  // App.css's ≤700px rule forces the drawer/backdrop/toggle to
-  // `display: none` regardless of this state -- no resize listener
-  // needed to avoid a "stuck open" drawer, the CSS handles it.
+  // Any navigation closes the sheet, including the browser's back button.
+  useEffect(() => setShowingMore(false), [location.pathname]);
+
   useEffect(() => {
-    if (!showingMobileNav) return;
+    if (!showingMore) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setShowingMobileNav(false);
+      if (e.key === "Escape") setShowingMore(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showingMobileNav]);
+  }, [showingMore]);
 
-  const navLinks = (
-    <>
-      <NavLink to="/" end className={navLinkClass} onClick={() => setShowingMobileNav(false)}>
-        Assets
-      </NavLink>
-      <NavLink to="/household" className={navLinkClass} onClick={() => setShowingMobileNav(false)}>
-        Household
-      </NavLink>
-      <NavLink to="/import" className={navLinkClass} onClick={() => setShowingMobileNav(false)}>
-        Import
-      </NavLink>
-      <NavLink to="/export" className={navLinkClass} onClick={() => setShowingMobileNav(false)}>
-        Export
-      </NavLink>
-      <NavLink to="/settings" className={navLinkClass} onClick={() => setShowingMobileNav(false)}>
-        Settings
-      </NavLink>
-      <button
-        type="button"
-        onClick={() => {
-          setShowingMobileNav(false);
-          clear();
-        }}
-      >
-        Log out
-      </button>
-    </>
-  );
+  const onAccountPage = ACCOUNT.some((entry) => location.pathname.startsWith(entry.to));
 
   return (
-    <div className="app-shell">
+    <div className="shell">
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
-      <header className="app-nav">
+
+      <aside className="shell-sidebar">
+        <Link to="/" className="shell-brand">
+          <img src="/icon-192.png" alt="" />
+          <span>
+            Trend &amp; Tend
+            {household && <small>{household.name}</small>}
+          </span>
+        </Link>
+        <nav className="shell-nav" aria-label="Main">
+          {PRIMARY.map((entry) => (
+            <NavItem key={entry.to} entry={entry} />
+          ))}
+        </nav>
+        <nav className="shell-nav shell-nav-account" aria-label="Account">
+          {ACCOUNT.map((entry) => (
+            <NavItem key={entry.to} entry={entry} />
+          ))}
+          <button type="button" onClick={clear}>
+            <Icon name="logout" />
+            <span>Log out</span>
+          </button>
+        </nav>
+      </aside>
+
+      <header className="shell-topbar">
+        <Link to="/" className="shell-brand">
+          <img src="/icon-192.png" alt="" />
+          <span>Trend &amp; Tend</span>
+        </Link>
+        {household && <span className="shell-topbar-household">{household.name}</span>}
+      </header>
+
+      <div className="shell-main">
+        <main className="app-content" id="main-content" tabIndex={-1}>
+          <Outlet />
+        </main>
+        <LegalNotice />
+      </div>
+
+      <nav className="shell-tabbar" aria-label="Main">
+        {PRIMARY.map((entry) => (
+          <NavItem key={entry.to} entry={entry} />
+        ))}
         <button
           type="button"
-          className="mobile-nav-toggle"
-          aria-label="Menu"
-          aria-expanded={showingMobileNav}
-          onClick={() => setShowingMobileNav(true)}
+          className={onAccountPage || showingMore ? "active" : undefined}
+          aria-expanded={showingMore}
+          onClick={() => setShowingMore(!showingMore)}
         >
-          <span />
-          <span />
-          <span />
+          <Icon name="more" />
+          <span>More</span>
         </button>
-        <Link to="/" className="brand">
-          <img src="/icon-192.png" alt="" />
-          Trend & Tend
-        </Link>
-        {household && <span className="household-name">{household.name}</span>}
-        <nav className="app-nav-links">{navLinks}</nav>
-      </header>
-      {showingMobileNav && (
+      </nav>
+
+      {showingMore && (
         <>
-          <button
-            type="button"
-            className="mobile-nav-backdrop"
-            aria-label="Close menu"
-            onClick={() => setShowingMobileNav(false)}
-          />
-          <nav className="mobile-nav-drawer">
-            {household && <span className="household-name">{household.name}</span>}
-            {navLinks}
+          <button type="button" className="shell-sheet-backdrop" aria-label="Close menu" onClick={() => setShowingMore(false)} />
+          <nav className="shell-sheet" aria-label="More">
+            {household && <span className="shell-sheet-title">{household.name}</span>}
+            {ACCOUNT.map((entry) => (
+              <NavItem key={entry.to} entry={entry} />
+            ))}
+            <button type="button" onClick={clear}>
+              <Icon name="logout" />
+              <span>Log out</span>
+            </button>
           </nav>
         </>
       )}
-      <main className="app-content" id="main-content" tabIndex={-1}>
-        <Outlet />
-      </main>
-      <LegalNotice />
     </div>
   );
 }

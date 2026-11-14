@@ -3,7 +3,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { deleteAsset, getAsset, listAssets, updateAsset } from "../../api/assets";
 import { useHouseholdMembers } from "../household/useHouseholdMembers";
 import type { AssetCreateInput } from "../../api/types";
@@ -14,12 +14,14 @@ import { SchedulesSection } from "../schedules/SchedulesSection";
 import { FuelLogsSection } from "../trips/FuelLogsSection";
 import { TripLogsSection } from "../trips/TripLogsSection";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
+import { TabNav, type TabItem } from "../../components/ui/TabNav";
+import { AssetOverview } from "./AssetOverview";
 import { AssetProfilePhoto } from "./AssetProfilePhoto";
 import { ASSET_TYPES } from "./assetTypes";
 import { WHOLE_NUMBER_INPUT } from "../../components/wholeNumberInput";
 
 export function AssetDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id, tab } = useParams<{ id: string; tab?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -80,7 +82,7 @@ export function AssetDetailPage() {
     mutationFn: () => deleteAsset(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assets"] });
-      navigate("/");
+      navigate("/inventory");
     },
   });
 
@@ -143,8 +145,35 @@ export function AssetDetailPage() {
 
   const assetTypeLabel = ASSET_TYPES.find((t) => t.value === asset.asset_type)?.label ?? asset.asset_type;
 
+  // One tab per kind of record, each a real address (/assets/<id>/<tab>).
+  // The page used to stack all of these in a single scroll several screens
+  // long. The edit form's state lives in this component, which stays
+  // mounted across tab changes, so unsaved edits survive a look at another
+  // tab.
+  const base = `/assets/${asset.id}`;
+  const isVehicle = asset.asset_type === "vehicle";
+  const tabs: (TabItem & { key: string })[] = [
+    { key: "overview", to: base, label: "Overview", end: true },
+    { key: "service", to: `${base}/service`, label: "Service" },
+    ...(isVehicle
+      ? [
+          { key: "fuel", to: `${base}/fuel`, label: "Fuel" },
+          { key: "trips", to: `${base}/trips`, label: "Trips" },
+        ]
+      : []),
+    { key: "reminders", to: `${base}/reminders`, label: "Reminders" },
+    ...(asset.asset_type === "valuable" ? [{ key: "documents", to: `${base}/documents`, label: "Documents" }] : []),
+    { key: "details", to: `${base}/details`, label: "Details" },
+  ];
+  const activeTab = tab ?? "overview";
+  if (!tabs.some((t) => t.key === activeTab)) return <Navigate to={base} replace />;
+
   return (
     <div className="asset-detail-page">
+      <nav className="page-trail" aria-label="Breadcrumb">
+        <Link to="/inventory">Assets</Link>
+        <span aria-hidden="true">/</span>
+      </nav>
       <header className="asset-header">
         <div className="asset-header-left">
           <div className="header-top-row">
@@ -168,7 +197,22 @@ export function AssetDetailPage() {
         </div>
       </header>
 
-      <form className="asset-body" onSubmit={handleSubmit}>
+      <TabNav label="Asset sections" items={tabs} />
+
+      {activeTab === "overview" && (
+        <div className="asset-bottom">
+          <AssetOverview asset={asset} />
+          <section className="asset-detail-panel">
+            <MaintenanceAlertsSection
+              assetId={asset.id}
+              assetType={asset.asset_type}
+              currentUsage={asset.vehicle_details?.current_mileage ?? null}
+            />
+          </section>
+        </div>
+      )}
+
+      <form className="asset-body" onSubmit={handleSubmit} hidden={activeTab !== "details"}>
         <section className="asset-info-panel">
           <AssetProfilePhoto asset={asset} />
 
@@ -471,13 +515,11 @@ export function AssetDetailPage() {
                   <dd>{nameFor(asset.owner_user_id) ?? "Unassigned"}</dd>
                 </>
               )}
-              <dt>Sync version</dt>
-              <dd>v{asset.version}</dd>
               {asset.purchase_cost != null && (
                 <>
                   <dt>Purchase cost</dt>
                   <dd>
-                    ${asset.purchase_cost.toLocaleString(undefined, {
+                    ${Number(asset.purchase_cost).toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
@@ -510,20 +552,17 @@ export function AssetDetailPage() {
       </form>
 
       <div className="asset-bottom">
-        <section className="asset-detail-panel">
-          <MaintenanceRecordsSection assetId={asset.id} assetType={asset.asset_type} />
-        </section>
-        <section className="asset-detail-panel">
-          <MaintenanceAlertsSection
-            assetId={asset.id}
-            assetType={asset.asset_type}
-            currentUsage={asset.vehicle_details?.current_mileage ?? null}
-          />
-        </section>
-        <section className="asset-detail-panel">
-          <SchedulesSection assetId={asset.id} assetType={asset.asset_type} />
-        </section>
-        {asset.asset_type === "valuable" && (
+        {activeTab === "service" && (
+          <section className="asset-detail-panel">
+            <MaintenanceRecordsSection assetId={asset.id} assetType={asset.asset_type} />
+          </section>
+        )}
+        {activeTab === "reminders" && (
+          <section className="asset-detail-panel">
+            <SchedulesSection assetId={asset.id} assetType={asset.asset_type} />
+          </section>
+        )}
+        {activeTab === "documents" && (
           <section className="asset-detail-panel">
             <h2>Documents &amp; Receipts</h2>
             <AttachmentsSection
@@ -534,15 +573,15 @@ export function AssetDetailPage() {
             />
           </section>
         )}
-        {asset.asset_type === "vehicle" && (
-          <>
-            <section className="asset-detail-panel">
-              <TripLogsSection assetId={asset.id} />
-            </section>
-            <section className="asset-detail-panel">
-              <FuelLogsSection assetId={asset.id} />
-            </section>
-          </>
+        {activeTab === "trips" && (
+          <section className="asset-detail-panel">
+            <TripLogsSection assetId={asset.id} />
+          </section>
+        )}
+        {activeTab === "fuel" && (
+          <section className="asset-detail-panel">
+            <FuelLogsSection assetId={asset.id} />
+          </section>
         )}
       </div>
     </div>

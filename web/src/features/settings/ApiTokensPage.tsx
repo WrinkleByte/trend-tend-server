@@ -75,10 +75,10 @@ export function ApiTokensPage() {
       <PairingUrlSection />
 
       <section className="panel">
-        <h2>API tokens</h2>
+        <h2>Pair a phone or tablet</h2>
         <p>
-          Pair a mobile app to this household by generating a token here and entering it — or scanning the QR
-          code below — in the app&rsquo;s sync settings.
+          Create a pairing code here, then scan its QR code (or type the code) in the app&rsquo;s sync
+          settings. Each device gets its own code, so a lost phone can be removed without affecting the others.
         </p>
 
         {justCreated && <PairingCodeReveal token={justCreated} onDone={() => setJustCreated(null)} />}
@@ -86,7 +86,7 @@ export function ApiTokensPage() {
         <form className="inline-form" onSubmit={handleSubmit}>
           <input placeholder="Token name, e.g. My iPhone" value={name} onChange={(e) => setName(e.target.value)} />
           <button type="submit" disabled={createMutation.isPending}>
-            Generate token
+            Create pairing code
           </button>
         </form>
 
