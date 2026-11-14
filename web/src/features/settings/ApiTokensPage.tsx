@@ -3,14 +3,17 @@
 
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { QRCodeSVG } from "qrcode.react";
-import { createApiToken, deleteApiToken, listApiTokens, revokeApiToken } from "../../api/apiTokens";
-import { getInstanceSettings } from "../../api/instanceSettings";
+import {
+  assignApiToken,
+  createApiToken,
+  deleteApiToken,
+  listApiTokens,
+  revokeApiToken,
+} from "../../api/apiTokens";
+import { getCurrentHousehold, listMembers } from "../../api/households";
+import { StatusMessage } from "../../components/StatusMessage";
+import { PairingCodeReveal } from "./PairingCodeReveal";
 import { PairingUrlSection } from "./PairingUrlSection";
-
-function buildPairingPayload(server: string, token: string): string {
-  return JSON.stringify({ v: 1, server, token });
-}
 
 /** The "API Tokens" settings category — pairing-URL config plus token
  * generate/list/revoke/delete. Was the whole /settings page before the
@@ -19,17 +22,29 @@ function buildPairingPayload(server: string, token: string): string {
 export function ApiTokensPage() {
   const queryClient = useQueryClient();
   const { data: tokens, isLoading } = useQuery({ queryKey: ["api-tokens"], queryFn: listApiTokens });
-  // 403s for a non-instance-admin generating their own token (this feature
-  // isn't admin-gated) -- React Query just leaves `data` undefined rather
-  // than throwing, so this falls through to the window.location.origin
-  // fallback below exactly like "not configured" does.
-  const { data: instanceSettings } = useQuery({
-    queryKey: ["instance-settings"],
-    queryFn: getInstanceSettings,
-    retry: false,
-  });
   const [name, setName] = useState("");
   const [justCreated, setJustCreated] = useState<string | null>(null);
+
+  // Owners can move a key to another member (Vikunja #165): the phone it's
+  // already paired on becomes that person's, no re-pairing.
+  const { data: household } = useQuery({ queryKey: ["household"], queryFn: getCurrentHousehold });
+  const isOwner = household?.my_role === "owner";
+  const { data: members } = useQuery({ queryKey: ["members"], queryFn: listMembers, enabled: isOwner });
+  const otherMembers = members?.filter((m) => m.user_id !== household?.my_user_id) ?? [];
+  const [assignTarget, setAssignTarget] = useState<Record<string, string>>({});
+  const [assignedNote, setAssignedNote] = useState<string | null>(null);
+
+  const assignMutation = useMutation({
+    mutationFn: ({ tokenId, userId }: { tokenId: string; userId: string }) => assignApiToken(tokenId, userId),
+    onSuccess: (token, { userId }) => {
+      const who = members?.find((m) => m.user_id === userId)?.display_name ?? "them";
+      setAssignedNote(
+        `\u201c${token.name}\u201d now belongs to ${who}. A device paired with it syncs as ${who} from its next sync; it now appears under ${who}\u2019s devices on the Household page.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["api-tokens"] });
+      queryClient.invalidateQueries({ queryKey: ["member-api-tokens"] });
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: () => createApiToken(name),
@@ -66,20 +81,7 @@ export function ApiTokensPage() {
           code below — in the app&rsquo;s sync settings.
         </p>
 
-        {justCreated && (
-          <div className="token-reveal">
-            <p>Copy this token now — it won&rsquo;t be shown again.</p>
-            <code>{justCreated}</code>
-            <p>Or scan this code from the mobile app&rsquo;s pairing screen:</p>
-            <QRCodeSVG
-              value={buildPairingPayload(instanceSettings?.public_api_url || window.location.origin, justCreated)}
-              size={200}
-            />
-            <button type="button" onClick={() => setJustCreated(null)}>
-              Done
-            </button>
-          </div>
-        )}
+        {justCreated && <PairingCodeReveal token={justCreated} onDone={() => setJustCreated(null)} />}
 
         <form className="inline-form" onSubmit={handleSubmit}>
           <input placeholder="Token name, e.g. My iPhone" value={name} onChange={(e) => setName(e.target.value)} />
@@ -88,11 +90,18 @@ export function ApiTokensPage() {
           </button>
         </form>
 
+        {assignedNote && <StatusMessage>{assignedNote}</StatusMessage>}
+        {assignMutation.isError && <StatusMessage>{(assignMutation.error as Error).message}</StatusMessage>}
         {isLoading && <p>Loading…</p>}
         <ul className="token-list">
           {tokens?.map((token) => (
             <li key={token.id}>
-              <span>{token.name}</span>
+              <span>
+                {token.name}
+                {token.created_by_name && (
+                  <span className="token-created-by"> (set up by {token.created_by_name})</span>
+                )}
+              </span>
               <span>
                 {token.revoked_at
                   ? "Revoked"
@@ -100,6 +109,30 @@ export function ApiTokensPage() {
                     ? `Last used ${token.last_used_at}`
                     : "Never used"}
               </span>
+              {!token.revoked_at && isOwner && otherMembers.length > 0 && (
+                <span className="token-assign">
+                  <select
+                    aria-label={`Assign ${token.name} to`}
+                    value={assignTarget[token.id] ?? ""}
+                    onChange={(e) => setAssignTarget({ ...assignTarget, [token.id]: e.target.value })}
+                  >
+                    <option value="">Assign to&hellip;</option>
+                    {otherMembers.map((m) => (
+                      <option key={m.user_id} value={m.user_id}>
+                        {m.display_name}
+                        {m.email ? ` (${m.email})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!assignTarget[token.id] || assignMutation.isPending}
+                    onClick={() => assignMutation.mutate({ tokenId: token.id, userId: assignTarget[token.id] })}
+                  >
+                    Assign
+                  </button>
+                </span>
+              )}
               {!token.revoked_at && (
                 <button type="button" className="danger" onClick={() => revokeMutation.mutate(token.id)}>
                   Revoke

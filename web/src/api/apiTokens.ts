@@ -22,3 +22,9 @@ export function revokeApiToken(id: string): Promise<void> {
 export function deleteApiToken(id: string): Promise<void> {
   return apiFetch(`/api-tokens/${id}/permanently`, { method: "DELETE" });
 }
+
+/** Owner only: move a key to another member. A device already paired with
+ * it syncs as that member from its next sync, no re-pairing. */
+export function assignApiToken(id: string, userId: string): Promise<ApiTokenSummary> {
+  return apiFetch(`/api-tokens/${id}`, { method: "PATCH", body: JSON.stringify({ user_id: userId }) });
+}

@@ -24,6 +24,13 @@ class ApiToken(Base):
         UUID(as_uuid=True), ForeignKey("households.id"), nullable=False, index=True
     )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # Who made the key, when that isn't the user it belongs to: a household
+    # owner or instance admin pairing a family member's phone for them. NULL
+    # for keys people made for themselves (every key before this column
+    # existed). See households.py's create_member_api_token.
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(200), unique=True, nullable=False, index=True)
     scopes: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)

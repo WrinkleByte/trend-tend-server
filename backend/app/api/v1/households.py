@@ -11,7 +11,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_principal
+from app.api.v1.api_tokens import token_responses
 from app.config import get_settings
+from app.core.api_token_issuing import (
+    app_only_email,
+    issue_api_token,
+    notify_key_issued_for_you,
+    public_email,
+    require_membership,
+)
 from app.core.email import send_email
 from app.core.household_deletion import delete_household_data, wipe_household_data
 from app.core.instance_settings import get_or_create_instance_settings
@@ -21,6 +29,7 @@ from app.core.security import (
     generate_invite_token,
 )
 from app.db.session import get_db
+from app.models.api_token import ApiToken
 from app.models.household import (
     Household,
     HouseholdInvite,
@@ -30,9 +39,15 @@ from app.models.household import (
 )
 from app.models.mixins import utcnow
 from app.models.user import User
+from app.schemas.api_token import (
+    ApiTokenCreateResponse,
+    ApiTokenResponse,
+    MemberApiTokenCreate,
+)
 from app.schemas.auth import TokenResponse
 from app.schemas.household import (
     AcceptInviteRequest,
+    AppOnlyMemberCreate,
     HouseholdMemberResponse,
     HouseholdResponse,
     HouseholdSettingsUpdate,
@@ -131,16 +146,18 @@ async def list_members(
         .where(HouseholdMembership.household_id == principal.household_id)
         .order_by(HouseholdMembership.joined_at)
     )
-    return [
-        HouseholdMemberResponse(
-            user_id=user.id,
-            email=user.email,
-            display_name=user.display_name,
-            role=membership.role,
-            joined_at=membership.joined_at,
-        )
-        for membership, user in result.all()
-    ]
+    return [_member_response(membership, user) for membership, user in result.all()]
+
+
+def _member_response(membership: HouseholdMembership, user: User) -> HouseholdMemberResponse:
+    return HouseholdMemberResponse(
+        user_id=user.id,
+        email=public_email(user.email),
+        display_name=user.display_name,
+        role=membership.role,
+        joined_at=membership.joined_at,
+        has_login=user.password_hash is not None,
+    )
 
 
 @router.delete("/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -168,6 +185,125 @@ async def remove_member(
 
     await db.delete(membership)
     await db.commit()
+
+
+@router.post("/members", response_model=HouseholdMemberResponse, status_code=status.HTTP_201_CREATED)
+async def add_app_only_member(
+    payload: AppOnlyMemberCreate,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> HouseholdMemberResponse:
+    """Adds a family member who won't have a web account of their own: no
+    password, so they can't sign in on the web; the owner pairs their phone
+    with a key made for them (create_member_api_token below), and that phone
+    then syncs as them. Someone who wants their own web login should get an
+    invite instead (POST /invites), which this refuses to shadow: an email
+    that already has an account is a 409, not a second account."""
+    _require_owner(principal)
+
+    if payload.email is not None:
+        existing = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
+        if existing is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "That email already has an account. Send them an invite instead.",
+            )
+
+    user_id = uuid.uuid4()
+    user = User(
+        id=user_id,
+        email=payload.email or app_only_email(user_id),
+        password_hash=None,
+        display_name=payload.display_name.strip(),
+    )
+    membership = HouseholdMembership(
+        id=uuid.uuid4(),
+        household_id=principal.household_id,
+        user_id=user_id,
+        role=payload.role,
+        invited_by_user_id=principal.user_id,
+    )
+    # The models declare no relationship between them, so the unit of work
+    # can't order the two inserts itself: flush the user before the
+    # membership that references it.
+    db.add(user)
+    await db.flush()
+    db.add(membership)
+    await db.commit()
+    await db.refresh(membership)
+    return _member_response(membership, user)
+
+
+@router.post(
+    "/members/{user_id}/api-tokens",
+    response_model=ApiTokenCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_member_api_token(
+    user_id: uuid.UUID,
+    payload: MemberApiTokenCreate,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> ApiTokenCreateResponse:
+    """The owner makes a pairing key for another member of this household,
+    so a device paired with it syncs as that member (see
+    app/core/api_token_issuing.py). Recorded as created by the owner, and
+    the member is emailed if they have a real address."""
+    _require_owner(principal)
+    await require_membership(db, principal.household_id, user_id)
+    api_token, raw_token = await issue_api_token(
+        db,
+        household_id=principal.household_id,
+        user_id=user_id,
+        name=payload.name,
+        issued_by_user_id=principal.user_id,
+        expires_at=payload.expires_at,
+    )
+    await notify_key_issued_for_you(db, api_token)
+    return ApiTokenCreateResponse.model_validate({**api_token.__dict__, "token": raw_token})
+
+
+@router.get("/members/{user_id}/api-tokens", response_model=list[ApiTokenResponse])
+async def list_member_api_tokens(
+    user_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> list[ApiTokenResponse]:
+    """Every key a member has in this household, whoever made it, so the
+    owner can see and revoke a lost phone's key."""
+    _require_owner(principal)
+    await require_membership(db, principal.household_id, user_id)
+    result = await db.execute(
+        select(ApiToken)
+        .where(ApiToken.household_id == principal.household_id, ApiToken.user_id == user_id)
+        .order_by(ApiToken.created_at.desc())
+    )
+    return await token_responses(db, list(result.scalars().all()))
+
+
+@router.delete("/members/{user_id}/api-tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_member_api_token(
+    user_id: uuid.UUID,
+    token_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Revoke a member's key. Idempotent, like revoking your own."""
+    _require_owner(principal)
+    token = (
+        await db.execute(
+            select(ApiToken).where(
+                ApiToken.id == token_id,
+                ApiToken.household_id == principal.household_id,
+                ApiToken.user_id == user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if token is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "API token not found")
+    if token.revoked_at is None:
+        token.revoked_at = utcnow()
+        await db.commit()
 
 
 @router.post("/invites", response_model=InviteCreateResponse, status_code=status.HTTP_201_CREATED)

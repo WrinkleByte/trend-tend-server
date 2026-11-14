@@ -3,16 +3,135 @@
 
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { assignApiToken } from "../../api/apiTokens";
 import {
+  addAppOnlyMember,
   createInvite,
+  createMemberApiToken,
   getCurrentHousehold,
   listInvites,
+  listMemberApiTokens,
   listMembers,
   removeMember,
   revokeInvite,
+  revokeMemberApiToken,
 } from "../../api/households";
-import type { HouseholdRole } from "../../api/types";
+import type { HouseholdMember, HouseholdRole } from "../../api/types";
 import { StatusMessage } from "../../components/StatusMessage";
+import { PairingCodeReveal } from "../settings/PairingCodeReveal";
+
+/** One member's devices (their API keys, whoever made them), for the owner:
+ * pair a new phone or tablet as this member, or revoke a lost one. Pairing
+ * a device for someone means it syncs as them -- the point for a family
+ * where not everyone wants a web account (Vikunja #165). */
+function MemberDevices({
+  member,
+  isSelf,
+  members,
+  myUserId,
+}: {
+  member: HouseholdMember;
+  isSelf: boolean;
+  members: HouseholdMember[];
+  myUserId: string | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const queryKey = ["member-api-tokens", member.user_id];
+  const { data: tokens } = useQuery({ queryKey, queryFn: () => listMemberApiTokens(member.user_id) });
+  const [deviceName, setDeviceName] = useState("");
+  const [justCreated, setJustCreated] = useState<string | null>(null);
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createMemberApiToken(member.user_id, deviceName.trim() || `${member.display_name}\u2019s phone`),
+    onSuccess: (token) => {
+      setJustCreated(token.token);
+      setDeviceName("");
+      queryClient.invalidateQueries({ queryKey });
+    },
+  });
+  const revokeMutation = useMutation({
+    mutationFn: (tokenId: string) => revokeMemberApiToken(member.user_id, tokenId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+  });
+  // Move a device to someone else, including back to yourself: the key's
+  // device becomes theirs on its next sync, no re-pairing.
+  const [assignTarget, setAssignTarget] = useState<Record<string, string>>({});
+  const assignMutation = useMutation({
+    mutationFn: ({ tokenId, userId }: { tokenId: string; userId: string }) => assignApiToken(tokenId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["member-api-tokens"] });
+      queryClient.invalidateQueries({ queryKey: ["api-tokens"] });
+    },
+  });
+  const assignable = members.filter((m) => m.user_id !== member.user_id);
+
+  const active = tokens?.filter((t) => !t.revoked_at) ?? [];
+  return (
+    <div className="member-devices">
+      {justCreated && (
+        <PairingCodeReveal
+          token={justCreated}
+          forName={isSelf ? undefined : member.display_name}
+          onDone={() => setJustCreated(null)}
+        />
+      )}
+      {assignMutation.isError && <StatusMessage>{(assignMutation.error as Error).message}</StatusMessage>}
+      <form
+        className="inline-form"
+        onSubmit={(event: FormEvent) => {
+          event.preventDefault();
+          createMutation.mutate();
+        }}
+      >
+        <input
+          placeholder={`Device name, e.g. ${member.display_name}\u2019s iPhone`}
+          value={deviceName}
+          onChange={(e) => setDeviceName(e.target.value)}
+        />
+        <button type="submit" disabled={createMutation.isPending}>
+          Pair a device
+        </button>
+      </form>
+      {active.length > 0 && (
+        <ul className="token-list">
+          {active.map((token) => (
+            <li key={token.id}>
+              <span>{token.name}</span>
+              <span>{token.last_used_at ? `Last synced ${token.last_used_at}` : "Not used yet"}</span>
+              {assignable.length > 0 && (
+                <span className="token-assign">
+                  <select
+                    aria-label={`Move ${token.name} to`}
+                    value={assignTarget[token.id] ?? ""}
+                    onChange={(e) => setAssignTarget({ ...assignTarget, [token.id]: e.target.value })}
+                  >
+                    <option value="">Assign to&hellip;</option>
+                    {assignable.map((m) => (
+                      <option key={m.user_id} value={m.user_id}>
+                        {m.user_id === myUserId ? `Me (${m.display_name})` : m.display_name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!assignTarget[token.id] || assignMutation.isPending}
+                    onClick={() => assignMutation.mutate({ tokenId: token.id, userId: assignTarget[token.id] })}
+                  >
+                    Assign
+                  </button>
+                </span>
+              )}
+              <button type="button" className="danger" onClick={() => revokeMutation.mutate(token.id)}>
+                Revoke
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function inviteLink(token: string): string {
   return `${window.location.origin}/join?token=${encodeURIComponent(token)}`;
@@ -36,6 +155,21 @@ export function HouseholdPage() {
   const [manualCopyInvite, setManualCopyInvite] = useState<{ id: string; url: string } | null>(null);
 
   const [lastInvite, setLastInvite] = useState<{ email: string; emailSent: boolean } | null>(null);
+
+  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [openDevicesFor, setOpenDevicesFor] = useState<string | null>(null);
+
+  const addMemberMutation = useMutation({
+    mutationFn: () => addAppOnlyMember(newMemberName.trim(), newMemberEmail.trim() || null),
+    onSuccess: (member) => {
+      setNewMemberName("");
+      setNewMemberEmail("");
+      // Straight to pairing their phone: that's what they were added for.
+      setOpenDevicesFor(member.user_id);
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+    },
+  });
 
   const inviteMutation = useMutation({
     mutationFn: () => createInvite(email, role),
@@ -96,12 +230,28 @@ export function HouseholdPage() {
         {members?.map((member) => (
           <li key={member.user_id}>
             <span>{member.display_name}</span>
-            <span className="member-email">{member.email}</span>
+            <span className="member-email">{member.email || (member.has_login ? "" : "App only")}</span>
             <span className="member-role">{member.role}</span>
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setOpenDevicesFor(openDevicesFor === member.user_id ? null : member.user_id)}
+              >
+                {openDevicesFor === member.user_id ? "Hide devices" : "Devices"}
+              </button>
+            )}
             {isOwner && member.role !== "owner" && (
               <button type="button" className="danger" onClick={() => removeMutation.mutate(member.user_id)}>
                 Remove
               </button>
+            )}
+            {isOwner && openDevicesFor === member.user_id && (
+              <MemberDevices
+                member={member}
+                isSelf={member.user_id === household?.my_user_id}
+                members={members ?? []}
+                myUserId={household?.my_user_id}
+              />
             )}
           </li>
         ))}
@@ -109,7 +259,39 @@ export function HouseholdPage() {
 
       {isOwner && (
         <>
+          <h2>Add a family member</h2>
+          <p>
+            For someone who will use the app but doesn&rsquo;t need a web account. You pair their phone for them, and
+            it syncs as them. Add their email if they might want to sign in on the web later (they can use
+            &ldquo;Forgot password&rdquo;).
+          </p>
+          <form
+            className="inline-form"
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              if (newMemberName.trim()) addMemberMutation.mutate();
+            }}
+          >
+            <input
+              placeholder="Name"
+              value={newMemberName}
+              onChange={(e) => setNewMemberName(e.target.value)}
+              required
+            />
+            <input
+              type="email"
+              placeholder="Email (optional)"
+              value={newMemberEmail}
+              onChange={(e) => setNewMemberEmail(e.target.value)}
+            />
+            <button type="submit" disabled={addMemberMutation.isPending}>
+              Add member
+            </button>
+          </form>
+          {addMemberMutation.isError && <StatusMessage>{(addMemberMutation.error as Error).message}</StatusMessage>}
+
           <h2>Invite someone</h2>
+          <p>For someone who wants their own web sign-in.</p>
           <form className="inline-form" onSubmit={handleInvite}>
             <input
               type="email"

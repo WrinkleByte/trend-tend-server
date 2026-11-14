@@ -4,7 +4,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from app.models.household import HouseholdRole, InviteStatus
 
@@ -61,10 +61,26 @@ class MembershipResponse(BaseModel):
 
 class HouseholdMemberResponse(BaseModel):
     user_id: uuid.UUID
-    email: EmailStr
+    # "" for an app-only member added without an address (see
+    # app/core/api_token_issuing.py's public_email); a plain str, not
+    # EmailStr, for that reason. Clients must not treat it as required.
+    email: str
     display_name: str
     role: HouseholdRole
     joined_at: datetime
+    # False for an app-only member: no password, so no web sign-in. Their
+    # devices are paired with a key the owner creates for them.
+    has_login: bool = True
+
+
+class AppOnlyMemberCreate(BaseModel):
+    """An owner adding a family member who won't have a web account of their
+    own. Email is optional: given, it's a real address they can later use
+    with "Forgot password" to get a web login; omitted, they're app-only."""
+
+    display_name: str = Field(min_length=1, max_length=200)
+    email: EmailStr | None = None
+    role: HouseholdRole = HouseholdRole.MEMBER
 
 
 class InviteCreate(BaseModel):

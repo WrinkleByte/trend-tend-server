@@ -8,14 +8,22 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, require_instance_admin
+from app.api.v1.api_tokens import token_responses
+from app.core.api_token_issuing import (
+    issue_api_token,
+    notify_key_issued_for_you,
+    require_membership,
+)
 from app.core.household_deletion import delete_household_data
 from app.core.user_deletion import UserOwnsHouseholdsError, delete_user_data
 from app.db.session import get_db
+from app.models.api_token import ApiToken
 from app.models.asset import Asset
 from app.models.fuel_log import FuelLog
 from app.models.household import Household, HouseholdMembership, HouseholdRole
 from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_schedule import MaintenanceSchedule
+from app.models.mixins import utcnow
 from app.models.trip_log import TripLog
 from app.models.user import User
 from app.schemas.admin import (
@@ -26,6 +34,11 @@ from app.schemas.admin import (
     AdminUserMembership,
     AdminUserSummary,
     PromoteUserResponse,
+)
+from app.schemas.api_token import (
+    AdminApiTokenCreate,
+    AdminApiTokenResponse,
+    ApiTokenCreateResponse,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -314,3 +327,67 @@ async def remove_user_membership(
 
     await db.delete(membership)
     await db.commit()
+
+
+@router.post(
+    "/users/{user_id}/api-tokens",
+    response_model=ApiTokenCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_user_api_token(
+    user_id: uuid.UUID,
+    payload: AdminApiTokenCreate,
+    principal: Principal = Depends(require_instance_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiTokenCreateResponse:
+    """An instance admin makes a pairing key for any user, in a household
+    that user belongs to -- the cross-household version of an owner's
+    households.py create_member_api_token. Same audit trail (created by the
+    admin) and the same best-effort email to the user."""
+    await require_membership(db, payload.household_id, user_id)
+    api_token, raw_token = await issue_api_token(
+        db,
+        household_id=payload.household_id,
+        user_id=user_id,
+        name=payload.name,
+        issued_by_user_id=principal.user_id,
+        expires_at=payload.expires_at,
+    )
+    await notify_key_issued_for_you(db, api_token)
+    return ApiTokenCreateResponse.model_validate({**api_token.__dict__, "token": raw_token})
+
+
+@router.get("/users/{user_id}/api-tokens", response_model=list[AdminApiTokenResponse])
+async def list_user_api_tokens(
+    user_id: uuid.UUID,
+    principal: Principal = Depends(require_instance_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[AdminApiTokenResponse]:
+    """Every key a user has, across all their households."""
+    result = await db.execute(
+        select(ApiToken).where(ApiToken.user_id == user_id).order_by(ApiToken.created_at.desc())
+    )
+    tokens = list(result.scalars().all())
+    responses = await token_responses(db, tokens)
+    return [
+        AdminApiTokenResponse(**response.model_dump(), household_id=token.household_id)
+        for response, token in zip(responses, tokens, strict=True)
+    ]
+
+
+@router.delete("/users/{user_id}/api-tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_user_api_token(
+    user_id: uuid.UUID,
+    token_id: uuid.UUID,
+    principal: Principal = Depends(require_instance_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Revoke any user's key. Idempotent."""
+    token = (
+        await db.execute(select(ApiToken).where(ApiToken.id == token_id, ApiToken.user_id == user_id))
+    ).scalar_one_or_none()
+    if token is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "API token not found")
+    if token.revoked_at is None:
+        token.revoked_at = utcnow()
+        await db.commit()
