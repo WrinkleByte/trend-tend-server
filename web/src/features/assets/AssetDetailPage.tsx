@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { deleteAsset, getAsset, listAssets, updateAsset } from "../../api/assets";
 import { useHouseholdMembers } from "../household/useHouseholdMembers";
-import type { AssetCreateInput, AssetStatus } from "../../api/types";
+import type { AssetCreateInput } from "../../api/types";
 import { GridField } from "../../components/GridField";
 import { MaintenanceRecordsSection } from "../maintenance/MaintenanceRecordsSection";
 import { MaintenanceAlertsSection } from "../schedules/MaintenanceAlertsSection";
@@ -45,6 +45,8 @@ export function AssetDetailPage() {
         notes: asset.notes ?? undefined,
         purchase_date: asset.purchase_date ?? undefined,
         purchase_cost: asset.purchase_cost ?? undefined,
+        // Only sent (and only editable) once the asset is retired.
+        ...(asset.status !== "active" ? { sale_price: asset.sale_price, sale_date: asset.sale_date } : {}),
         owner_user_id: asset.owner_user_id ?? undefined,
         vehicle_details: asset.vehicle_details ? { ...asset.vehicle_details } : undefined,
         equipment_details: asset.equipment_details ? { ...asset.equipment_details } : undefined,
@@ -70,7 +72,7 @@ export function AssetDetailPage() {
   // fixed there with a dedicated writeDetails-free repository method; the
   // backend never had that bug since it does a real partial update).
   const statusMutation = useMutation({
-    mutationFn: (status: AssetStatus) => updateAsset(id!, { status }),
+    mutationFn: (change: Pick<AssetCreateInput, "status" | "sale_price" | "sale_date">) => updateAsset(id!, change),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["assets", id] }),
   });
 
@@ -109,10 +111,31 @@ export function AssetDetailPage() {
           `Retire "${asset.name}"? This will move it to the retired section. You can still view its history, but it won't appear in active lists.`,
         )
       ) {
-        statusMutation.mutate("archived");
+        // Optional, like the mobile apps' retire dialog: blank means it
+        // wasn't sold (scrapped, given away). Dated today; the Sale section
+        // of the form can change it afterwards.
+        const answer = window.prompt("What did it sell for? Leave blank if it wasn't sold.", "");
+        if (answer === null) return;
+        const cleaned = answer.trim().replace(/^\$/, "").replace(/,/g, "");
+        const price = cleaned === "" ? null : Number(cleaned);
+        if (price !== null && (!Number.isFinite(price) || price < 0)) {
+          window.alert("Enter the sale price as a number, like 8500.");
+          return;
+        }
+        statusMutation.mutate({
+          status: "archived",
+          sale_price: price,
+          sale_date: price === null ? null : new Date().toLocaleDateString("en-CA"),
+        });
       }
-    } else if (window.confirm(`Restore "${asset.name}" to active? This will move it back to your active list.`)) {
-      statusMutation.mutate("active");
+    } else if (
+      window.confirm(
+        `Restore "${asset.name}" to active? This will move it back to your active list.` +
+          (asset.sale_price != null ? " The recorded sale price will be cleared." : ""),
+      )
+    ) {
+      // Same as mobile: restoring means it wasn't sold after all.
+      statusMutation.mutate({ status: "active", sale_price: null, sale_date: null });
     }
   }
 
@@ -202,6 +225,29 @@ export function AssetDetailPage() {
               onChange={(v) => setForm({ ...form, purchase_cost: v ? Number(v) : undefined })}
             />
           </div>
+
+          {asset.status !== "active" && (
+            <>
+              <h2 style={{ marginTop: 24 }}>Sale</h2>
+              <div className="field-grid">
+                <GridField
+                  label="Sale date"
+                  type="date"
+                  value={form.sale_date ?? ""}
+                  onChange={(v) => setForm({ ...form, sale_date: v || null })}
+                />
+                <GridField
+                  label="Sale price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.sale_price ?? ""}
+                  placeholder="Not sold"
+                  onChange={(v) => setForm({ ...form, sale_price: v ? Number(v) : null })}
+                />
+              </div>
+            </>
+          )}
 
           {asset.asset_type === "vehicle" && (
             <>
@@ -435,6 +481,18 @@ export function AssetDetailPage() {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
+                  </dd>
+                </>
+              )}
+              {asset.sale_price != null && (
+                <>
+                  <dt>Sold for</dt>
+                  <dd>
+                    ${Number(asset.sale_price).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                    {asset.sale_date ? ` on ${asset.sale_date}` : ""}
                   </dd>
                 </>
               )}
