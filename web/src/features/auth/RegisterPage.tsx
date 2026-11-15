@@ -17,7 +17,7 @@ export function RegisterPage() {
   const [householdName, setHouseholdName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const setTokens = useAuthStore((s) => s.setTokens);
+  const setAccessToken = useAuthStore((s) => s.setAccessToken);
   const navigate = useNavigate();
 
   async function handleSubmit(event: FormEvent) {
@@ -31,7 +31,7 @@ export function RegisterPage() {
         display_name: displayName,
         household_name: householdName,
       });
-      setTokens(tokens.access_token, tokens.refresh_token);
+      setAccessToken(tokens.access_token);
       navigate("/");
     } catch (err) {
       setError(

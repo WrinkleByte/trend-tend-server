@@ -7,7 +7,9 @@
 
 export interface TokenResponse {
   access_token: string;
-  refresh_token: string;
+  // Always null for this app: it asks for cookie mode, so the server keeps
+  // the refresh token in an HttpOnly cookie instead (Vikunja #93).
+  refresh_token: string | null;
   token_type: string;
 }
 

@@ -7,7 +7,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { getCurrentHousehold } from "../../api/households";
 import { FEATURES } from "../../app/features";
 import type { NavEntry } from "../../app/featureTypes";
-import { useAuthStore } from "../../auth/authStore";
+import { logout } from "../../api/client";
 import { LegalNotice } from "../../components/LegalNotice";
 import { Icon } from "../../components/ui/Icon";
 
@@ -38,7 +38,8 @@ function NavItem({ entry }: { entry: NavEntry }) {
  * without touching this file. Which of the two is visible is decided purely
  * by shell.css's breakpoint. */
 export function Layout() {
-  const clear = useAuthStore((s) => s.clear);
+  // Ends the session on the server too, not just in this browser (#93).
+  const clear = () => void logout();
   const { data: household } = useQuery({ queryKey: ["household"], queryFn: getCurrentHousehold });
   const [showingMore, setShowingMore] = useState(false);
   const location = useLocation();

@@ -20,7 +20,7 @@ export function JoinPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
   const navigate = useNavigate();
-  const setTokens = useAuthStore((s) => s.setTokens);
+  const setAccessToken = useAuthStore((s) => s.setAccessToken);
 
   const {
     data: preview,
@@ -40,7 +40,7 @@ export function JoinPage() {
   const acceptMutation = useMutation({
     mutationFn: () => acceptInvite(token!),
     onSuccess: (tokens) => {
-      setTokens(tokens.access_token, tokens.refresh_token);
+      setAccessToken(tokens.access_token);
       navigate("/");
     },
     onError: () => setError("Couldn't accept this invite — it may no longer be valid."),
@@ -50,7 +50,7 @@ export function JoinPage() {
     mutationFn: () =>
       register({ email: preview!.invited_email, password, display_name: displayName, invite_token: token! }),
     onSuccess: (tokens) => {
-      setTokens(tokens.access_token, tokens.refresh_token);
+      setAccessToken(tokens.access_token);
       navigate("/");
     },
     onError: (err) =>

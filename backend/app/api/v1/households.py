@@ -6,12 +6,13 @@ import logging
 import uuid
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_principal
 from app.api.v1.api_tokens import token_responses
+from app.api.v1.auth import issue_refresh_token, token_response
 from app.config import get_settings
 from app.core.api_token_issuing import (
     app_only_email,
@@ -25,7 +26,6 @@ from app.core.household_deletion import delete_household_data, wipe_household_da
 from app.core.instance_settings import get_or_create_instance_settings
 from app.core.security import (
     create_access_token,
-    create_refresh_token,
     generate_invite_token,
 )
 from app.db.session import get_db
@@ -460,6 +460,8 @@ async def preview_invite(token: str, db: AsyncSession = Depends(get_db)) -> Invi
 @router.post("/invites/accept", response_model=TokenResponse)
 async def accept_invite(
     payload: AcceptInviteRequest,
+    request: Request,
+    response: Response,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
@@ -496,9 +498,15 @@ async def accept_invite(
         )
     )
     invite.status = InviteStatus.ACCEPTED
+    # A tracked token (with a jti), like login issues, so it can be rotated
+    # and revoked; this used to mint an untracked one that refresh had to
+    # upgrade on first use.
+    refresh_token = await issue_refresh_token(db, user_id=user.id, household_id=invite.household_id)
     await db.commit()
 
-    return TokenResponse(
+    return token_response(
+        request,
+        response,
         access_token=create_access_token(user_id=user.id, household_id=invite.household_id),
-        refresh_token=create_refresh_token(user_id=user.id, household_id=invite.household_id),
+        refresh_token=refresh_token,
     )

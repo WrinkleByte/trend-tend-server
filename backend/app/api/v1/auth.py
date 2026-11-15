@@ -6,7 +6,8 @@ import logging
 import uuid
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import jwt as pyjwt
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,12 @@ from app.core.security import (
     generate_password_reset_token,
     hash_password,
     verify_password,
+)
+from app.core.session_cookie import (
+    clear_refresh_cookie,
+    cookie_token,
+    set_refresh_cookie,
+    wants_cookie,
 )
 from app.db.session import get_db
 from app.models.household import (
@@ -110,7 +117,7 @@ async def _consume_pending_invite(db: AsyncSession, token: str, email: str) -> H
     return invite
 
 
-async def _issue_refresh_token(
+async def issue_refresh_token(
     db: AsyncSession,
     *,
     user_id: uuid.UUID,
@@ -136,6 +143,18 @@ async def _issue_refresh_token(
     return create_refresh_token(
         user_id=user_id, household_id=household_id, jti=jti, family_id=family
     )
+
+
+def token_response(request: Request, response: Response, *, access_token: str, refresh_token: str) -> TokenResponse:
+    """Hand a fresh token pair to the client in whichever form it asked for.
+
+    Cookie mode (the web app): refresh token in an HttpOnly cookie and NOT in
+    the body. Otherwise both in the body, as before. See
+    app/core/session_cookie.py."""
+    if wants_cookie(request):
+        set_refresh_cookie(response, refresh_token)
+        return TokenResponse(access_token=access_token)
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 async def _revoke_family(db: AsyncSession, family_id: uuid.UUID) -> None:
@@ -178,6 +197,8 @@ async def setup_status(db: AsyncSession = Depends(get_db)) -> SetupStatusRespons
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     payload: RegisterRequest,
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     _rate_limit: None = Depends(_register_limiter),
 ) -> TokenResponse:
@@ -249,10 +270,12 @@ async def register(
             )
         )
 
-    refresh_token = await _issue_refresh_token(db, user_id=user.id, household_id=household_id)
+    refresh_token = await issue_refresh_token(db, user_id=user.id, household_id=household_id)
     await db.commit()
 
-    return TokenResponse(
+    return token_response(
+        request,
+        response,
         access_token=create_access_token(user_id=user.id, household_id=household_id),
         refresh_token=refresh_token,
     )
@@ -261,6 +284,8 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: LoginRequest,
+    request: Request,
+    response: Response,
     household_id: uuid.UUID | None = None,
     db: AsyncSession = Depends(get_db),
     _rate_limit: None = Depends(_login_limiter),
@@ -295,12 +320,14 @@ async def login(
     else:
         selected = memberships[0]
 
-    refresh_token = await _issue_refresh_token(
+    refresh_token = await issue_refresh_token(
         db, user_id=user.id, household_id=selected.household_id
     )
     await db.commit()
 
-    return TokenResponse(
+    return token_response(
+        request,
+        response,
         access_token=create_access_token(user_id=user.id, household_id=selected.household_id),
         refresh_token=refresh_token,
     )
@@ -308,12 +335,24 @@ async def login(
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
-    payload: RefreshRequest,
+    request: Request,
+    response: Response,
+    payload: RefreshRequest | None = None,
     db: AsyncSession = Depends(get_db),
     _rate_limit: None = Depends(_refresh_limiter),
 ) -> TokenResponse:
+    # A token in the body wins (older clients, and the web app's one-time
+    # migration of a token it used to keep in localStorage); otherwise the
+    # HttpOnly cookie. A token that came from the cookie is only ever
+    # answered in cookie form: echoing it into the body would let any script
+    # on the page read the very token the cookie exists to hide.
+    body_token = payload.refresh_token if payload else None
+    presented = body_token or cookie_token(request)
+    if not presented:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing refresh token")
+    from_cookie = body_token is None
     try:
-        claims = decode_token(payload.refresh_token)
+        claims = decode_token(presented)
     except Exception as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token") from exc
     if claims.get("type") != "refresh":
@@ -337,9 +376,12 @@ async def refresh(
         # (30 days) has elapsed since the release that added rotation --
         # after that, any token without a jti is necessarily forged or
         # ancient.
-        rotated = await _issue_refresh_token(db, user_id=user_id, household_id=household_id)
+        rotated = await issue_refresh_token(db, user_id=user_id, household_id=household_id)
         await db.commit()
-        return TokenResponse(
+        return _refresh_response(
+            request,
+            response,
+            from_cookie,
             access_token=create_access_token(user_id=user_id, household_id=household_id),
             refresh_token=rotated,
         )
@@ -371,15 +413,62 @@ async def refresh(
         )
 
     stored.used_at = utcnow()
-    rotated = await _issue_refresh_token(
+    rotated = await issue_refresh_token(
         db, user_id=user_id, household_id=household_id, family_id=stored.family_id
     )
     await db.commit()
 
-    return TokenResponse(
+    return _refresh_response(
+        request,
+        response,
+        from_cookie,
         access_token=create_access_token(user_id=user_id, household_id=household_id),
         refresh_token=rotated,
     )
+
+
+def _refresh_response(
+    request: Request, response: Response, from_cookie: bool, *, access_token: str, refresh_token: str
+) -> TokenResponse:
+    if from_cookie:
+        set_refresh_cookie(response, refresh_token)
+        return TokenResponse(access_token=access_token)
+    return token_response(request, response, access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    request: Request,
+    response: Response,
+    payload: RefreshRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(_refresh_limiter),
+) -> None:
+    """End this login on the server, not just in the browser.
+
+    Revokes the whole refresh-token family behind the presented token (the
+    cookie, or a body token for other clients) and clears the cookie, so a
+    copy of the token taken earlier stops working too. Always 204: there is
+    nothing useful to tell a caller whose token was already invalid. Access
+    tokens already issued live out their 15 minutes; logging out from every
+    device at once is what a password reset is for.
+    """
+    clear_refresh_cookie(response)
+    presented = (payload.refresh_token if payload else None) or cookie_token(request)
+    if not presented:
+        return
+    try:
+        claims = decode_token(presented)
+    except pyjwt.PyJWTError:
+        return
+    if claims.get("type") != "refresh" or not claims.get("jti"):
+        return
+    stored = (
+        await db.execute(select(RefreshToken).where(RefreshToken.id == uuid.UUID(claims["jti"])))
+    ).scalar_one_or_none()
+    if stored is not None:
+        await _revoke_family(db, stored.family_id)
+        await db.commit()
 
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)

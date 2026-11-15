@@ -16,7 +16,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const setTokens = useAuthStore((s) => s.setTokens);
+  const setAccessToken = useAuthStore((s) => s.setAccessToken);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const next = searchParams.get("next") || "/";
@@ -27,7 +27,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       const tokens = await login({ email, password });
-      setTokens(tokens.access_token, tokens.refresh_token);
+      setAccessToken(tokens.access_token);
       navigate(next);
     } catch (err) {
       setError(err instanceof ApiError && err.status === 401 ? "Invalid email or password." : "Something went wrong.");
