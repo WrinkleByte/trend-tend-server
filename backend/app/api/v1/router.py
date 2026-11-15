@@ -16,6 +16,7 @@ from app.api.v1 import (
     maintenance_categories,
     maintenance_records,
     maintenance_schedules,
+    meta,
     sync,
     trip_logs,
 )
@@ -35,3 +36,4 @@ api_router.include_router(attachments.router)
 api_router.include_router(import_restore.router)
 api_router.include_router(api_tokens.router)
 api_router.include_router(sync.router)
+api_router.include_router(meta.router)
