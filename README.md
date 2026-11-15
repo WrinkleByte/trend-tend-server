@@ -186,6 +186,10 @@ The first account ever registered on an instance automatically becomes its **ins
 
 Locked out, or need to act before any admin exists? `backend/scripts/reset-password.sh` resets a user's password directly against the database, no email required — see [`backend/README.md`](backend/README.md#admin-operations) for usage and for the direct-database fallback to promote the very first admin on a fresh instance.
 
+## Releasing
+
+Version bump, tag, published images and release notes: [`RELEASING.md`](RELEASING.md).
+
 ## CI
 
 Every pull request and push to `main` runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml): `ruff`, Alembic migrations against an empty database, the full `pytest` suite against Postgres, `oxlint` + type-check + PWA build, a gitleaks secret scan of the full history, REUSE licensing compliance, and `scripts/smoke-test-prod.sh --build`.
