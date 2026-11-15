@@ -12,7 +12,7 @@ drop data it doesn't understand.
 Rules (see internal compatibility rules; summarised here for contributors):
 
 * Add a capability in the same change that adds the feature, named after the
-  feature, lowercase, dot-separated (``profile.display_name``).
+  feature, lowercase with underscores (``profile_display_name``).
 * **Never remove or rename one** while the API is ``/api/v1``: an app that
   checks for it would lose the feature. A breaking change means ``/api/v2``.
 * A capability only ever *enables* client behaviour. Clients treat a server
@@ -33,4 +33,6 @@ CAPABILITIES: tuple[str, ...] = (
     "web_session_cookie",
     # 1.4.0: this endpoint, and logging of X-WrinkleByte-Client.
     "meta",
+    # 1.4.0: GET/PATCH /users/me, so anyone can change their own display name.
+    "profile_display_name",
 )
