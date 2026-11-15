@@ -16,8 +16,10 @@ from app.api.v1 import (
     maintenance_categories,
     maintenance_records,
     maintenance_schedules,
+    meta,
     sync,
     trip_logs,
+    users,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -35,3 +37,5 @@ api_router.include_router(attachments.router)
 api_router.include_router(import_restore.router)
 api_router.include_router(api_tokens.router)
 api_router.include_router(sync.router)
+api_router.include_router(meta.router)
+api_router.include_router(users.router)

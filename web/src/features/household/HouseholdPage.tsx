@@ -17,8 +17,71 @@ import {
   revokeMemberApiToken,
 } from "../../api/households";
 import type { HouseholdMember, HouseholdRole } from "../../api/types";
+import { updateMyDisplayName } from "../../api/users";
 import { StatusMessage } from "../../components/StatusMessage";
 import { PairingCodeReveal } from "../settings/PairingCodeReveal";
+import { useHouseholdMembers } from "./useHouseholdMembers";
+
+/** Who you are in this household, and changing your own name (Vikunja
+ * #164): with several people syncing, it isn't always obvious which member
+ * this sign-in is. */
+function YouInThisHousehold({ me, role }: { me: HouseholdMember; role: HouseholdRole }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(me.display_name);
+  const mutation = useMutation({
+    mutationFn: () => updateMyDisplayName(name.trim()),
+    onSuccess: () => {
+      setEditing(false);
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+    },
+  });
+  return (
+    <section className="you-in-household" aria-label="You">
+      <h2>You</h2>
+      {!editing ? (
+        <p>
+          Signed in as <strong>{me.display_name}</strong>
+          {me.email ? ` \u00b7 ${me.email}` : ""}
+          {` \u00b7 ${role} `}
+          <button
+            type="button"
+            onClick={() => {
+              setName(me.display_name);
+              setEditing(true);
+            }}
+          >
+            Change name
+          </button>
+        </p>
+      ) : (
+        <form
+          className="inline-form"
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault();
+            if (name.trim()) mutation.mutate();
+          }}
+        >
+          <input
+            aria-label="Your name"
+            value={name}
+            maxLength={200}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+          <button type="submit" disabled={mutation.isPending || !name.trim()}>
+            Save
+          </button>
+          <button type="button" onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+        </form>
+      )}
+      <p className="field-hint">Everyone in the household sees this name.</p>
+      {mutation.isError && <StatusMessage>{(mutation.error as Error).message}</StatusMessage>}
+    </section>
+  );
+}
 
 /** One member's devices (their API keys, whoever made them), for the owner:
  * pair a new phone or tablet as this member, or revoke a lost one. Pairing
@@ -28,12 +91,10 @@ function MemberDevices({
   member,
   isSelf,
   members,
-  myUserId,
 }: {
   member: HouseholdMember;
   isSelf: boolean;
   members: HouseholdMember[];
-  myUserId: string | undefined;
 }) {
   const queryClient = useQueryClient();
   const queryKey = ["member-api-tokens", member.user_id];
@@ -64,7 +125,8 @@ function MemberDevices({
       queryClient.invalidateQueries({ queryKey: ["api-tokens"] });
     },
   });
-  const assignable = members.filter((m) => m.user_id !== member.user_id);
+  const { pickerMembers, pickerLabel } = useHouseholdMembers();
+  const assignable = (pickerMembers.length ? pickerMembers : members).filter((m) => m.user_id !== member.user_id);
 
   const active = tokens?.filter((t) => !t.revoked_at) ?? [];
   return (
@@ -109,7 +171,7 @@ function MemberDevices({
                     <option value="">Assign to&hellip;</option>
                     {assignable.map((m) => (
                       <option key={m.user_id} value={m.user_id}>
-                        {m.user_id === myUserId ? `Me (${m.display_name})` : m.display_name}
+                        {pickerLabel(m)}
                       </option>
                     ))}
                   </select>
@@ -224,6 +286,14 @@ export function HouseholdPage() {
     <div>
       <h1>Household{household ? `: ${household.name}` : ""}</h1>
 
+      {household && members?.find((m) => m.user_id === household.my_user_id) && (
+        <YouInThisHousehold
+          key={household.my_user_id}
+          me={members.find((m) => m.user_id === household.my_user_id)!}
+          role={household.my_role}
+        />
+      )}
+
       <h2>Members</h2>
       {membersLoading && <p>Loading…</p>}
       <ul className="household-member-list">
@@ -250,7 +320,6 @@ export function HouseholdPage() {
                 member={member}
                 isSelf={member.user_id === household?.my_user_id}
                 members={members ?? []}
-                myUserId={household?.my_user_id}
               />
             )}
           </li>
