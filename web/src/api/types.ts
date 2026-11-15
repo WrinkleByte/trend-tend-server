@@ -245,6 +245,15 @@ export interface Household {
   my_user_id: string;
 }
 
+/** GET /users/me: the signed-in user. */
+export interface Me {
+  user_id: string;
+  /** "" for an app-only member added without an email address. */
+  email: string;
+  display_name: string;
+  has_login: boolean;
+}
+
 export interface HouseholdMember {
   user_id: string;
   /** "" for an app-only member added without an email address. */

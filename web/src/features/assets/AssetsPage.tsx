@@ -55,7 +55,7 @@ export function AssetsPage() {
     queryKey: ["assets", { mineOnly }],
     queryFn: () => listAssets(mineOnly),
   });
-  const { members, nameFor } = useHouseholdMembers();
+  const { members, nameFor, pickerMembers, pickerLabel } = useHouseholdMembers();
   const [ownerUserId, setOwnerUserId] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const activeCategory = searchParams.get("category") ?? DEFAULT_CATEGORY;
@@ -158,9 +158,9 @@ export function AssetsPage() {
             aria-label="Owner"
           >
             <option value="">Unassigned</option>
-            {members?.map((m) => (
+            {pickerMembers.map((m) => (
               <option key={m.user_id} value={m.user_id}>
-                {m.display_name}
+                {pickerLabel(m)}
               </option>
             ))}
           </select>

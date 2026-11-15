@@ -38,7 +38,7 @@ export function AssetDetailPage() {
     (a) => a.asset_type === "property" || a.asset_type === "home_system",
   );
 
-  const { members, nameFor } = useHouseholdMembers();
+  const { members, nameFor, pickerMembers, pickerLabel } = useHouseholdMembers();
   const [form, setForm] = useState<Partial<AssetCreateInput>>({});
   useEffect(() => {
     if (asset) {
@@ -228,9 +228,9 @@ export function AssetDetailPage() {
                   onChange={(e) => setForm({ ...form, owner_user_id: e.target.value || undefined })}
                 >
                   <option value="">Unassigned</option>
-                  {members?.map((m) => (
+                  {pickerMembers.map((m) => (
                     <option key={m.user_id} value={m.user_id}>
-                      {m.display_name}
+                      {pickerLabel(m)}
                     </option>
                   ))}
                 </select>

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { useQuery } from "@tanstack/react-query";
-import { listMembers } from "../../api/households";
+import { getCurrentHousehold, listMembers } from "../../api/households";
 import type { HouseholdMember } from "../../api/types";
 
 /**
@@ -16,7 +16,26 @@ import type { HouseholdMember } from "../../api/types";
 export function useHouseholdMembers() {
   const { data: members, isLoading } = useQuery({ queryKey: ["members"], queryFn: listMembers });
 
+  // Same ["household"] key as HouseholdPage, so this is one shared fetch.
+  const { data: household } = useQuery({ queryKey: ["household"], queryFn: getCurrentHousehold });
+  const myUserId = household?.my_user_id;
+
   const byId = new Map<string, HouseholdMember>((members ?? []).map((m) => [m.user_id, m]));
+
+  /** For pickers: you first, then everyone else in join order. */
+  const pickerMembers = (members ?? []).slice().sort((a, b) => Number(b.user_id === myUserId) - Number(a.user_id === myUserId));
+
+  /**
+   * A member's name as a picker shows it (Vikunja #164): "Me (Name)" for you,
+   * and the email (or "app only") after a name two members share, so two
+   * people both called "Alex" can be told apart.
+   */
+  function pickerLabel(member: HouseholdMember): string {
+    const name = member.user_id === myUserId ? `Me (${member.display_name})` : member.display_name;
+    const shared = (members ?? []).filter((m) => m.display_name === member.display_name).length > 1;
+    if (!shared) return name;
+    return `${name} \u00b7 ${member.email || "app only"}`;
+  }
 
   /**
    * Falls back to "Someone" rather than rendering a raw UUID: a member who has
@@ -29,5 +48,5 @@ export function useHouseholdMembers() {
     return byId.get(userId)?.display_name ?? "Someone";
   }
 
-  return { members, isLoading, byId, nameFor };
+  return { members, isLoading, byId, nameFor, myUserId, pickerMembers, pickerLabel };
 }
