@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     # local dev, since it's baked into an email that could be opened from
     # any device.
     frontend_url: str = "http://localhost:5173"
+    # Secure flag on the web app's refresh-token cookie: blank = decide from
+    # frontend_url (https -> Secure); "true"/"false" forces it. See
+    # app/core/session_cookie.py.
+    refresh_cookie_secure: str = ""
 
     # One-time seed for instance_settings.public_api_url (see
     # core/instance_settings.py) -- the backend API's own externally

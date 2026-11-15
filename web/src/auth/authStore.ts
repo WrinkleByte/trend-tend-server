@@ -2,46 +2,64 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
-const LEGACY_AUTH_KEY = "tendfida-auth";
-const AUTH_KEY = "wrinklebyte-auth";
-
-// One-time carry-forward of the persisted auth state from the pre-rename
-// localStorage key, so an existing installed PWA doesn't get silently
-// logged out by the rebrand. Must run before `persist()` below does its
-// own (synchronous) hydration read, so this executes as a top-level
-// module side effect rather than inside the store itself.
-if (typeof localStorage !== "undefined" && !localStorage.getItem(AUTH_KEY)) {
-  const legacy = localStorage.getItem(LEGACY_AUTH_KEY);
-  if (legacy) {
-    localStorage.setItem(AUTH_KEY, legacy);
-    localStorage.removeItem(LEGACY_AUTH_KEY);
-  }
-}
+/**
+ * The signed-in session, in memory only (Vikunja #93).
+ *
+ * The short-lived access token (15 minutes) lives here and nowhere else.
+ * The refresh token is an HttpOnly cookie the server sets, which no script
+ * on this page can read, so a cross-site-scripting bug can no longer walk
+ * off with a 30-day session. A page reload starts at "restoring" and
+ * ../api/client.ts's restoreSession() turns the cookie back into an access
+ * token. Both tokens used to sit in localStorage; client.ts moves an old
+ * session over once, then deletes it (see takeLegacyRefreshToken below).
+ */
+export type SessionStatus = "restoring" | "signed-in" | "signed-out";
 
 interface AuthState {
   accessToken: string | null;
-  refreshToken: string | null;
-  setTokens: (accessToken: string, refreshToken: string) => void;
+  status: SessionStatus;
+  setAccessToken: (accessToken: string) => void;
   clear: () => void;
 }
 
-/** Persisted to localStorage so a page refresh doesn't log the user out.
- * See ../api/client.ts for how these tokens get attached to requests and
- * refreshed on expiry. */
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      accessToken: null,
-      refreshToken: null,
-      setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
-      clear: () => set({ accessToken: null, refreshToken: null }),
-    }),
-    { name: AUTH_KEY },
-  ),
-);
+export const useAuthStore = create<AuthState>()((set) => ({
+  accessToken: null,
+  status: "restoring",
+  setAccessToken: (accessToken) => set({ accessToken, status: "signed-in" }),
+  clear: () => set({ accessToken: null, status: "signed-out" }),
+}));
 
 export function isAuthenticated(): boolean {
   return useAuthStore.getState().accessToken !== null;
+}
+
+// Where earlier versions persisted both tokens (zustand's persist middleware,
+// before and after the WrinkleByte rename).
+const LEGACY_KEYS = ["wrinklebyte-auth", "tendfida-auth"];
+
+/** The refresh token an earlier version left in localStorage, if any, so
+ * client.ts can trade it for the cookie once. */
+export function readLegacyRefreshToken(): string | null {
+  try {
+    for (const key of LEGACY_KEYS) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const token = (JSON.parse(raw) as { state?: { refreshToken?: unknown } })?.state?.refreshToken;
+      if (typeof token === "string" && token) return token;
+    }
+  } catch {
+    // Private windows and blocked site data throw on access; unparseable
+    // leftovers are simply ignored.
+  }
+  return null;
+}
+
+/** Remove every localStorage copy of the old tokens. */
+export function forgetLegacyTokens(): void {
+  try {
+    for (const key of LEGACY_KEYS) localStorage.removeItem(key);
+  } catch {
+    // Nothing to remove if storage is unavailable.
+  }
 }

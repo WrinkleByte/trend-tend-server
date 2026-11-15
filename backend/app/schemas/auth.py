@@ -59,12 +59,17 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
+    # None in cookie mode (the web app): the refresh token is then set as an
+    # HttpOnly cookie and deliberately kept out of the body, so page script
+    # can never read it. See app/core/session_cookie.py.
+    refresh_token: str | None = None
     token_type: str = "bearer"
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    # Optional: cookie-mode clients send nothing here and the token comes
+    # from the HttpOnly cookie instead.
+    refresh_token: str | None = None
 
 
 class UserResponse(BaseModel):

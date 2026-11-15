@@ -8,6 +8,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import { migrateLegacyDatabase } from './db/migrateLegacyDatabase'
+import { restoreSession } from './api/client'
 
 const queryClient = new QueryClient()
 
@@ -15,6 +16,9 @@ async function bootstrap() {
   // Must complete before any component can query the renamed `db` — see
   // migrateLegacyDatabase.ts for why this can't just run lazily.
   await migrateLegacyDatabase()
+  // Turn the HttpOnly refresh cookie back into an in-memory session before
+  // the first render, so protected pages don't flash the login screen.
+  await restoreSession()
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>

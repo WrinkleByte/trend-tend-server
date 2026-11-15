@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { deleteHousehold, getCurrentHousehold, wipeHouseholdData } from "../../api/households";
-import { useAuthStore } from "../../auth/authStore";
+import { logout } from "../../api/client";
 import { StatusMessage } from "../../components/StatusMessage";
 
 /** Owner-only "wipe all data" / "delete household" -- moved here from
@@ -18,7 +18,7 @@ import { StatusMessage } from "../../components/StatusMessage";
 export function DangerZoneSection() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const clearAuth = useAuthStore((s) => s.clear);
+  const clearAuth = () => void logout();
   const { data: household } = useQuery({ queryKey: ["household"], queryFn: getCurrentHousehold });
   const isOwner = household?.my_role === "owner";
 
