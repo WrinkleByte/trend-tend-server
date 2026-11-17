@@ -19,6 +19,7 @@ import {
 import type { HouseholdMember, HouseholdRole } from "../../api/types";
 import { updateMyDisplayName } from "../../api/users";
 import { StatusMessage } from "../../components/StatusMessage";
+import { formatDateTime } from "../../lib/format";
 import { PairingCodeReveal } from "../settings/PairingCodeReveal";
 import { useHouseholdMembers } from "./useHouseholdMembers";
 
@@ -156,12 +157,29 @@ function MemberDevices({
         </button>
       </form>
       {active.length > 0 && (
-        <ul className="token-list">
+        // A table, with shaded rows and readable times: as a run-on list,
+        // several devices were hard to tell apart (owner, 2026-11-16).
+        <div className="device-table-wrap">
+        <table className="device-table">
+          <thead>
+            <tr>
+              <th scope="col">Device</th>
+              <th scope="col">Last synced</th>
+              {assignable.length > 0 && <th scope="col">Move to</th>}
+              <th scope="col" className="device-actions">
+                <span className="visually-hidden">Revoke</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
           {active.map((token) => (
-            <li key={token.id}>
-              <span>{token.name}</span>
-              <span>{token.last_used_at ? `Last synced ${token.last_used_at}` : "Not used yet"}</span>
+            <tr key={token.id}>
+              <td className="device-name">{token.name}</td>
+              <td title={token.last_used_at ?? undefined}>
+                {token.last_used_at ? formatDateTime(token.last_used_at) : <span className="device-unused">Not used yet</span>}
+              </td>
               {assignable.length > 0 && (
+                <td>
                 <span className="token-assign">
                   <select
                     aria-label={`Move ${token.name} to`}
@@ -183,13 +201,18 @@ function MemberDevices({
                     Assign
                   </button>
                 </span>
+                </td>
               )}
-              <button type="button" className="danger" onClick={() => revokeMutation.mutate(token.id)}>
-                Revoke
-              </button>
-            </li>
+              <td className="device-actions">
+                <button type="button" className="danger" onClick={() => revokeMutation.mutate(token.id)}>
+                  Revoke
+                </button>
+              </td>
+            </tr>
           ))}
-        </ul>
+          </tbody>
+        </table>
+        </div>
       )}
     </div>
   );
