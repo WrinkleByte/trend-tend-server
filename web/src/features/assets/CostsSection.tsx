@@ -3,7 +3,9 @@
 
 import { useState } from "react";
 import type { Asset } from "../../api/types";
-import { costTrend, todayIso, type CostTrend } from "../../lib/costs";
+import { useQuery } from "@tanstack/react-query";
+import { getCurrentHousehold } from "../../api/households";
+import { costTrend, effectiveUnitSystem, perKilometre, runningCost, todayIso, type CostTrend } from "../../lib/costs";
 import { formatDate, formatMoney } from "../../lib/format";
 import { PERIODS, useAssetCosts, type PeriodKey } from "./useAssetCosts";
 
@@ -32,7 +34,24 @@ export function PeriodPicker({ value, onChange, label }: { value: PeriodKey; onC
 export function CostsSection({ asset }: { asset: Asset }) {
   const [period, setPeriod] = useState<PeriodKey>("1Y");
   const { tracksFuel, records, fuelLogs, loading, ownership } = useAssetCosts(asset);
+  const { data: household } = useQuery({ queryKey: ["household"], queryFn: getCurrentHousehold });
   if (loading) return <p>Loading…</p>;
+
+  // Vikunja #131: service + fuel per mile/km (vehicles) or per hour (equipment).
+  const isEquipment = asset.asset_type === "equipment";
+  const running =
+    asset.asset_type === "vehicle" || isEquipment
+      ? runningCost(
+          records.map((r) => ({ performedAt: r.performed_at, amount: r.cost, reading: r.odometer_reading })),
+          fuelLogs.map((f) => ({ performedAt: f.performed_at, amount: f.total_cost, reading: f.odometer_reading })),
+          // Equipment's current hours aren't in the web API; its service records' readings still count.
+          isEquipment ? null : asset.vehicle_details?.current_mileage,
+          isEquipment,
+        )
+      : null;
+  const metric =
+    !isEquipment &&
+    effectiveUnitSystem(asset.vehicle_details?.unit_system_override, household?.settings?.unit_system) === "metric";
 
   const months = PERIODS.find((p) => p.key === period)!.months;
   const trend = costTrend(
@@ -101,7 +120,20 @@ export function CostsSection({ asset }: { asset: Asset }) {
           testId="total-cost-of-ownership"
         />
         {ownership.perYear != null && <CostRow label="Per Year Owned" value={formatMoney(ownership.perYear)} />}
+        {running && (
+          <CostRow
+            label={`Running Cost per ${isEquipment ? "Hour" : metric ? "Kilometre" : "Mile"}`}
+            value={formatMoney(metric ? perKilometre(running.perUnit) : running.perUnit)}
+            testId="running-cost"
+          />
+        )}
       </dl>
+      {running && (
+        <p className="field-hint">
+          Running cost is service and fuel over the {isEquipment ? "hours" : "distance"} you&apos;ve logged; it leaves
+          out the purchase price.
+        </p>
+      )}
       {!ownership.purchaseKnown && (
         <p className="field-hint">Add a purchase price (Details tab) to include what it cost to buy.</p>
       )}

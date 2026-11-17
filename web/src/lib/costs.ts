@@ -316,3 +316,70 @@ export function economyForDisplay(mpg: number, system: UnitSystem): number {
 export function economyUnitLabel(system: UnitSystem): string {
   return system === "metric" ? "km/L" : "mpg";
 }
+
+// --- running cost per mile / hour (Vikunja #131) --------------------------------
+
+/** One logged cost with the odometer (or equipment hours) reading taken with it, if any. */
+export interface UsageCostEntry {
+  performedAt: string;
+  amount: number | string | null | undefined;
+  reading: number | null | undefined;
+}
+
+export interface RunningCost {
+  cost: number;
+  /** Miles (as stored) or hours, first reading to latest. */
+  usage: number;
+  /** Dollars per mile or per hour. */
+  perUnit: number;
+}
+
+export const MIN_MILES = 500;
+export const MIN_HOURS = 10;
+
+/**
+ * Service and fuel over the miles or hours logged: the shared Kotlin
+ * RunningCostCalculator.compute. Usage runs from the lowest reading (service
+ * record, fill-up or the current odometer/hours) to the highest. Cost is
+ * every service record and fill-up dated on or after the first reading's
+ * date, except the fill-up that took that reading (its fuel was burned
+ * before tracking began). Purchase price is left out: nothing records the
+ * odometer at purchase. Null under MIN_MILES / MIN_HOURS or with no spending.
+ */
+export function runningCost(
+  service: UsageCostEntry[],
+  fuel: UsageCostEntry[],
+  currentReading: number | null | undefined,
+  isEquipment: boolean,
+): RunningCost | null {
+  const day = (v: string) => (/^\d{4}-\d{2}-\d{2}/.exec(v.trim())?.[0] ?? null);
+  type Reading = { value: number; date: string | null; fuelIndex: number | null };
+  const readings: Reading[] = [];
+  for (const e of service) if (e.reading != null && e.reading > 0) readings.push({ value: e.reading, date: day(e.performedAt), fuelIndex: null });
+  fuel.forEach((e, i) => {
+    if (e.reading != null && e.reading > 0) readings.push({ value: e.reading, date: day(e.performedAt), fuelIndex: i });
+  });
+  if (currentReading != null && currentReading > 0) readings.push({ value: currentReading, date: null, fuelIndex: null });
+  if (readings.length === 0) return null;
+  // Lowest value first; on a tie a fill-up wins, so its fuel is excluded.
+  const first = readings.reduce((a, b) =>
+    b.value < a.value || (b.value === a.value && b.fuelIndex != null && a.fuelIndex == null) ? b : a,
+  );
+  const usage = Math.max(...readings.map((r) => r.value)) - first.value;
+  if (usage < (isEquipment ? MIN_HOURS : MIN_MILES)) return null;
+  const counts = (e: UsageCostEntry) => first.date == null || (day(e.performedAt) ?? "") >= first.date;
+  const positive = (v: UsageCostEntry["amount"]) => {
+    const n = Number(v);
+    return v != null && v !== "" && Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const cost =
+    service.filter(counts).reduce((s, e) => s + positive(e.amount), 0) +
+    fuel.filter((e, i) => i !== first.fuelIndex && counts(e)).reduce((s, e) => s + positive(e.amount), 0);
+  if (cost <= 0) return null;
+  return { cost, usage, perUnit: cost / usage };
+}
+
+/** Per mile to per kilometre, for metric display. */
+export function perKilometre(perMile: number): number {
+  return perMile / KM_PER_MILE;
+}

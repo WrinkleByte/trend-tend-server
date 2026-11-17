@@ -18,7 +18,8 @@ export type PeriodKey = (typeof PERIODS)[number]["key"];
 
 /** Same queries (and keys) as the Overview, Service and Fuel tabs, so nothing is fetched twice. */
 export function useAssetCosts(asset: Asset) {
-  const tracksFuel = asset.asset_type === "vehicle";
+  // As on mobile: equipment (generators, mowers) can have fuel logs too.
+  const tracksFuel = asset.asset_type === "vehicle" || asset.asset_type === "equipment";
   const records = useQuery({
     queryKey: ["maintenance-records", asset.id],
     queryFn: () => listMaintenanceRecords(asset.id),

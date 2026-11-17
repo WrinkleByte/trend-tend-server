@@ -14,6 +14,8 @@ import {
   economyForDisplay,
   effectiveUnitSystem,
   mpgSeries,
+  perKilometre,
+  runningCost,
   trailingAverage,
   type CostEntry,
   type FuelLogLike,
@@ -279,4 +281,36 @@ test("units: asset beats household beats imperial; metric shows km/L", () => {
   assert.equal(effectiveUnitSystem(undefined, undefined), "imperial");
   near(economyForDisplay(30, "metric"), 12.754, 0.001);
   assert.equal(economyForDisplay(30, "imperial"), 30);
+});
+
+// --- running cost (RunningCostTest) ----------------------------------------------
+
+const u = (performedAt: string, amount: number | null, reading: number | null = null) => ({ performedAt, amount, reading });
+
+test("running cost: service and fuel over the miles logged, first fill-up's fuel left out", () => {
+  const r = runningCost(
+    [u("2026-03-01", 100, 60_400)],
+    [u("2026-01-01", 40, 60_000), u("2026-02-01", 40, 60_300), u("2026-04-01", 40, 61_000)],
+    61_000,
+    false,
+  );
+  assert.equal(r?.usage, 1_000);
+  assert.equal(r?.cost, 180);
+  near(r?.perUnit ?? null, 0.18, 1e-9);
+});
+
+test("running cost: current odometer extends the distance; earlier costs are left out", () => {
+  near(runningCost([u("2026-03-01", 200, 10_000)], [], 12_000, false)?.perUnit ?? null, 0.1, 1e-9);
+  assert.equal(runningCost([u("2025-01-01", 900), u("2026-03-01", 100, 20_000)], [], 21_000, false)?.cost, 100);
+  assert.equal(runningCost([u("2026-03-01", 100, 20_000), u("2026-05-01T10:00:00Z", 50)], [], 21_000, false)?.cost, 150);
+});
+
+test("running cost: minimum miles/hours, equipment per hour, nothing without readings or spending", () => {
+  assert.equal(runningCost([u("2026-03-01", 100, 20_000)], [], 20_499, false), null);
+  assert.notEqual(runningCost([u("2026-03-01", 100, 20_000)], [], 20_500, false), null);
+  assert.equal(runningCost([u("2026-03-01", 100, 100)], [], 109, true), null);
+  assert.equal(runningCost([u("2026-01-01", 60, 100), u("2026-06-01", 90, 150)], [], 150, true)?.perUnit, 3);
+  assert.equal(runningCost([u("2026-01-01", 60)], [], null, false), null);
+  assert.equal(runningCost([u("2026-01-01", null, 1_000)], [], 5_000, false), null);
+  near(perKilometre(0.1609344), 0.1, 1e-9);
 });
