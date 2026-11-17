@@ -23,3 +23,12 @@ export function formatDate(isoDate: string | null | undefined): string {
     day: "numeric",
   });
 }
+
+/** "Nov 16, 2026, 8:47 PM" in the viewer's own time zone, from a full ISO
+ * timestamp ("2026-11-16T20:47:58.557619Z"). */
+export function formatDateTime(isoTimestamp: string | null | undefined): string {
+  if (!isoTimestamp) return "";
+  const date = new Date(isoTimestamp);
+  if (Number.isNaN(date.getTime())) return isoTimestamp;
+  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
