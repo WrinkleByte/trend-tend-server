@@ -9,7 +9,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "screenshot": "node scripts/screenshot.mjs"
+    "screenshot": "node scripts/screenshot.mjs",
+    "test": "node --test 'src/**/*.test.ts'"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",

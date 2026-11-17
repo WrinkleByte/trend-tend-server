@@ -25,6 +25,8 @@ export interface VehicleDetails {
   current_mileage: number | null;
   mileage_unit: string;
   fuel_type: string | null;
+  /** "imperial" / "metric", or null to follow the household. */
+  unit_system_override?: string | null;
 }
 
 export interface EquipmentDetails {
@@ -32,6 +34,7 @@ export interface EquipmentDetails {
   model_number: string | null;
   serial_number: string | null;
   warranty_expiration: string | null;
+  unit_system_override?: string | null;
 }
 
 export interface PropertyDetails {

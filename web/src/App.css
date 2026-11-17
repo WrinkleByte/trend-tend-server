@@ -1304,3 +1304,145 @@ ul {
   white-space: nowrap;
   border: 0;
 }
+
+/* ---- Cost Trends and Fuel Economy (asset Costs and Fuel tabs) ---- */
+
+.costs-section h2 + .period-picker,
+.fuel-economy h2 + .period-picker {
+  margin-bottom: 16px;
+}
+
+.costs-section h2:not(:first-child) {
+  margin-top: 32px;
+}
+
+.costs-section h3 {
+  font-size: 1rem;
+  margin: 8px 0;
+}
+
+.period-picker {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.period-picker button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-h);
+  padding: 6px 16px;
+  font-weight: 600;
+}
+
+.period-picker button + button {
+  border-left: 1px solid var(--border);
+}
+
+.period-picker button.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.chart-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+
+.chart-legend .swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+
+.swatch-service,
+.cost-chart .bar-service {
+  background: #2f5fb3;
+  fill: #2f5fb3;
+}
+
+.swatch-fuel,
+.cost-chart .bar-fuel {
+  background: #b5732c;
+  fill: #b5732c;
+}
+
+.cost-chart,
+.economy-chart {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  height: auto;
+}
+
+.chart-axis {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-tick {
+  fill: var(--text);
+  font-size: 12px;
+}
+
+.economy-line {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.economy-point {
+  fill: var(--accent);
+}
+
+.chart-empty {
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  text-align: center;
+  max-width: 720px;
+}
+
+.chart-empty p {
+  margin: 6px 0 0;
+}
+
+.cost-rows {
+  max-width: 720px;
+  margin: 12px 0 0;
+}
+
+.cost-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.cost-row dt {
+  color: var(--text);
+}
+
+.cost-row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+
+.cost-row-note {
+  font-size: 0.85rem;
+}
+
+.cost-row-total {
+  border-top: 1px solid var(--border);
+  font-weight: 700;
+}
+
+.cost-row-total dt {
+  color: var(--text-h);
+}
