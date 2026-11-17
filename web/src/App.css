@@ -430,6 +430,14 @@ ul {
   padding: 12px 4px;
 }
 
+/* A member's devices panel always starts on its own full-width line, below
+   the member's name, email and buttons. Without this the wrapping flex row
+   put it beside them whenever there was room, and the name drifted down to
+   the middle of a long device list. */
+.household-member-list li > .member-devices {
+  flex-basis: 100%;
+}
+
 /* Record rows — CSS Grid so long descriptions don't break button/cost alignment */
 .record-row {
   display: grid;
