@@ -17,6 +17,7 @@ import {
 } from "../../lib/costs";
 import { formatDate } from "../../lib/format";
 import { PeriodPicker } from "../assets/CostsSection";
+import { FuelMap } from "./FuelMap";
 import { PERIODS, type PeriodKey } from "../assets/useAssetCosts";
 
 /** The first day of the month monthsBack-1 months before today's: the same
@@ -31,7 +32,12 @@ function cutoff(monthsBack: number): string {
 export function FuelEconomyPanel({ asset }: { asset: Asset }) {
   const { data: logs } = useQuery({ queryKey: ["fuel-logs", asset.id], queryFn: () => listFuelLogs(asset.id) });
   if (!logs) return null;
-  return <FuelEconomyChart asset={asset} logs={logs} />;
+  return (
+    <>
+      <FuelEconomyChart asset={asset} logs={logs} />
+      <FuelMap asset={asset} logs={logs} />
+    </>
+  );
 }
 
 /**

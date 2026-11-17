@@ -306,6 +306,9 @@ export interface FuelLog {
   // zero-gallon fill-up and would be averaged into MPG.
   gallons: string | null;
   cost_per_gallon: string | null;
+  /** Where the fill-up happened (apps only, rounded to ~110 m); decimal strings. */
+  latitude?: string | null;
+  longitude?: string | null;
   total_cost: string | null;
   currency: string;
   is_fill_up: boolean;
