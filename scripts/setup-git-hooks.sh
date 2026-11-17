@@ -16,7 +16,9 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SOURCE_DIR="$REPO_ROOT/.githooks"
-TARGET_DIR="$REPO_ROOT/.git/hooks"
+# The shared hooks directory: in a linked worktree .git is a file, and every
+# worktree of the clone uses the main checkout's hooks.
+TARGET_DIR="$(cd "$REPO_ROOT" && git rev-parse --path-format=absolute --git-common-dir)/hooks"
 
 for hook in "$SOURCE_DIR"/*; do
     name="$(basename "$hook")"
