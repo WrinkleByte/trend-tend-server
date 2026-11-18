@@ -64,6 +64,11 @@ function LeafletMap({ places, metric }: { places: FillUpPlace[]; metric: boolean
     map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
+      // OpenStreetMap's tile policy requires a Referer from web pages and
+      // answers 403 "Access blocked" without one. The site's own policy
+      // (nginx.conf: Referrer-Policy same-origin) sends none cross-origin,
+      // so the tile requests alone send the origin (never the path).
+      referrerPolicy: "strict-origin-when-cross-origin",
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
     for (const place of places) {
