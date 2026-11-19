@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { listFuelLogs } from "../../api/fuelLogs";
 import { listMaintenanceRecords } from "../../api/maintenanceRecords";
 import type { Asset } from "../../api/types";
 import { formatDate, formatMoney } from "../../lib/format";
+import { useAssetCosts } from "./useAssetCosts";
 
 /** The numbers at the top of an asset's Overview tab. Shares its queries
  * with the Service and Fuel tabs (same query keys), so switching tabs
@@ -26,6 +28,7 @@ export function AssetOverview({ asset }: { asset: Asset }) {
   const fuelTotal = (fuelLogs ?? []).reduce((sum, f) => sum + Number(f.total_cost ?? 0), 0);
   const lastService = (records ?? []).map((r) => r.performed_at).sort().at(-1);
   const mileage = asset.vehicle_details?.current_mileage;
+  const { ownership } = useAssetCosts(asset);
 
   return (
     <div className="stat-row">
@@ -54,13 +57,18 @@ export function AssetOverview({ asset }: { asset: Asset }) {
           </span>
         </div>
       )}
-      {asset.purchase_cost != null && (
-        <div className="stat-tile">
-          <span className="stat-label">Purchase price</span>
-          <span className="stat-value">{formatMoney(asset.purchase_cost)}</span>
-          {asset.purchase_date && <span className="stat-note">{formatDate(asset.purchase_date)}</span>}
-        </div>
-      )}
+      {/* The bottom line, as on the apps' Cost Trends row; the breakdown is on the Costs tab. */}
+      <Link className="stat-tile" to={`/assets/${asset.id}/costs`} data-testid="overview-cost-of-ownership">
+        <span className="stat-label">{ownership.saleKnown ? "Net cost of ownership" : "Cost of ownership"}</span>
+        <span className="stat-value">{formatMoney(ownership.netCost)}</span>
+        <span className="stat-note">
+          {ownership.perYear != null
+            ? `${formatMoney(ownership.perYear)} per year owned`
+            : ownership.purchaseKnown
+              ? `Bought for ${formatMoney(ownership.purchase)}${asset.purchase_date ? ` · ${formatDate(asset.purchase_date)}` : ""}`
+              : "No purchase price entered"}
+        </span>
+      </Link>
     </div>
   );
 }

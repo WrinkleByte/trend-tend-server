@@ -16,6 +16,8 @@ import { TripLogsSection } from "../trips/TripLogsSection";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
 import { TabNav, type TabItem } from "../../components/ui/TabNav";
 import { AssetOverview } from "./AssetOverview";
+import { CostsSection } from "./CostsSection";
+import { FuelEconomyPanel } from "../trips/FuelEconomyChart";
 import { AssetProfilePhoto } from "./AssetProfilePhoto";
 import { ASSET_TYPES } from "./assetTypes";
 import { WHOLE_NUMBER_INPUT } from "../../components/wholeNumberInput";
@@ -161,6 +163,7 @@ export function AssetDetailPage() {
           { key: "trips", to: `${base}/trips`, label: "Trips" },
         ]
       : []),
+    { key: "costs", to: `${base}/costs`, label: "Costs" },
     { key: "reminders", to: `${base}/reminders`, label: "Reminders" },
     ...(asset.asset_type === "valuable" ? [{ key: "documents", to: `${base}/documents`, label: "Documents" }] : []),
     { key: "details", to: `${base}/details`, label: "Details" },
@@ -579,8 +582,18 @@ export function AssetDetailPage() {
           </section>
         )}
         {activeTab === "fuel" && (
+          <>
+            <section className="asset-detail-panel">
+              <FuelEconomyPanel asset={asset} />
+            </section>
+            <section className="asset-detail-panel">
+              <FuelLogsSection assetId={asset.id} />
+            </section>
+          </>
+        )}
+        {activeTab === "costs" && (
           <section className="asset-detail-panel">
-            <FuelLogsSection assetId={asset.id} />
+            <CostsSection asset={asset} />
           </section>
         )}
       </div>

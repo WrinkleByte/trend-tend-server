@@ -48,6 +48,13 @@ else
         || status=1
 fi
 
+echo "[pre-push] Running web unit tests..."
+# npm test needs Node 22.18+ (built-in TypeScript stripping); runs on the
+# host. CI doesn't run it yet: the ops GitHub App can't change workflow files.
+if [[ -d web/node_modules ]]; then
+    (cd web && npm test) || status=1
+fi
+
 echo "[pre-push] Running web lint + build..."
 if compose_service_running web; then
     docker compose exec -T web npm run lint || status=1
