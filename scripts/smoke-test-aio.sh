@@ -17,6 +17,10 @@
 #   scripts/smoke-test-aio.sh                  # build from this tree first
 #   scripts/smoke-test-aio.sh <image:tag>      # test an already built/pulled image
 set -euo pipefail
+# Checks that read a command's output use `grep PATTERN >/dev/null`, never
+# `grep -q`: -q exits at the first match, the writer can then die of
+# SIGPIPE, and pipefail reports that as a failed check (main 7637065's
+# compose smoke test failed this way on logs that did contain the match).
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
@@ -66,12 +70,12 @@ docker run -d --name "$NAME" -p "127.0.0.1:$PORT:8080" \
 wait_healthy
 
 echo "==> web app"
-curl -fsS "$BASE/" | grep -qi "<html" || fail "web root did not return HTML"
+curl -fsS "$BASE/" | grep -i "<html" >/dev/null || fail "web root did not return HTML"
 
 echo "==> API through nginx"
 health="$(curl -fsS "$BASE/api/v1/auth/setup-status")" || fail "setup-status unreachable"
 echo "    setup-status: $health"
-echo "$health" | grep -q '"setup_complete":false' || fail "fresh instance should report setup incomplete"
+echo "$health" | grep '"setup_complete":false' >/dev/null || fail "fresh instance should report setup incomplete"
 version="$(docker exec "$NAME" python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health').read().decode())")"
 echo "    /health: $version"
 
@@ -85,7 +89,7 @@ echo "==> authenticated API call"
 curl -fsS "$BASE/api/v1/assets" -H "Authorization: Bearer $token" >/dev/null || fail "GET /api/v1/assets failed"
 
 echo "==> security headers"
-curl -fsSI "$BASE/" | grep -qi "content-security-policy" || fail "missing Content-Security-Policy on /"
+curl -fsSI "$BASE/" | grep -i "content-security-policy" >/dev/null || fail "missing Content-Security-Policy on /"
 
 echo "==> generated secrets are private"
 mode="$(docker exec "$NAME" stat -c '%a' /data/secrets.env)"
@@ -97,13 +101,13 @@ docker stop "$NAME" >/dev/null
 took=$(( $(date +%s) - start ))
 [[ "$(docker inspect -f '{{.State.ExitCode}}' "$NAME")" == "0" ]] || fail "container exited non-zero on docker stop"
 (( took < 10 )) || fail "docker stop took ${took}s (hit the kill timeout?)"
-docker logs "$NAME" 2>&1 | grep -q "database system is shut down" || fail "Postgres did not report a clean shutdown"
+docker logs "$NAME" 2>&1 | grep "database system is shut down" >/dev/null || fail "Postgres did not report a clean shutdown"
 echo "    stopped cleanly in ${took}s"
 
 echo "==> restart keeps data, secrets and logins"
 docker start "$NAME" >/dev/null
 wait_healthy
-curl -fsS "$BASE/api/v1/auth/setup-status" | grep -q '"setup_complete":true' || fail "instance forgot its setup after restart"
+curl -fsS "$BASE/api/v1/auth/setup-status" | grep '"setup_complete":true' >/dev/null || fail "instance forgot its setup after restart"
 curl -fsS -X POST "$BASE/api/v1/auth/login" -H 'Content-Type: application/json' -d "$creds" >/dev/null \
     || fail "could not log in after restart"
 curl -fsS "$BASE/api/v1/assets" -H "Authorization: Bearer $token" >/dev/null \

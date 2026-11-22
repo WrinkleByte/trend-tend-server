@@ -18,6 +18,10 @@
 # Runs as its own Compose project on its own port, so it never touches a
 # real instance's containers or volumes.
 set -euo pipefail
+# Checks that read a command's output use `grep PATTERN >/dev/null`, never
+# `grep -q`: -q exits at the first match, the writer can then die of
+# SIGPIPE, and pipefail reports that as a failed check (main 7637065's
+# compose smoke test failed this way on logs that did contain the match).
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
@@ -56,18 +60,18 @@ echo "==> starting $PROJECT on port $PORT"
 compose up -d "${BUILD_ARGS[@]}" --wait --wait-timeout 180
 
 echo "==> web app"
-curl -fsS "$BASE/" | grep -qi "<html" || fail "web root did not return HTML"
+curl -fsS "$BASE/" | grep -i "<html" >/dev/null || fail "web root did not return HTML"
 
 echo "==> health through nginx"
 health="$(curl -fsS "$BASE/api/v1/auth/setup-status")" || fail "setup-status unreachable"
 echo "    setup-status: $health"
-echo "$health" | grep -q '"setup_complete":false' || fail "fresh instance should report setup incomplete"
+echo "$health" | grep '"setup_complete":false' >/dev/null || fail "fresh instance should report setup incomplete"
 
 version="$(compose exec -T server python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health').read().decode())")"
 echo "    /health: $version"
 
 echo "==> uses the postgres service, not a built-in database"
-compose logs server | grep -q "external database" || fail "server did not start in external-database mode"
+compose logs server | grep "external database" >/dev/null || fail "server did not start in external-database mode"
 [[ "$(compose exec -T server sh -c 'test -e /data/postgres && echo yes || echo no')" == no ]] || fail "server created a built-in database"
 
 echo "==> first account (becomes instance admin)"
@@ -80,12 +84,12 @@ echo "==> authenticated API call"
 curl -fsS "$BASE/api/v1/assets" -H "Authorization: Bearer $token" >/dev/null || fail "GET /api/v1/assets failed"
 
 echo "==> security headers"
-curl -fsSI "$BASE/" | grep -qi "content-security-policy" || fail "missing Content-Security-Policy on /"
+curl -fsSI "$BASE/" | grep -i "content-security-policy" >/dev/null || fail "missing Content-Security-Policy on /"
 
 echo "==> restart keeps data, generated secrets and logins"
 compose restart >/dev/null
 compose up -d --wait --wait-timeout 180 >/dev/null
-curl -fsS "$BASE/api/v1/auth/setup-status" | grep -q '"setup_complete":true' || fail "instance forgot its setup after restart"
+curl -fsS "$BASE/api/v1/auth/setup-status" | grep '"setup_complete":true' >/dev/null || fail "instance forgot its setup after restart"
 curl -fsS "$BASE/api/v1/assets" -H "Authorization: Bearer $token" >/dev/null \
     || fail "a token issued before the restart was rejected (generated JWT secret not persisted?)"
 
