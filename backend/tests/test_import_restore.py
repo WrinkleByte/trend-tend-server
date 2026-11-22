@@ -41,6 +41,11 @@ def _minimal_bundle(**overrides) -> dict:
                     "current_mileage": 42000,
                     "mileage_unit": "mi",
                     "fuel_type": None,
+                    # Remembered specs, in the shape a backup written before the
+                    # service_defaults table existed actually has them.
+                    "default_oil_viscosity": "0W-20",
+                    "default_oil_filter_part_number": "OL-909",
+                    "default_coolant_type": "OAT",
                 },
                 "equipment_details": None,
                 "property_details": None,
@@ -159,6 +164,13 @@ async def test_restore_seeds_empty_household_with_remapped_ids_and_photo(client,
     assert asset["id"] != "old-asset-1"
     assert asset["name"] == "Family Minivan"
     assert asset["vehicle_details"]["make"] == "Honda"
+    # The specs a pre-service_defaults backup remembered survive the restore. Before
+    # this they were silently dropped on the floor: restore rebuilt vehicle_details
+    # from nine hand-picked columns and never looked at the rest of the row.
+    assert asset["vehicle_details"]["default_oil_viscosity"] == "0W-20"
+    assert asset["vehicle_details"]["default_oil_filter_part_number"] == "OL-909"
+    assert asset["vehicle_details"]["default_coolant_type"] == "OAT"
+    assert asset["service_defaults"]["default_oil_viscosity"] == "0W-20"
     assert asset["version"] == 1
     # Photo pointer correctly remapped to the newly created attachment.
     assert asset["photo_attachment_id"] is not None
@@ -180,6 +192,39 @@ async def test_restore_seeds_empty_household_with_remapped_ids_and_photo(client,
     )).json()
     assert len(fuel_logs) == 1
     assert fuel_logs[0]["gas_brand"] == "Shell"
+
+
+async def test_restore_reads_service_defaults_from_the_new_bundle_shape(client, auth_headers):
+    """A current-shaped bundle writes through `service_defaults`, and the legacy fields
+    still in the same row are merged under it rather than overwriting it."""
+    bundle = json.loads(json.dumps(_minimal_bundle()))
+    row = bundle["assets"][0]
+    # A newer app wrote the same spec through both halves and disagreed with the old one:
+    # the explicit new key is what gets stored.
+    row["service_defaults"] = {
+        "default_oil_viscosity": "0W-16",
+        "default_motor_oil_brand": "Valvoline",
+        "default_fuel_filter_part_number": "FF-12",
+        "default_hvac_filter_size": "20x25x1",
+    }
+
+    response = await client.post(
+        "/api/v1/import/restore",
+        headers=auth_headers,
+        files={"file": ("backup.zip", _make_backup_zip(bundle), "application/zip")},
+    )
+    assert response.status_code == 201
+
+    asset = (await client.get("/api/v1/assets", headers=auth_headers)).json()[0]
+    saved = asset["service_defaults"]
+    assert saved["default_oil_viscosity"] == "0W-16"
+    assert saved["default_motor_oil_brand"] == "Valvoline"
+    assert saved["default_fuel_filter_part_number"] == "FF-12"
+    assert saved["default_hvac_filter_size"] == "20x25x1"
+    # A field the new key left alone still comes from the backup's legacy half.
+    assert saved["default_oil_filter_part_number"] == "OL-909"
+    # ...and the client that never learned about this table still sees it.
+    assert asset["vehicle_details"]["default_oil_filter_part_number"] == "OL-909"
 
 
 async def test_restore_blocked_when_household_already_has_data(client, auth_headers):
