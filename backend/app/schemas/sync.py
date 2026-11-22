@@ -18,6 +18,12 @@ class SyncDeviceRegister(BaseModel):
     platform: Platform
     device_name: str
     conflict_resolution_mode: ConflictResolutionMode = ConflictResolutionMode.LAST_WRITE_WINS
+    # The client side of the handshake (Vikunja #828): what app this is, and which field
+    # families it understands, named in the server's own vocabulary. Both optional, and
+    # an app that predates the key simply omits it -- which the server reads as a legacy
+    # superset client, not as a client that can do nothing.
+    client_version: str | None = None
+    capabilities: list[str] | None = None
 
 
 class SyncDeviceResponse(BaseModel):
@@ -32,6 +38,13 @@ class SyncDeviceResponse(BaseModel):
     # live -- you cannot sensibly decide what to revoke without seeing it
     # (Vikunja #36).
     revoked_at: datetime | None = None
+    # ... and which of them have ever negotiated at all (Vikunja #828). A household with one
+    # phone that declared capabilities and one that never did is a household where the two
+    # halves are storing different amounts of the same row, and nothing else in the API
+    # makes that visible.
+    client_version: str | None = None
+    capabilities: list[str] | None = None
+    capabilities_reported_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -373,6 +386,10 @@ class SyncPullResponse(BaseModel):
     # an old client nothing and gives a new one something to check before it offers a
     # field the server would throw away.
     server_capabilities: list[str] = Field(default_factory=server_capabilities)
+    # What THIS device last declared, echoed back so a client can tell "the server forgot
+    # me" from "I never said". None means never declared -- deliberately not an empty list.
+    device_capabilities: list[str] | None = None
+    device_client_version: str | None = None
 
 
 class SyncChangeIn(BaseModel):
@@ -390,6 +407,12 @@ class SyncChangeIn(BaseModel):
 class SyncPushRequest(BaseModel):
     device_id: uuid.UUID
     changes: list[SyncChangeIn]
+    # Optional refresh of what this device can do, carried on an ordinary push so an app
+    # that upgrades mid-life doesn't need a second round trip to tell the server. Absent
+    # means "nothing changed", never "clear what you have" (same rule as every other
+    # optional field on this branch).
+    client_version: str | None = None
+    capabilities: list[str] | None = None
 
 
 class SyncPushResult(BaseModel):

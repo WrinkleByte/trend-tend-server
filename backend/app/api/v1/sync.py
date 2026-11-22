@@ -314,6 +314,14 @@ async def register_device(
         platform=payload.platform,
         device_name=payload.device_name,
         conflict_resolution_mode=payload.conflict_resolution_mode,
+        # Recorded as declared, not validated against this server's own vocabulary: a client
+        # that names a capability this build doesn't have is a client on a newer build, and
+        # that is worth knowing rather than worth rejecting. server_capabilities() stays
+        # derived from this server alone, so a client can never talk itself into a feature
+        # (Vikunja #828).
+        client_version=payload.client_version,
+        capabilities=payload.capabilities,
+        capabilities_reported_at=utcnow() if payload.capabilities is not None else None,
     )
     db.add(device)
     await db.commit()
@@ -507,6 +515,11 @@ async def pull(
         # server would drop (Vikunja #828). Derived from the schemas, so it cannot claim
         # more than this build can store.
         server_capabilities=server_capabilities(),
+        # What this device last told us, echoed back (Vikunja #828). A client that declared
+        # capabilities and gets None back here knows the server lost them; a client that
+        # never declared anything sees None and knows it is the legacy half of the pair.
+        device_capabilities=device.capabilities,
+        device_client_version=device.client_version,
     )
 
 
@@ -803,6 +816,17 @@ async def push(
     db: AsyncSession = Depends(get_db),
 ) -> SyncPushResponse:
     device = await _get_active_device(db, principal, payload.device_id)
+
+    # A push is the cheap place for an app that just upgraded to say so: no second round trip,
+    # no new endpoint (Vikunja #828). Absent means "nothing changed" -- a client that omits the
+    # key must not wipe what it declared when it paired, the same presence rule every optional
+    # field on this branch follows.
+    if payload.client_version is not None:
+        device.client_version = payload.client_version
+    if payload.capabilities is not None:
+        device.capabilities = payload.capabilities
+    if payload.client_version is not None or payload.capabilities is not None:
+        device.capabilities_reported_at = utcnow()
 
     results = [
         await _apply_change(db, principal, payload.device_id, change)

@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import DateTime, ForeignKey, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -42,6 +42,16 @@ class SyncDevice(Base):
     last_sync_cursor: Mapped[str | None] = mapped_column(String(500), nullable=True)
     conflict_resolution_mode: Mapped[ConflictResolutionMode] = mapped_column(
         String(20), default=ConflictResolutionMode.LAST_WRITE_WINS, nullable=False
+    )
+    # What this device told the server it can do (Vikunja #828): its app version and the
+    # capability tags it understands, refreshed on registration and on push. NULL means
+    # "never declared anything" -- a paired phone older than the handshake, which the
+    # server keeps serving the legacy shapes rather than refusing. That is why these are
+    # nullable and why an empty list must never be backfilled into them.
+    client_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    capabilities: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    capabilities_reported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

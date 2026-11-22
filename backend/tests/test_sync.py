@@ -1222,3 +1222,171 @@ def test_the_unsupported_field_check_looks_inside_nested_payloads():
         )
         == ["service_defaults.made_up_spec"]
     )
+
+
+async def _declared_push(client, auth_headers, device_id, asset_id, base_version, data, **declaration):
+    """Push with an optional device declaration riding alongside the changes."""
+    response = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_id,
+            "changes": [
+                {
+                    "entity_type": "asset",
+                    "id": asset_id,
+                    "base_version": base_version,
+                    "client_updated_at": "2026-11-13T00:00:00Z",
+                    "data": data,
+                }
+            ],
+            **declaration,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["results"][0]
+
+
+async def _device_row(client, auth_headers, device_id) -> dict:
+    listing = await client.get("/api/v1/sync/devices", headers=auth_headers)
+    return next(d for d in listing.json() if d["id"] == device_id)
+
+
+async def test_a_device_that_says_what_it_can_do_is_remembered_saying_it(client, auth_headers):
+    """The client half of #828, server side. A pairing that declares its app version and the
+    field families it understands has both kept, and both visible on the device list --
+    because a household with one negotiating phone and one legacy phone is a household where
+    the two devices are storing different amounts of the same row, and until now nothing in
+    the API could show that."""
+    response = await client.post(
+        "/api/v1/sync/devices",
+        headers=auth_headers,
+        json={
+            "platform": "ios",
+            "device_name": "Phone on build 17",
+            "client_version": "1.5.0 (16)",
+            "capabilities": ["serviceDefaults", "serviceDefaultsBrands"],
+        },
+    )
+    assert response.status_code == 201, response.text
+    device_id = response.json()["id"]
+
+    row = await _device_row(client, auth_headers, device_id)
+    assert row["client_version"] == "1.5.0 (16)"
+    assert set(row["capabilities"]) == {"serviceDefaults", "serviceDefaultsBrands"}
+    assert row["capabilities_reported_at"] is not None
+
+    pull = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_id}
+    )
+    assert set(pull.json()["device_capabilities"]) == {"serviceDefaults", "serviceDefaultsBrands"}
+    assert pull.json()["device_client_version"] == "1.5.0 (16)"
+
+
+async def test_a_device_that_said_nothing_is_known_as_having_said_nothing(client, auth_headers):
+    """The distinction the whole compatibility story rests on. A phone paired before the
+    handshake exists is a legacy superset client and keeps getting everything; a phone that
+    deliberately declared an empty capability list would mean something else, and the server
+    must not confuse the two. So NULL is stored as NULL and echoed as None, never backfilled
+    into []."""
+    device_id = await _register_device(client, auth_headers, "Phone paired in 2025")
+
+    row = await _device_row(client, auth_headers, device_id)
+    assert row["client_version"] is None
+    assert row["capabilities"] is None
+    assert row["capabilities_reported_at"] is None
+
+    pull = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_id}
+    )
+    assert pull.json()["device_capabilities"] is None
+    # The server still advertises everything it can hold, to a legacy client, unprompted:
+    # legacy means "serve the old shapes too", never "this device gets nothing".
+    assert "serviceDefaults" in pull.json()["server_capabilities"]
+
+
+async def test_an_app_that_upgrades_mid_life_says_so_on_an_ordinary_push(client, auth_headers):
+    """No second round trip and no new endpoint: the declaration rides along with a push, so
+    a device that updated its app starts negotiating on the next sync rather than the next
+    re-pairing (which is the one thing users should never have to do to keep their data)."""
+    device_id = await _register_device(client, auth_headers, "Phone that will upgrade")
+    asset_id = str(uuid.uuid4())
+
+    await _declared_push(
+        client,
+        auth_headers,
+        device_id,
+        asset_id,
+        0,
+        {"asset_type": "vehicle", "name": "Truck", "vehicle_details": {"make": "Ram"}},
+        client_version="1.6.0 (20)",
+        capabilities=["serviceDefaults", "equipmentServiceDefaults"],
+    )
+
+    row = await _device_row(client, auth_headers, device_id)
+    assert row["client_version"] == "1.6.0 (20)"
+    assert set(row["capabilities"]) == {"serviceDefaults", "equipmentServiceDefaults"}
+    assert row["capabilities_reported_at"] is not None
+
+
+async def test_a_push_that_says_nothing_about_itself_keeps_what_it_already_said(client, auth_headers):
+    """Presence rule again, applied to the device itself. Most pushes are an app that has not
+    thought about capabilities at all; if an omitted key were read as an empty declaration,
+    every sync from a negotiating device would erase its own negotiation and drop it back to
+    legacy treatment."""
+    response = await client.post(
+        "/api/v1/sync/devices",
+        headers=auth_headers,
+        json={
+            "platform": "android",
+            "device_name": "Tablet",
+            "client_version": "1.5.0 (16)",
+            "capabilities": ["serviceDefaults"],
+        },
+    )
+    device_id = response.json()["id"]
+
+    await _push_asset(client, auth_headers, device_id, str(uuid.uuid4()), 0, {
+        "asset_type": "vehicle",
+        "name": "Truck",
+        "vehicle_details": {"make": "Ram"},
+    })
+
+    row = await _device_row(client, auth_headers, device_id)
+    assert row["client_version"] == "1.5.0 (16)"
+    assert row["capabilities"] == ["serviceDefaults"]
+
+
+async def test_a_client_cannot_declare_itself_into_a_feature(client, auth_headers):
+    """Declaring a capability is information about the client, not permission from the server.
+    What this build can hold is derived from its own schemas and columns alone, so a client
+    that names a capability the server has never heard of gains nothing -- the field it wants
+    still comes back named as unsupported."""
+    response = await client.post(
+        "/api/v1/sync/devices",
+        headers=auth_headers,
+        json={
+            "platform": "ios",
+            "device_name": "Optimistic app",
+            "client_version": "9.9.9",
+            "capabilities": ["serviceDefaultsV2"],
+        },
+    )
+    device_id = response.json()["id"]
+    asset_id = str(uuid.uuid4())
+
+    result = await _push_asset(client, auth_headers, device_id, asset_id, 0, {
+        "asset_type": "vehicle",
+        "name": "Truck",
+        # A field this build has no column for, named the way a future schema would name it.
+        "service_defaults": {"default_gasket_type": "Fel-Pro"},
+    })
+
+    assert "service_defaults.default_gasket_type" in result["unsupported_fields"]
+
+    pull = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_id}
+    )
+    assert "serviceDefaultsV2" not in pull.json()["server_capabilities"]
+    # ... while the server still remembers the device claimed it. Kept, not trusted.
+    assert pull.json()["device_capabilities"] == ["serviceDefaultsV2"]
