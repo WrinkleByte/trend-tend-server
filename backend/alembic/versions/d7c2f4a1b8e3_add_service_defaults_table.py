@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 WrinkleByte LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """move remembered service specs into one asset-level service_defaults table
 
 Revision ID: d7c2f4a1b8e3
