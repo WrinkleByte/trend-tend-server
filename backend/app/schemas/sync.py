@@ -264,6 +264,73 @@ class SyncPullRequest(BaseModel):
     device_id: uuid.UUID
 
 
+# --- Saying out loud what this server can store (Vikunja #828) -----------------
+#
+# A capability tag means exactly one thing: the fields the tag names are accepted on
+# push, stored, and sent back on pull. The tags below are DERIVED from the payload
+# schemas just above rather than written out as a constant, because a tag advertised for
+# a field the server would silently drop is worse than no tag at all: a client builds a
+# form on it, someone types their oil filter brand into it, and the value vanishes. That
+# is precisely the bug this whole card exists to prevent (comment 2204 on #823 -- build 16
+# was already sending brands, the schema did not declare them, Pydantic dropped them, and
+# the push still said "accepted"). If a field is added to a schema and a capability is
+# not raised for it, the capability list cannot lie about it.
+_SYNC_NESTED_MODELS: dict[str, type[BaseModel]] = {
+    "vehicle_details": VehicleDetailsSyncData,
+    "equipment_details": EquipmentDetailsSyncData,
+    "property_details": PropertyDetailsSyncData,
+    "valuable_details": ValuableDetailsSyncData,
+    "service_defaults": ServiceDefaultsSyncData,
+}
+
+
+def server_capabilities() -> list[str]:
+    """Every field family this server can actually carry, as tags a client can gate on."""
+    asset = AssetSyncData.model_fields
+    vehicle = VehicleDetailsSyncData.model_fields
+    defaults = ServiceDefaultsSyncData.model_fields
+    brands = {
+        "default_motor_oil_brand",
+        "default_oil_filter_brand",
+        "default_air_filter_brand",
+    }
+
+    capabilities: list[str] = []
+    if {"vehicle_details", "equipment_details", "property_details", "valuable_details"} <= set(asset):
+        capabilities.append("assetDetails")
+    if "service_defaults" in asset:
+        capabilities.append("serviceDefaults")
+    # Both halves, not just the storage half: the shipped mobile build sends brands
+    # *inside* vehicle_details, so advertising brands is only honest while the legacy
+    # shape still accepts them too. Drop one side and this tag has to fall with it.
+    if brands <= set(defaults) and brands <= set(vehicle):
+        capabilities.append("serviceDefaultsBrands")
+    if {"default_hydraulic_fluid_type", "default_hydraulic_fluid_capacity"} <= set(defaults):
+        capabilities.append("equipmentServiceDefaults")
+    if {"default_hvac_filter_size", "default_water_filter_cartridge"} <= set(defaults):
+        capabilities.append("propertyServiceDefaults")
+    return capabilities
+
+
+def unsupported_sync_fields(data_model: type[BaseModel], data: dict) -> list[str]:
+    """Keys this push carried that the server has nowhere to store them.
+
+    Pydantic drops these in silence today -- that is the mechanism, not a bug in
+    Pydantic. Dot-separated so a client can point at the exact field it sent, and so a
+    nested key cannot hide behind the name of the object that carried it.
+    """
+    fields = data_model.model_fields
+    unsupported: list[str] = []
+    for key, value in data.items():
+        if key not in fields:
+            unsupported.append(key)
+            continue
+        nested = _SYNC_NESTED_MODELS.get(key)
+        if nested is not None and isinstance(value, dict):
+            unsupported.extend(f"{key}.{k}" for k in value if k not in nested.model_fields)
+    return unsupported
+
+
 class SyncChangeOut(BaseModel):
     entity_type: str
     id: uuid.UUID
@@ -277,6 +344,12 @@ class SyncPullResponse(BaseModel):
     changes: list[SyncChangeOut]
     next_cursor: str | None
     has_more: bool
+    # On every pull, whether or not the client asked (server_capabilities() above). An
+    # app that has never heard of this key ignores it -- Android parses with
+    # ignoreUnknownKeys = true, iOS Codable ignores unknown keys -- so advertising costs
+    # an old client nothing and gives a new one something to check before it offers a
+    # field the server would throw away.
+    server_capabilities: list[str] = Field(default_factory=server_capabilities)
 
 
 class SyncChangeIn(BaseModel):
@@ -306,6 +379,12 @@ class SyncPushResult(BaseModel):
     client_data: dict | None = None
     reason: str | None = None
     detail: str | None = None
+    # Fields this push carried that the server cannot store (unsupported_sync_fields
+    # above). The row is STILL accepted -- refusing a whole change because of one key the
+    # server has never heard of is how an old phone stops syncing at all. Loudness, not
+    # rejection: the client keeps its local value instead of learning about the loss
+    # later, on another device, where the field comes back empty.
+    unsupported_fields: list[str] = []
 
 
 class SyncPushResponse(BaseModel):

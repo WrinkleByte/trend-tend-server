@@ -60,6 +60,8 @@ from app.schemas.sync import (
     TripLogSyncData,
     ValuableDetailsSyncData,
     VehicleDetailsSyncData,
+    server_capabilities,
+    unsupported_sync_fields,
 )
 
 # entity_type=="asset" 1:1 detail-table lookup, keyed by AssetType -- used by
@@ -497,7 +499,15 @@ async def pull(
     device.last_sync_at = utcnow()
     await db.commit()
 
-    return SyncPullResponse(changes=changes, next_cursor=next_cursor, has_more=has_more)
+    return SyncPullResponse(
+        changes=changes,
+        next_cursor=next_cursor,
+        has_more=has_more,
+        # Advertised on every pull so a client can check it before offering a field the
+        # server would drop (Vikunja #828). Derived from the schemas, so it cannot claim
+        # more than this build can store.
+        server_capabilities=server_capabilities(),
+    )
 
 
 async def _apply_change(
@@ -798,6 +808,18 @@ async def push(
         await _apply_change(db, principal, payload.device_id, change)
         for change in payload.changes
     ]
+
+    # Loudness, not rejection (Vikunja #828). A change the server accepted stays
+    # accepted -- an old phone must keep syncing -- but every key in it that had nowhere
+    # to go is now named back to the client. Before this, Pydantic dropped those keys in
+    # silence and the only way anyone found out was the value being empty on another
+    # device. Soft-deletes are skipped: their payload is ignored by design.
+    for change, result in zip(payload.changes, results, strict=True):
+        if result.status != "accepted" or change.deleted:
+            continue
+        config = SYNC_REGISTRY.get(change.entity_type)
+        if config is not None:
+            result.unsupported_fields = unsupported_sync_fields(config.data_model, change.data)
 
     device.last_sync_at = utcnow()
     await db.commit()

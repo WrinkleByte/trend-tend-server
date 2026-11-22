@@ -2,12 +2,14 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 import uuid
+from typing import get_args
 
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.models.mixins import utcnow
 from app.models.sync_device import SyncDevice
-from app.schemas.sync import AssetSyncData
+from app.schemas.sync import _SYNC_NESTED_MODELS, AssetSyncData, unsupported_sync_fields
 
 
 async def _register_device(client, auth_headers, name="Test Device") -> str:
@@ -1059,3 +1061,143 @@ async def test_sync_push_without_service_defaults_does_not_clear_them(client, au
     assert stored["name"] == "Truck (renamed)"
     assert stored["service_defaults"]["default_oil_viscosity"] == "0W-20"
     assert stored["vehicle_details"]["default_coolant_type"] == "OAT"
+
+
+# ===== the server says what it can store, and says it loudly (Vikunja #828) =====
+
+
+def _nested_payload_fields(model) -> set[str]:
+    """Field names whose declared type is another payload schema, Optional unwrapped."""
+    names = set()
+    for name, info in model.model_fields.items():
+        for candidate in (info.annotation, *get_args(info.annotation)):
+            if isinstance(candidate, type) and issubclass(candidate, BaseModel):
+                names.add(name)
+                break
+    return names
+
+
+def test_the_nested_map_covers_every_nested_payload_the_asset_change_declares():
+    """unsupported_sync_fields can only look inside a nested object whose shape it knows.
+    A nested schema added to AssetSyncData but not to that map would have its unknown keys
+    reported as top-level ones, which is wrong in a way a client cannot see. So the map is
+    asserted against the schema rather than kept in sync by whoever remembers it."""
+    assert _nested_payload_fields(AssetSyncData) == set(_SYNC_NESTED_MODELS)
+
+
+async def test_pull_advertises_the_field_families_it_can_store(client, auth_headers):
+    """Every pull answers what this server can actually hold, unprompted. A client that has
+    never heard of the key ignores it; a client that has can refuse to offer a field before
+    the user types anything into it. Derived from the payload schemas, so a capability that
+    the schema cannot back is not advertiseable."""
+    device = await _register_device(client, auth_headers, "Any app")
+
+    pull = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device}
+    )
+    capabilities = set(pull.json()["server_capabilities"])
+
+    assert {"assetDetails", "serviceDefaults", "serviceDefaultsBrands"} <= capabilities
+    # The server is ahead of the shipped apps here on purpose: the equipment and property
+    # specs already have a column, a sync field and a REST field, while the screens that
+    # would ask for them are still cards #825/#826. Advertising the storage half is what
+    # lets a client know it may send them.
+    assert {"equipmentServiceDefaults", "propertyServiceDefaults"} <= capabilities
+
+
+async def test_push_reports_the_fields_it_has_nowhere_to_put(client, auth_headers):
+    """The half that stops data loss: a payload carrying a field this server does not know
+    is still accepted -- the rest of the row is real, and an old phone has to keep syncing
+    -- but the keys with nowhere to go come back named. Before this, Pydantic dropped them
+    silently and "accepted" was a lie: the client believed the value was saved, sent it to
+    no one else, and the owner found out when a second device showed the field empty."""
+    device = await _register_device(client, auth_headers, "App ahead of the server")
+    asset_id = str(uuid.uuid4())
+
+    result = await _push_asset(
+        client,
+        auth_headers,
+        device,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Truck",
+            # A field the client would like the server to have. Top level: not declared.
+            "default_gasket_type": "Fel-Pro",
+            "vehicle_details": {
+                "make": "Ram",
+                # The shape of the brand bug found on #823: close to a real field name,
+                # so nothing about the push looks wrong to the client that sent it.
+                "default_oil_brand": "Valvoline",
+            },
+        },
+    )
+
+    assert result["status"] == "accepted"
+    assert set(result["unsupported_fields"]) == {
+        "default_gasket_type",
+        # Dot-separated: a nested key cannot hide behind the name of the object that
+        # carried it, and a client can point at the exact field it sent.
+        "vehicle_details.default_oil_brand",
+    }
+
+    # And the part it *can* store is stored, unchanged. What it could not store left no
+    # row behind: absence stays absence, rather than becoming an empty row of nulls that
+    # then syncs out to every other device as "the user cleared these".
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["name"] == "Truck"
+    assert stored["vehicle_details"]["make"] == "Ram"
+    assert stored["service_defaults"] is None
+
+
+async def test_fields_the_server_can_store_are_not_reported_as_unsupported(client, auth_headers):
+    """The false-alarm half of the same contract. This is build 16's actual payload shape:
+    brands inside `vehicle_details`, plus a spec only the new table carries. A client that
+    obeys unsupported_fields would start holding back fields it saves perfectly well, so an
+    accepted payload must come back with nothing in that list."""
+    device = await _register_device(client, auth_headers, "Build 16")
+    asset_id = str(uuid.uuid4())
+
+    result = await _push_asset(
+        client,
+        auth_headers,
+        device,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Truck",
+            "vehicle_details": {
+                "make": "Ram",
+                "default_oil_viscosity": "5W-30",
+                "default_motor_oil_brand": "Valvoline",
+                "default_oil_filter_brand": "Fram",
+                "default_air_filter_brand": "Fram",
+            },
+            "service_defaults": {"default_hvac_filter_size": "20x25x1"},
+        },
+    )
+
+    assert result["unsupported_fields"] == []
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["service_defaults"]["default_motor_oil_brand"] == "Valvoline"
+    assert stored["vehicle_details"]["default_air_filter_brand"] == "Fram"
+    assert stored["service_defaults"]["default_hvac_filter_size"] == "20x25x1"
+
+
+def test_the_unsupported_field_check_looks_inside_nested_payloads():
+    """Pure form of the same rule, no HTTP: nested unknown keys are named with their path,
+    known ones are not named, and a payload that is entirely understood returns empty."""
+    assert (
+        unsupported_sync_fields(
+            AssetSyncData,
+            {
+                "asset_type": "vehicle",
+                "name": "Truck",
+                "service_defaults": {"default_oil_viscosity": "5W-30", "made_up_spec": "x"},
+            },
+        )
+        == ["service_defaults.made_up_spec"]
+    )
