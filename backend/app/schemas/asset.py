@@ -19,6 +19,14 @@ class VehicleDetailsIn(BaseModel):
     current_mileage: int | None = None
     mileage_unit: str = "mi"
     fuel_type: str | None = None
+    # Accepted and echoed here even though a brand was never a vehicle_details column: this
+    # is the shape the shipped mobile build sends them in, and AssetResponse below reuses
+    # this schema, so declaring them is also what lets the outbound mirror appear instead of
+    # being dropped on the way out. Stored in service_defaults -- see VEHICLE_SIDE_NEW_FIELDS
+    # in app/schemas/service_defaults.py.
+    default_motor_oil_brand: str | None = None
+    default_oil_filter_brand: str | None = None
+    default_air_filter_brand: str | None = None
     car_display_theme: str | None = None
     stylized_plate_enabled: bool | None = None
     unit_system_override: str | None = None

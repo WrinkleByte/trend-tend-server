@@ -67,6 +67,75 @@ async def test_vehicle_service_defaults_round_trip(client, auth_headers):
     assert details["default_differential_rear_capacity"] == "2 qt"
 
 
+async def test_service_defaults_brands_arrive_through_the_vehicle_shape(client, auth_headers):
+    """The REST half of the same contract the phones use.
+
+    Brands were never vehicle_details columns, but the shipped mobile build sends them there,
+    and a key the schema does not declare is gone before any handler sees it -- while the
+    request still returns 201. Both directions are asserted because both are needed: written
+    into service_defaults, and readable from vehicle_details by a client that has never heard
+    of the new table.
+    """
+    create = await client.post(
+        "/api/v1/assets",
+        headers=auth_headers,
+        json={
+            "asset_type": "vehicle",
+            "name": "Pickup",
+            "vehicle_details": {
+                "make": "Ford",
+                "default_oil_viscosity": "5W-30",
+                "default_motor_oil_brand": "Valvoline",
+                "default_oil_filter_brand": "Fram",
+            },
+        },
+    )
+    assert create.status_code == 201, create.text
+    asset_id = create.json()["id"]
+    body = create.json()
+    assert body["vehicle_details"]["default_motor_oil_brand"] == "Valvoline"
+    assert body["vehicle_details"]["default_oil_filter_brand"] == "Fram"
+    assert body["service_defaults"]["default_motor_oil_brand"] == "Valvoline"
+    assert body["service_defaults"]["default_oil_viscosity"] == "5W-30"
+
+    # A later edit that never mentions brands must not clear them -- the field set the client
+    # sent is the only thing the server is allowed to write.
+    patch = await client.patch(
+        f"/api/v1/assets/{asset_id}",
+        headers=auth_headers,
+        json={"service_defaults": {"default_oil_viscosity": "0W-20"}},
+    )
+    assert patch.status_code == 200, patch.text
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["service_defaults"]["default_oil_viscosity"] == "0W-20"
+    assert stored["service_defaults"]["default_motor_oil_brand"] == "Valvoline"
+    assert stored["vehicle_details"]["default_oil_filter_brand"] == "Fram"
+
+
+async def test_service_defaults_are_not_vehicle_only(client, auth_headers):
+    """The table is keyed by asset, not by asset type: an equipment asset can hold the specs
+    its category list offers, and no vehicle_details row is needed for it."""
+    create = await client.post(
+        "/api/v1/assets",
+        headers=auth_headers,
+        json={
+            "asset_type": "equipment",
+            "name": "Tractor",
+            "equipment_details": {"manufacturer": "Kubota"},
+            "service_defaults": {
+                "default_oil_viscosity": "10W-30",
+                "default_hydraulic_fluid_type": "ISO 46",
+                "default_hvac_filter_size": "20x25x1",
+            },
+        },
+    )
+    assert create.status_code == 201, create.text
+    saved = create.json()["service_defaults"]
+    assert saved["default_oil_viscosity"] == "10W-30"
+    assert saved["default_hydraulic_fluid_type"] == "ISO 46"
+    assert saved["default_hvac_filter_size"] == "20x25x1"
+
+
 async def test_create_equipment_asset(client, auth_headers):
     response = await client.post(
         "/api/v1/assets",
