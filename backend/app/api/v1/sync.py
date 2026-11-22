@@ -20,6 +20,7 @@ from app.models.asset import (
     AssetType,
     EquipmentDetails,
     PropertyDetails,
+    ServiceDefaults,
     ValuableDetails,
     VehicleDetails,
 )
@@ -32,6 +33,11 @@ from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.mixins import utcnow
 from app.models.sync_device import SyncDevice
 from app.models.trip_log import TripLog
+from app.schemas.service_defaults import (
+    defaults_from_payload,
+    legacy_defaults_for_response,
+    vehicle_columns,
+)
 from app.schemas.sync import (
     AssetSyncData,
     AttachmentSyncData,
@@ -41,6 +47,7 @@ from app.schemas.sync import (
     MaintenanceRecordSyncData,
     MaintenanceScheduleSyncData,
     PropertyDetailsSyncData,
+    ServiceDefaultsSyncData,
     SyncChangeIn,
     SyncChangeOut,
     SyncDeviceRegister,
@@ -118,7 +125,9 @@ _REFERENCE_FIELDS: dict[str, tuple[type, str]] = {
 }
 
 
-def _serialize_row(entity_type: str, obj, detail: object | None = None) -> dict:
+def _serialize_row(
+    entity_type: str, obj, detail: object | None = None, service_defaults: object | None = None
+) -> dict:
     """Explicit field allowlist, not a dynamic walk of every ORM column
     (Vikunja #44's design review) -- reuses each entity's own *SyncData
     schema (the same one push validates incoming changes against) as the
@@ -158,6 +167,17 @@ def _serialize_row(entity_type: str, obj, detail: object | None = None) -> dict:
                 base["valuable_details"] = ValuableDetailsSyncData.model_validate(
                     detail, from_attributes=True
                 ).model_dump(mode="json")
+        # The asset-level defaults go out for every serviced asset type, and a
+        # vehicle gets them a second time inside vehicle_details -- outbound
+        # compatibility for clients that shipped before this table existed and
+        # read the values there. Dropping that mirror is how a lossless storage
+        # move becomes, from an old client's point of view, lost data.
+        if service_defaults is not None:
+            base["service_defaults"] = ServiceDefaultsSyncData.model_validate(
+                service_defaults, from_attributes=True
+            ).model_dump(mode="json")
+            if isinstance(detail, VehicleDetails) and base["vehicle_details"] is not None:
+                base["vehicle_details"].update(legacy_defaults_for_response(service_defaults))
     return base
 
 
@@ -175,6 +195,11 @@ async def _fetch_asset_detail(db: AsyncSession, asset: Asset) -> object | None:
     if model is None:
         return None
     result = await db.execute(select(model).where(model.asset_id == asset.id))
+    return result.scalar_one_or_none()
+
+
+async def _fetch_service_defaults(db: AsyncSession, asset_id: uuid.UUID) -> object | None:
+    result = await db.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset_id))
     return result.scalar_one_or_none()
 
 
@@ -203,8 +228,24 @@ async def _upsert_asset_details(
     } - {keep}:
         await db.execute(other.__table__.delete().where(other.asset_id == asset_id))
 
+    # Service defaults first and independently of the type sweep below: they belong
+    # to the asset, not to its current type, so turning a vehicle into a piece of
+    # equipment must not discard specs the household paid attention to entering. It
+    # also runs before the early return at the bottom, which exists for payloads
+    # that carry no matching detail row.
+    defaults = defaults_from_payload(parsed.service_defaults, parsed.vehicle_details)
+    if defaults is not None:
+        existing_defaults = (
+            await db.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset_id))
+        ).scalar_one_or_none()
+        if existing_defaults is None:
+            db.add(ServiceDefaults(asset_id=asset_id, **defaults))
+        else:
+            for field, value in defaults.items():
+                setattr(existing_defaults, field, value)
+
     if asset_type == AssetType.VEHICLE and parsed.vehicle_details is not None:
-        model, data = VehicleDetails, parsed.vehicle_details.model_dump()
+        model, data = VehicleDetails, vehicle_columns(parsed.vehicle_details)
     elif asset_type == AssetType.EQUIPMENT and parsed.equipment_details is not None:
         model, data = EquipmentDetails, parsed.equipment_details.model_dump()
     elif (
@@ -415,6 +456,17 @@ async def pull(
         for detail in result.scalars().all():
             asset_details_by_id[detail.asset_id] = detail
 
+    # Same batching as above, one extra round trip for the whole page rather than
+    # one per asset. Keyed by asset_id across every asset type: unlike the detail
+    # tables, service_defaults does not depend on which type the asset is now.
+    service_defaults_by_id: dict[uuid.UUID, object] = {}
+    if ids_by_type.get("asset", []):
+        result = await db.execute(
+            select(ServiceDefaults).where(ServiceDefaults.asset_id.in_(ids_by_type["asset"]))
+        )
+        for defaults_row in result.scalars().all():
+            service_defaults_by_id[defaults_row.asset_id] = defaults_row
+
     changes = [
         SyncChangeOut(
             entity_type=row.entity_type,
@@ -426,6 +478,9 @@ async def pull(
                 row.entity_type,
                 full_rows[(row.entity_type, row.id)],
                 detail=asset_details_by_id.get(row.id)
+                if row.entity_type == "asset"
+                else None,
+                service_defaults=service_defaults_by_id.get(row.id)
                 if row.entity_type == "asset"
                 else None,
             ),
@@ -499,7 +554,12 @@ async def _apply_change(
             status="conflict",
             server_version=existing.version,
             server_data=_serialize_row(
-                change.entity_type, existing, detail=conflict_detail
+                change.entity_type,
+                existing,
+                detail=conflict_detail,
+                service_defaults=await _fetch_service_defaults(db, change.id)
+                if change.entity_type == "asset"
+                else None,
             ),
             client_data=change.data,
         )
@@ -662,6 +722,7 @@ async def _apply_change(
                     "equipment_details",
                     "property_details",
                     "valuable_details",
+                    "service_defaults",
                     # Attribution is server-authored, never client-supplied.
                     # AttributedSyncData declares it so pull serializes it,
                     # but honouring it on push would let any client credit its

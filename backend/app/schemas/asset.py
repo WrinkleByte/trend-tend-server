@@ -39,6 +39,47 @@ class VehicleDetailsIn(BaseModel):
     default_differential_rear_capacity: str | None = None
 
 
+class ServiceDefaultsIn(BaseModel):
+    """Remembered service specs, one row per asset, for every serviced asset type.
+
+    The same field names VehicleDetailsIn has always carried for these, which is
+    the point: an app that still sends them under `vehicle_details` and an app
+    that sends them here are writing the identical value. See
+    app/schemas/service_defaults.py for both halves of that compatibility path and
+    why neither half is optional.
+
+    Which subset a client shows depends on the asset type -- vehicle, equipment,
+    property each get their own screen -- but the wire shape is one schema, and
+    `valuable` assets get no row at all.
+    """
+
+    default_oil_viscosity: str | None = None
+    default_oil_formulation: str | None = None
+    default_oil_meets_dexos: bool | None = None
+    default_oil_capacity: str | None = None
+    default_motor_oil_brand: str | None = None
+    default_oil_filter_part_number: str | None = None
+    default_oil_filter_brand: str | None = None
+    default_air_filter_part_number: str | None = None
+    default_air_filter_brand: str | None = None
+    default_fuel_filter_part_number: str | None = None
+    default_fuel_filter_brand: str | None = None
+    default_hydraulic_fluid_type: str | None = None
+    default_hydraulic_fluid_capacity: str | None = None
+    default_hvac_filter_size: str | None = None
+    default_hvac_filter_brand: str | None = None
+    default_water_filter_cartridge: str | None = None
+    default_water_filter_brand: str | None = None
+    default_transmission_fluid_type: str | None = None
+    default_transmission_filter_part_number: str | None = None
+    default_transmission_fluid_capacity: str | None = None
+    default_coolant_type: str | None = None
+    default_differential_front_fluid_type: str | None = None
+    default_differential_front_capacity: str | None = None
+    default_differential_rear_fluid_type: str | None = None
+    default_differential_rear_capacity: str | None = None
+
+
 class EquipmentDetailsIn(BaseModel):
     manufacturer: str | None = None
     model_number: str | None = None
@@ -79,6 +120,7 @@ class AssetCreate(BaseModel):
     equipment_details: EquipmentDetailsIn | None = None
     property_details: PropertyDetailsIn | None = None
     valuable_details: ValuableDetailsIn | None = None
+    service_defaults: ServiceDefaultsIn | None = None
 
 
 class AssetUpdate(BaseModel):
@@ -103,6 +145,7 @@ class AssetUpdate(BaseModel):
     equipment_details: EquipmentDetailsIn | None = None
     property_details: PropertyDetailsIn | None = None
     valuable_details: ValuableDetailsIn | None = None
+    service_defaults: ServiceDefaultsIn | None = None
 
 
 class AssetResponse(BaseModel):
@@ -134,5 +177,6 @@ class AssetResponse(BaseModel):
     equipment_details: EquipmentDetailsIn | None = None
     property_details: PropertyDetailsIn | None = None
     valuable_details: ValuableDetailsIn | None = None
+    service_defaults: ServiceDefaultsIn | None = None
 
     model_config = {"from_attributes": True}

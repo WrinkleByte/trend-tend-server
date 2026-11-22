@@ -18,6 +18,7 @@ from app.models.asset import (
     Asset,
     EquipmentDetails,
     PropertyDetails,
+    ServiceDefaults,
     ValuableDetails,
     VehicleDetails,
 )
@@ -25,6 +26,11 @@ from app.models.attachment import Attachment
 from app.models.household import HouseholdMembership
 from app.models.mixins import utcnow
 from app.schemas.asset import AssetCreate, AssetResponse, AssetUpdate
+from app.schemas.service_defaults import (
+    defaults_from_payload,
+    legacy_defaults_for_response,
+    vehicle_columns,
+)
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -49,11 +55,48 @@ async def _load_details(db: AsyncSession, asset: Asset) -> dict:
     elif asset.asset_type == "valuable":
         result = await db.execute(select(ValuableDetails).where(ValuableDetails.asset_id == asset.id))
         extra["valuable_details"] = _row_to_dict(result.scalar_one_or_none())
+
+    # Remembered service specs ride along for every serviced asset type -- that is
+    # the point of the new table -- and a vehicle additionally gets them re-emitted
+    # inside vehicle_details. That second half is not decoration: an app shipped
+    # before this table exists reads vehicle_details.default_oil_viscosity, and
+    # serving the value only under the new key reads to it as "no saved specs".
+    # From that client's side the data would simply be gone.
+    result = await db.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset.id))
+    defaults = result.scalar_one_or_none()
+    extra["service_defaults"] = _row_to_dict(defaults)
+    if asset.asset_type == "vehicle" and defaults is not None:
+        if extra["vehicle_details"] is None:
+            extra["vehicle_details"] = {}
+        extra["vehicle_details"].update(legacy_defaults_for_response(defaults))
     return extra
 
 
 def _to_response(asset: Asset, details: dict) -> AssetResponse:
     return AssetResponse.model_validate({**asset.__dict__, **details})
+
+
+async def _write_service_defaults(
+    db: AsyncSession, asset_id: uuid.UUID, payload: AssetCreate | AssetUpdate
+) -> None:
+    """Write the payload's remembered specs into service_defaults, from either shape.
+
+    Only fields the client actually sent are written (see defaults_from_payload): an app
+    that knows nine of the twenty-five must not clear the other sixteen because the user
+    renamed the asset. A payload with no service-default intent at all is a no-op, not a
+    wipe -- the rule _upsert_asset_details already applies to the detail tables.
+    """
+    values = defaults_from_payload(payload.service_defaults, payload.vehicle_details)
+    if values is None:
+        return
+    existing = (
+        await db.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset_id))
+    ).scalar_one_or_none()
+    if existing is None:
+        db.add(ServiceDefaults(asset_id=asset_id, **values))
+    else:
+        for field, value in values.items():
+            setattr(existing, field, value)
 
 
 async def _verify_owner_is_a_member(
@@ -128,8 +171,9 @@ async def create_asset(
     db.add(asset)
     await db.flush()
 
+    await _write_service_defaults(db, asset.id, payload)
     if payload.vehicle_details:
-        db.add(VehicleDetails(asset_id=asset.id, **payload.vehicle_details.model_dump()))
+        db.add(VehicleDetails(asset_id=asset.id, **vehicle_columns(payload.vehicle_details)))
     if payload.equipment_details:
         db.add(EquipmentDetails(asset_id=asset.id, **payload.equipment_details.model_dump()))
     if payload.property_details:
@@ -189,11 +233,12 @@ async def update_asset(
     asset.version += 1
     asset.updated_at = utcnow()
 
+    await _write_service_defaults(db, asset.id, payload)
     if payload.vehicle_details:
         await db.execute(
             VehicleDetails.__table__.delete().where(VehicleDetails.asset_id == asset.id)
         )
-        db.add(VehicleDetails(asset_id=asset.id, **payload.vehicle_details.model_dump()))
+        db.add(VehicleDetails(asset_id=asset.id, **vehicle_columns(payload.vehicle_details)))
     if payload.equipment_details:
         await db.execute(
             EquipmentDetails.__table__.delete().where(EquipmentDetails.asset_id == asset.id)

@@ -11,6 +11,7 @@ from app.models.asset import AssetStatus, AssetType
 from app.models.attachment import StorageBackendType
 from app.models.maintenance_schedule import IntervalType
 from app.models.sync_device import ConflictResolutionMode, Platform
+from app.schemas.asset import ServiceDefaultsIn
 
 
 class SyncDeviceRegister(BaseModel):
@@ -117,6 +118,18 @@ class ValuableDetailsSyncData(BaseModel):
     linked_property_asset_id: uuid.UUID | None = None
 
 
+class ServiceDefaultsSyncData(ServiceDefaultsIn):
+    """Wire shape for the asset-level service defaults, declared as its own class so
+    the pull/push allowlist invariant keeps naming it explicitly (docs/development.md),
+    and inheriting the field list from the REST schema because the two are meant to be
+    identical -- a spec the REST API can store is a spec sync must be able to carry.
+
+    The same names VehicleDetailsSyncData still declares for its fourteen legacy specs.
+    Both halves are required: a pre-move client writes and reads through the legacy
+    fields, a current client through these. See app/schemas/service_defaults.py.
+    """
+
+
 class AssetSyncData(AttributedSyncData):
     """The base `assets` row plus, nested, whichever 1:1 detail side table
     matches asset_type — the 1:1 tables carry no sync envelope of their own
@@ -150,6 +163,7 @@ class AssetSyncData(AttributedSyncData):
     equipment_details: EquipmentDetailsSyncData | None = None
     property_details: PropertyDetailsSyncData | None = None
     valuable_details: ValuableDetailsSyncData | None = None
+    service_defaults: ServiceDefaultsSyncData | None = None
 
 
 class MaintenanceRecordSyncData(AttributedSyncData):
