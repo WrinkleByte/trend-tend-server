@@ -92,6 +92,13 @@ class VehicleDetailsSyncData(BaseModel):
     default_transmission_fluid_capacity: str | None = None
     default_differential_front_capacity: str | None = None
     default_differential_rear_capacity: str | None = None
+    # Not legacy vehicle columns: see VEHICLE_SIDE_NEW_FIELDS in app/schemas/service_defaults.py.
+    # Declared here because the shipped mobile build sends the brand preferences its 21.sqm
+    # added inside vehicle_details, and an undeclared key is discarded at parse -- before any
+    # handler can route it -- while the push is still reported to the client as accepted.
+    default_motor_oil_brand: str | None = None
+    default_oil_filter_brand: str | None = None
+    default_air_filter_brand: str | None = None
 
 
 class EquipmentDetailsSyncData(BaseModel):

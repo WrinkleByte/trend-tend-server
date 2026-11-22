@@ -983,3 +983,79 @@ async def test_negative_sale_price_push_is_rejected(client, auth_headers):
     result = response.json()["results"][0]
     assert result["status"] == "rejected"
     assert result["reason"] == "validation_error"
+
+
+# ===== service defaults across the sync protocol, in both client shapes =====
+
+
+async def test_service_defaults_reach_sync_from_a_pre_move_client_payload(client, auth_headers):
+    """A phone that shipped before this table exists writes its remembered specs inside
+    `vehicle_details` and reads them back from there. Both directions have to keep working
+    after the move, because that build is already installed and is not being rebuilt as part
+    of this release.
+
+    The brand rows matter here specifically: build 16 sends them inside `vehicle_details`
+    and the server has been dropping them. If they do not land in the table, a second phone
+    pulls a null and clears the brand the owner actually chose.
+    """
+    old_app = await _register_device(client, auth_headers, "Pre-move app")
+    other = await _register_device(client, auth_headers, "Other phone")
+    asset_id = str(uuid.uuid4())
+
+    await _push_asset(
+        client,
+        auth_headers,
+        old_app,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Dodge Truck",
+            "vehicle_details": {
+                "make": "Ram",
+                "default_oil_viscosity": "5W-30",
+                "default_oil_filter_part_number": "PF-63",
+                "default_motor_oil_brand": "Valvoline",
+            },
+        },
+    )
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["service_defaults"]["default_oil_viscosity"] == "5W-30"
+    assert stored["service_defaults"]["default_oil_filter_part_number"] == "PF-63"
+    assert stored["service_defaults"]["default_motor_oil_brand"] == "Valvoline"
+
+    data = await _pulled_asset(client, auth_headers, other, asset_id)
+    # The pre-move client's own read path: still inside vehicle_details.
+    assert data["vehicle_details"]["default_oil_viscosity"] == "5W-30"
+    assert data["vehicle_details"]["default_oil_filter_part_number"] == "PF-63"
+    # A client that knows about the table can read it straight off the same change.
+    assert data["service_defaults"]["default_oil_viscosity"] == "5W-30"
+
+
+async def test_sync_push_without_service_defaults_does_not_clear_them(client, auth_headers):
+    """An edit to just the base asset row, or a push from a client that has never heard of
+    this table, must not blank out specs another device already saved."""
+    device = await _register_device(client, auth_headers, "One app")
+    asset_id = str(uuid.uuid4())
+
+    await _push_asset(
+        client,
+        auth_headers,
+        device,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Truck",
+            "vehicle_details": {"default_oil_viscosity": "0W-20", "default_coolant_type": "OAT"},
+        },
+    )
+    await _push_asset(
+        client, auth_headers, device, asset_id, 1, {"asset_type": "vehicle", "name": "Truck (renamed)"}
+    )
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["name"] == "Truck (renamed)"
+    assert stored["service_defaults"]["default_oil_viscosity"] == "0W-20"
+    assert stored["vehicle_details"]["default_coolant_type"] == "OAT"

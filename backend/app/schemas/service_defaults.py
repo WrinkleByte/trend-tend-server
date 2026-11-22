@@ -71,6 +71,23 @@ NEW_DEFAULT_FIELDS: tuple[str, ...] = (
 
 SERVICE_DEFAULT_FIELDS: tuple[str, ...] = LEGACY_VEHICLE_DEFAULT_FIELDS + NEW_DEFAULT_FIELDS
 
+# The three specs the shipped mobile build already puts inside `vehicle_details`, even
+# though they were never vehicle columns and have no legacy name: its 21.sqm added them
+# to vehicleDetails, so that is the shape its payloads arrive in. Accepted there, stored
+# in service_defaults, mirrored back there. Without this list they are dropped at schema
+# parse and the server reports the push as accepted -- which is how a saved brand gets
+# erased: one phone pushes it, the server stores null, every other phone pulls the null,
+# and the next full-row push writes that null back over what the owner chose.
+VEHICLE_SIDE_NEW_FIELDS: tuple[str, ...] = (
+    "default_motor_oil_brand",
+    "default_oil_filter_brand",
+    "default_air_filter_brand",
+)
+
+# Everything a vehicle client may send or read inside `vehicle_details`, in either
+# direction. Wider than the fourteen that were actually columns there.
+VEHICLE_WIRE_DEFAULT_FIELDS: tuple[str, ...] = LEGACY_VEHICLE_DEFAULT_FIELDS + VEHICLE_SIDE_NEW_FIELDS
+
 
 def _sent_fields(payload: Any) -> set[str]:
     """Keys the client actually put in the payload.
@@ -101,7 +118,7 @@ def defaults_from_payload(
             out[field] = getattr(service_defaults, field)
 
     if legacy_vehicle_details is not None:
-        legacy_sent = _sent_fields(legacy_vehicle_details) & set(LEGACY_VEHICLE_DEFAULT_FIELDS)
+        legacy_sent = _sent_fields(legacy_vehicle_details) & set(VEHICLE_WIRE_DEFAULT_FIELDS)
         for field in legacy_sent:
             # Only fill what the new payload left open, so a client that sends both
             # shapes cannot have the stale copy overwrite the fresh one.
@@ -120,7 +137,7 @@ def legacy_defaults_for_response(row: Any) -> dict[str, Any]:
     """
     if row is None:
         return {}
-    return {field: getattr(row, field, None) for field in LEGACY_VEHICLE_DEFAULT_FIELDS}
+    return {field: getattr(row, field, None) for field in VEHICLE_WIRE_DEFAULT_FIELDS}
 
 
 def vehicle_columns(payload: Any) -> dict[str, Any]:
@@ -132,4 +149,4 @@ def vehicle_columns(payload: Any) -> dict[str, Any]:
     on every asset save, and the fourteen values are already being written to
     service_defaults by defaults_from_payload above -- here they are simply not passed on.
     """
-    return {k: v for k, v in payload.model_dump().items() if k not in LEGACY_VEHICLE_DEFAULT_FIELDS}
+    return {k: v for k, v in payload.model_dump().items() if k not in SERVICE_DEFAULT_FIELDS}
