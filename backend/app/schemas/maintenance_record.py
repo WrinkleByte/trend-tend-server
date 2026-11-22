@@ -27,6 +27,10 @@ class MaintenanceRecordCreate(BaseModel):
     filter_part_number: str | None = None
     fluid_type: str | None = None
     capacity: str | None = None
+    # Which brand this job actually used. Distinct from the asset's saved default
+    # brand; the mobile app has been sending it since 2026-11-21 and the server
+    # only got a column for it now (card #823).
+    brand: str | None = None
 
 
 class MaintenanceRecordBulkCreate(BaseModel):
@@ -59,6 +63,7 @@ class MaintenanceRecordUpdate(BaseModel):
     filter_part_number: str | None = None
     fluid_type: str | None = None
     capacity: str | None = None
+    brand: str | None = None
 
 
 class MaintenanceRecordResponse(BaseModel):
@@ -81,6 +86,7 @@ class MaintenanceRecordResponse(BaseModel):
     filter_part_number: str | None
     fluid_type: str | None
     capacity: str | None
+    brand: str | None
     # Who in the household last changed this row. Server-set from the
     # authenticated principal, never client-supplied — see
     # SyncedEntityMixin.updated_by_user_id.

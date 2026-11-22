@@ -191,6 +191,10 @@ class MaintenanceRecordSyncData(AttributedSyncData):
     filter_part_number: str | None = None
     fluid_type: str | None = None
     capacity: str | None = None
+    # Sent by the shipped mobile app on every record push. Declared here and backed by
+    # maintenance_records.brand (migration a4f6c1d8b2e5): declaring it without the column
+    # is the exact silent-loss shape tests/test_sync_contract.py exists to catch.
+    brand: str | None = None
 
 
 class FuelLogSyncData(AttributedSyncData):
