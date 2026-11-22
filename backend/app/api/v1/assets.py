@@ -4,7 +4,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -77,7 +77,7 @@ def _to_response(asset: Asset, details: dict) -> AssetResponse:
 
 
 async def _write_service_defaults(
-    db: AsyncSession, asset_id: uuid.UUID, payload: AssetCreate | AssetUpdate
+    db: AsyncSession, asset: Asset, payload: AssetCreate | AssetUpdate
 ) -> None:
     """Write the payload's remembered specs into service_defaults, from either shape.
 
@@ -85,15 +85,25 @@ async def _write_service_defaults(
     that knows nine of the twenty-five must not clear the other sixteen because the user
     renamed the asset. A payload with no service-default intent at all is a no-op, not a
     wipe -- the rule _upsert_asset_details already applies to the detail tables.
+
+    `valuable` assets have no row at all: their categories (repair, replacement,
+    appraisal) are not spec-driven, so there is nothing a default could prefill and
+    nothing a cart would search for. Sending specs for one is dropped here rather than
+    stored -- which is what ServiceDefaultsIn's docstring promises -- and a row an
+    earlier build already wrote gets removed instead of left orphaned behind the asset.
     """
     values = defaults_from_payload(payload.service_defaults, payload.vehicle_details)
+    if asset.asset_type == "valuable":
+        if values is not None:
+            await db.execute(delete(ServiceDefaults).where(ServiceDefaults.asset_id == asset.id))
+        return
     if values is None:
         return
     existing = (
-        await db.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset_id))
+        await db.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset.id))
     ).scalar_one_or_none()
     if existing is None:
-        db.add(ServiceDefaults(asset_id=asset_id, **values))
+        db.add(ServiceDefaults(asset_id=asset.id, **values))
     else:
         for field, value in values.items():
             setattr(existing, field, value)
@@ -171,7 +181,7 @@ async def create_asset(
     db.add(asset)
     await db.flush()
 
-    await _write_service_defaults(db, asset.id, payload)
+    await _write_service_defaults(db, asset, payload)
     if payload.vehicle_details:
         db.add(VehicleDetails(asset_id=asset.id, **vehicle_columns(payload.vehicle_details)))
     if payload.equipment_details:
@@ -233,7 +243,7 @@ async def update_asset(
     asset.version += 1
     asset.updated_at = utcnow()
 
-    await _write_service_defaults(db, asset.id, payload)
+    await _write_service_defaults(db, asset, payload)
     if payload.vehicle_details:
         await db.execute(
             VehicleDetails.__table__.delete().where(VehicleDetails.asset_id == asset.id)

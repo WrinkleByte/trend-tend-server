@@ -29,8 +29,8 @@ from app.models.maintenance_record import MaintenanceRecord, RecordAttachment
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.schemas.import_restore import RestoreConflict, RestoreSummary
 from app.schemas.service_defaults import (
-    LEGACY_VEHICLE_DEFAULT_FIELDS,
     SERVICE_DEFAULT_FIELDS,
+    VEHICLE_WIRE_DEFAULT_FIELDS,
 )
 from app.storage.base import StorageBackend
 from app.storage.factory import get_storage_backend
@@ -58,6 +58,14 @@ def _service_defaults_from_row(row: dict) -> dict[str, Any] | None:
 
     Fields the backup does not contain stay unset rather than null-written: absence in a
     backup means "that app version had no such field", not "the user cleared it".
+
+    The legacy half reads the vehicle wire set, not just the fourteen columns that predate
+    this table. The three brand fields were added on the mobile side while the server still
+    kept specs inside vehicle_details, so a backup written by that build carries
+    default_motor_oil_brand, default_oil_filter_brand and default_air_filter_brand in
+    vehicle_details too. Reading only the pre-brand twelve-plus-two list restores such a
+    backup with the oil and the filter part number intact and every brand quietly gone --
+    the exact shape of loss this function exists to prevent.
     """
     out: dict[str, Any] = {}
     exported = row.get("service_defaults")
@@ -67,7 +75,7 @@ def _service_defaults_from_row(row: dict) -> dict[str, Any] | None:
                 out[field] = exported[field]
     vehicle = row.get("vehicle_details")
     if isinstance(vehicle, dict):
-        for field in LEGACY_VEHICLE_DEFAULT_FIELDS:
+        for field in VEHICLE_WIRE_DEFAULT_FIELDS:
             if field in vehicle:
                 out.setdefault(field, vehicle[field])
     return out or None

@@ -136,6 +136,42 @@ async def test_service_defaults_are_not_vehicle_only(client, auth_headers):
     assert saved["default_hvac_filter_size"] == "20x25x1"
 
 
+async def test_valuable_assets_get_no_service_defaults_row(client, auth_headers):
+    """ServiceDefaultsIn promises "valuable assets get no row", because their categories
+    (repair, replacement, appraisal) are not spec-driven: nothing a default could prefill,
+    nothing a cart would search for. The write path has to keep that promise rather than
+    document it -- it used to store whatever arrived, which left a spec row hanging off an
+    asset that can never use it, reported back to the client as if it were saved.
+
+    Dropping the intent is the safe half; removing a row an earlier build already wrote is
+    the repair, so a valuable asset that picked up specs by accident stops reporting them.
+    """
+    create = await client.post(
+        "/api/v1/assets",
+        headers=auth_headers,
+        json={
+            "asset_type": "valuable",
+            "name": "Upright Piano",
+            "valuable_details": {"manufacturer": "Steinway"},
+            "service_defaults": {"default_oil_viscosity": "should-not-land"},
+        },
+    )
+    assert create.status_code == 201, create.text
+    asset = create.json()
+    assert asset["service_defaults"] is None
+
+    patch = await client.patch(
+        f"/api/v1/assets/{asset['id']}",
+        headers=auth_headers,
+        json={"service_defaults": {"default_oil_viscosity": "still-should-not-land"}},
+    )
+    assert patch.status_code == 200, patch.text
+    assert patch.json()["service_defaults"] is None
+
+    stored = await client.get(f"/api/v1/assets/{asset['id']}", headers=auth_headers)
+    assert stored.json()["service_defaults"] is None
+
+
 async def test_create_equipment_asset(client, auth_headers):
     response = await client.post(
         "/api/v1/assets",

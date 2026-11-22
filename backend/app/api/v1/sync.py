@@ -236,7 +236,16 @@ async def _upsert_asset_details(
     # also runs before the early return at the bottom, which exists for payloads
     # that carry no matching detail row.
     defaults = defaults_from_payload(parsed.service_defaults, parsed.vehicle_details)
-    if defaults is not None:
+    if asset_type == AssetType.VALUABLE:
+        # The same rule _write_service_defaults applies on the REST side: a valuable
+        # asset has no service_defaults row, because its categories are not
+        # spec-driven. Specs sent for one are dropped rather than stored, and a row
+        # an earlier build already wrote is removed rather than left orphaned.
+        if defaults is not None:
+            await db.execute(
+                ServiceDefaults.__table__.delete().where(ServiceDefaults.asset_id == asset_id)
+            )
+    elif defaults is not None:
         existing_defaults = (
             await db.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset_id))
         ).scalar_one_or_none()
