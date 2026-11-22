@@ -2,12 +2,14 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 import uuid
+from typing import get_args
 
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.models.mixins import utcnow
 from app.models.sync_device import SyncDevice
-from app.schemas.sync import AssetSyncData
+from app.schemas.sync import _SYNC_NESTED_MODELS, AssetSyncData, unsupported_sync_fields
 
 
 async def _register_device(client, auth_headers, name="Test Device") -> str:
@@ -983,3 +985,408 @@ async def test_negative_sale_price_push_is_rejected(client, auth_headers):
     result = response.json()["results"][0]
     assert result["status"] == "rejected"
     assert result["reason"] == "validation_error"
+
+
+# ===== service defaults across the sync protocol, in both client shapes =====
+
+
+async def test_service_defaults_reach_sync_from_a_pre_move_client_payload(client, auth_headers):
+    """A phone that shipped before this table exists writes its remembered specs inside
+    `vehicle_details` and reads them back from there. Both directions have to keep working
+    after the move, because that build is already installed and is not being rebuilt as part
+    of this release.
+
+    The brand rows matter here specifically: build 16 sends them inside `vehicle_details`
+    and the server has been dropping them. If they do not land in the table, a second phone
+    pulls a null and clears the brand the owner actually chose.
+    """
+    old_app = await _register_device(client, auth_headers, "Pre-move app")
+    other = await _register_device(client, auth_headers, "Other phone")
+    asset_id = str(uuid.uuid4())
+
+    await _push_asset(
+        client,
+        auth_headers,
+        old_app,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Dodge Truck",
+            "vehicle_details": {
+                "make": "Ram",
+                "default_oil_viscosity": "5W-30",
+                "default_oil_filter_part_number": "PF-63",
+                "default_motor_oil_brand": "Valvoline",
+            },
+        },
+    )
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["service_defaults"]["default_oil_viscosity"] == "5W-30"
+    assert stored["service_defaults"]["default_oil_filter_part_number"] == "PF-63"
+    assert stored["service_defaults"]["default_motor_oil_brand"] == "Valvoline"
+
+    data = await _pulled_asset(client, auth_headers, other, asset_id)
+    # The pre-move client's own read path: still inside vehicle_details.
+    assert data["vehicle_details"]["default_oil_viscosity"] == "5W-30"
+    assert data["vehicle_details"]["default_oil_filter_part_number"] == "PF-63"
+    # A client that knows about the table can read it straight off the same change.
+    assert data["service_defaults"]["default_oil_viscosity"] == "5W-30"
+
+
+async def test_sync_push_without_service_defaults_does_not_clear_them(client, auth_headers):
+    """An edit to just the base asset row, or a push from a client that has never heard of
+    this table, must not blank out specs another device already saved."""
+    device = await _register_device(client, auth_headers, "One app")
+    asset_id = str(uuid.uuid4())
+
+    await _push_asset(
+        client,
+        auth_headers,
+        device,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Truck",
+            "vehicle_details": {"default_oil_viscosity": "0W-20", "default_coolant_type": "OAT"},
+        },
+    )
+    await _push_asset(
+        client, auth_headers, device, asset_id, 1, {"asset_type": "vehicle", "name": "Truck (renamed)"}
+    )
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["name"] == "Truck (renamed)"
+    assert stored["service_defaults"]["default_oil_viscosity"] == "0W-20"
+    assert stored["vehicle_details"]["default_coolant_type"] == "OAT"
+
+
+# ===== the server says what it can store, and says it loudly (Vikunja #828) =====
+
+
+def _nested_payload_fields(model) -> set[str]:
+    """Field names whose declared type is another payload schema, Optional unwrapped."""
+    names = set()
+    for name, info in model.model_fields.items():
+        for candidate in (info.annotation, *get_args(info.annotation)):
+            if isinstance(candidate, type) and issubclass(candidate, BaseModel):
+                names.add(name)
+                break
+    return names
+
+
+def test_the_nested_map_covers_every_nested_payload_the_asset_change_declares():
+    """unsupported_sync_fields can only look inside a nested object whose shape it knows.
+    A nested schema added to AssetSyncData but not to that map would have its unknown keys
+    reported as top-level ones, which is wrong in a way a client cannot see. So the map is
+    asserted against the schema rather than kept in sync by whoever remembers it."""
+    assert _nested_payload_fields(AssetSyncData) == set(_SYNC_NESTED_MODELS)
+
+
+async def test_pull_advertises_the_field_families_it_can_store(client, auth_headers):
+    """Every pull answers what this server can actually hold, unprompted. A client that has
+    never heard of the key ignores it; a client that has can refuse to offer a field before
+    the user types anything into it. Derived from the payload schemas, so a capability that
+    the schema cannot back is not advertiseable."""
+    device = await _register_device(client, auth_headers, "Any app")
+
+    pull = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device}
+    )
+    capabilities = set(pull.json()["server_capabilities"])
+
+    assert {"assetDetails", "serviceDefaults", "serviceDefaultsBrands"} <= capabilities
+    # The server is ahead of the shipped apps here on purpose: the equipment and property
+    # specs already have a column, a sync field and a REST field, while the screens that
+    # would ask for them are still cards #825/#826. Advertising the storage half is what
+    # lets a client know it may send them.
+    assert {"equipmentServiceDefaults", "propertyServiceDefaults"} <= capabilities
+
+
+def test_a_capability_needs_a_column_not_only_a_wire_field(monkeypatch):
+    """The gating is the entire point of a capability tag, so it gets tested directly: strip
+    the columns out from under it and the tags fall, even though every payload schema still
+    declares every field. Telling a client "brands are supported" and then dropping them is
+    the bug this card was opened for, so a tag is not allowed to survive on the wire's word
+    alone -- only on the wire AND a column that survives a restart."""
+    import app.schemas.sync as sync_schemas
+
+    monkeypatch.setattr(
+        sync_schemas,
+        "_STORED_SERVICE_DEFAULT_FIELDS",
+        frozenset({"default_oil_viscosity"}),
+    )
+    capabilities = sync_schemas.server_capabilities()
+
+    assert "serviceDefaults" in capabilities
+    assert "serviceDefaultsBrands" not in capabilities
+    assert "equipmentServiceDefaults" not in capabilities
+    assert "propertyServiceDefaults" not in capabilities
+
+
+async def test_push_reports_the_fields_it_has_nowhere_to_put(client, auth_headers):
+    """The half that stops data loss: a payload carrying a field this server does not know
+    is still accepted -- the rest of the row is real, and an old phone has to keep syncing
+    -- but the keys with nowhere to go come back named. Before this, Pydantic dropped them
+    silently and "accepted" was a lie: the client believed the value was saved, sent it to
+    no one else, and the owner found out when a second device showed the field empty."""
+    device = await _register_device(client, auth_headers, "App ahead of the server")
+    asset_id = str(uuid.uuid4())
+
+    result = await _push_asset(
+        client,
+        auth_headers,
+        device,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Truck",
+            # A field the client would like the server to have. Top level: not declared.
+            "default_gasket_type": "Fel-Pro",
+            "vehicle_details": {
+                "make": "Ram",
+                # The shape of the brand bug found on #823: close to a real field name,
+                # so nothing about the push looks wrong to the client that sent it.
+                "default_oil_brand": "Valvoline",
+            },
+        },
+    )
+
+    assert result["status"] == "accepted"
+    assert set(result["unsupported_fields"]) == {
+        "default_gasket_type",
+        # Dot-separated: a nested key cannot hide behind the name of the object that
+        # carried it, and a client can point at the exact field it sent.
+        "vehicle_details.default_oil_brand",
+    }
+
+    # And the part it *can* store is stored, unchanged. What it could not store left no
+    # row behind: absence stays absence, rather than becoming an empty row of nulls that
+    # then syncs out to every other device as "the user cleared these".
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["name"] == "Truck"
+    assert stored["vehicle_details"]["make"] == "Ram"
+    assert stored["service_defaults"] is None
+
+
+async def test_fields_the_server_can_store_are_not_reported_as_unsupported(client, auth_headers):
+    """The false-alarm half of the same contract. This is build 16's actual payload shape:
+    brands inside `vehicle_details`, plus a spec only the new table carries. A client that
+    obeys unsupported_fields would start holding back fields it saves perfectly well, so an
+    accepted payload must come back with nothing in that list."""
+    device = await _register_device(client, auth_headers, "Build 16")
+    asset_id = str(uuid.uuid4())
+
+    result = await _push_asset(
+        client,
+        auth_headers,
+        device,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Truck",
+            "vehicle_details": {
+                "make": "Ram",
+                "default_oil_viscosity": "5W-30",
+                "default_motor_oil_brand": "Valvoline",
+                "default_oil_filter_brand": "Fram",
+                "default_air_filter_brand": "Fram",
+            },
+            "service_defaults": {"default_hvac_filter_size": "20x25x1"},
+        },
+    )
+
+    assert result["unsupported_fields"] == []
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["service_defaults"]["default_motor_oil_brand"] == "Valvoline"
+    assert stored["vehicle_details"]["default_air_filter_brand"] == "Fram"
+    assert stored["service_defaults"]["default_hvac_filter_size"] == "20x25x1"
+
+
+def test_the_unsupported_field_check_looks_inside_nested_payloads():
+    """Pure form of the same rule, no HTTP: nested unknown keys are named with their path,
+    known ones are not named, and a payload that is entirely understood returns empty."""
+    assert (
+        unsupported_sync_fields(
+            AssetSyncData,
+            {
+                "asset_type": "vehicle",
+                "name": "Truck",
+                "service_defaults": {"default_oil_viscosity": "5W-30", "made_up_spec": "x"},
+            },
+        )
+        == ["service_defaults.made_up_spec"]
+    )
+
+
+async def _declared_push(client, auth_headers, device_id, asset_id, base_version, data, **declaration):
+    """Push with an optional device declaration riding alongside the changes."""
+    response = await client.post(
+        "/api/v1/sync/push",
+        headers=auth_headers,
+        json={
+            "device_id": device_id,
+            "changes": [
+                {
+                    "entity_type": "asset",
+                    "id": asset_id,
+                    "base_version": base_version,
+                    "client_updated_at": "2026-11-13T00:00:00Z",
+                    "data": data,
+                }
+            ],
+            **declaration,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["results"][0]
+
+
+async def _device_row(client, auth_headers, device_id) -> dict:
+    listing = await client.get("/api/v1/sync/devices", headers=auth_headers)
+    return next(d for d in listing.json() if d["id"] == device_id)
+
+
+async def test_a_device_that_says_what_it_can_do_is_remembered_saying_it(client, auth_headers):
+    """The client half of #828, server side. A pairing that declares its app version and the
+    field families it understands has both kept, and both visible on the device list --
+    because a household with one negotiating phone and one legacy phone is a household where
+    the two devices are storing different amounts of the same row, and until now nothing in
+    the API could show that."""
+    response = await client.post(
+        "/api/v1/sync/devices",
+        headers=auth_headers,
+        json={
+            "platform": "ios",
+            "device_name": "Phone on build 17",
+            "client_version": "1.5.0 (16)",
+            "capabilities": ["serviceDefaults", "serviceDefaultsBrands"],
+        },
+    )
+    assert response.status_code == 201, response.text
+    device_id = response.json()["id"]
+
+    row = await _device_row(client, auth_headers, device_id)
+    assert row["client_version"] == "1.5.0 (16)"
+    assert set(row["capabilities"]) == {"serviceDefaults", "serviceDefaultsBrands"}
+    assert row["capabilities_reported_at"] is not None
+
+    pull = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_id}
+    )
+    assert set(pull.json()["device_capabilities"]) == {"serviceDefaults", "serviceDefaultsBrands"}
+    assert pull.json()["device_client_version"] == "1.5.0 (16)"
+
+
+async def test_a_device_that_said_nothing_is_known_as_having_said_nothing(client, auth_headers):
+    """The distinction the whole compatibility story rests on. A phone paired before the
+    handshake exists is a legacy superset client and keeps getting everything; a phone that
+    deliberately declared an empty capability list would mean something else, and the server
+    must not confuse the two. So NULL is stored as NULL and echoed as None, never backfilled
+    into []."""
+    device_id = await _register_device(client, auth_headers, "Phone paired in 2025")
+
+    row = await _device_row(client, auth_headers, device_id)
+    assert row["client_version"] is None
+    assert row["capabilities"] is None
+    assert row["capabilities_reported_at"] is None
+
+    pull = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_id}
+    )
+    assert pull.json()["device_capabilities"] is None
+    # The server still advertises everything it can hold, to a legacy client, unprompted:
+    # legacy means "serve the old shapes too", never "this device gets nothing".
+    assert "serviceDefaults" in pull.json()["server_capabilities"]
+
+
+async def test_an_app_that_upgrades_mid_life_says_so_on_an_ordinary_push(client, auth_headers):
+    """No second round trip and no new endpoint: the declaration rides along with a push, so
+    a device that updated its app starts negotiating on the next sync rather than the next
+    re-pairing (which is the one thing users should never have to do to keep their data)."""
+    device_id = await _register_device(client, auth_headers, "Phone that will upgrade")
+    asset_id = str(uuid.uuid4())
+
+    await _declared_push(
+        client,
+        auth_headers,
+        device_id,
+        asset_id,
+        0,
+        {"asset_type": "vehicle", "name": "Truck", "vehicle_details": {"make": "Ram"}},
+        client_version="1.6.0 (20)",
+        capabilities=["serviceDefaults", "equipmentServiceDefaults"],
+    )
+
+    row = await _device_row(client, auth_headers, device_id)
+    assert row["client_version"] == "1.6.0 (20)"
+    assert set(row["capabilities"]) == {"serviceDefaults", "equipmentServiceDefaults"}
+    assert row["capabilities_reported_at"] is not None
+
+
+async def test_a_push_that_says_nothing_about_itself_keeps_what_it_already_said(client, auth_headers):
+    """Presence rule again, applied to the device itself. Most pushes are an app that has not
+    thought about capabilities at all; if an omitted key were read as an empty declaration,
+    every sync from a negotiating device would erase its own negotiation and drop it back to
+    legacy treatment."""
+    response = await client.post(
+        "/api/v1/sync/devices",
+        headers=auth_headers,
+        json={
+            "platform": "android",
+            "device_name": "Tablet",
+            "client_version": "1.5.0 (16)",
+            "capabilities": ["serviceDefaults"],
+        },
+    )
+    device_id = response.json()["id"]
+
+    await _push_asset(client, auth_headers, device_id, str(uuid.uuid4()), 0, {
+        "asset_type": "vehicle",
+        "name": "Truck",
+        "vehicle_details": {"make": "Ram"},
+    })
+
+    row = await _device_row(client, auth_headers, device_id)
+    assert row["client_version"] == "1.5.0 (16)"
+    assert row["capabilities"] == ["serviceDefaults"]
+
+
+async def test_a_client_cannot_declare_itself_into_a_feature(client, auth_headers):
+    """Declaring a capability is information about the client, not permission from the server.
+    What this build can hold is derived from its own schemas and columns alone, so a client
+    that names a capability the server has never heard of gains nothing -- the field it wants
+    still comes back named as unsupported."""
+    response = await client.post(
+        "/api/v1/sync/devices",
+        headers=auth_headers,
+        json={
+            "platform": "ios",
+            "device_name": "Optimistic app",
+            "client_version": "9.9.9",
+            "capabilities": ["serviceDefaultsV2"],
+        },
+    )
+    device_id = response.json()["id"]
+    asset_id = str(uuid.uuid4())
+
+    result = await _push_asset(client, auth_headers, device_id, asset_id, 0, {
+        "asset_type": "vehicle",
+        "name": "Truck",
+        # A field this build has no column for, named the way a future schema would name it.
+        "service_defaults": {"default_gasket_type": "Fel-Pro"},
+    })
+
+    assert "service_defaults.default_gasket_type" in result["unsupported_fields"]
+
+    pull = await client.post(
+        "/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device_id}
+    )
+    assert "serviceDefaultsV2" not in pull.json()["server_capabilities"]
+    # ... while the server still remembers the device claimed it. Kept, not trusted.
+    assert pull.json()["device_capabilities"] == ["serviceDefaultsV2"]

@@ -87,6 +87,42 @@ export interface Asset {
   equipment_details: EquipmentDetails | null;
   property_details: PropertyDetails | null;
   valuable_details: ValuableDetails | null;
+  // Remembered service specs, one row per asset, any serviced type (backend card
+  // #824). The fourteen legacy ones are ALSO still emitted inside vehicle_details
+  // for apps that shipped before this table existed.
+  service_defaults: ServiceDefaults | null;
+}
+
+/** One row per asset in the backend's service_defaults table: what the apps
+ * prefill a maintenance record with and what the shopping cart searches for.
+ * One nullable field set for every serviced asset type -- the per-type subset is
+ * a screen decision, not a wire decision. `valuable` assets get no row. */
+export interface ServiceDefaults {
+  default_oil_viscosity: string | null;
+  default_oil_formulation: string | null;
+  default_oil_meets_dexos: boolean | null;
+  default_oil_capacity: string | null;
+  default_motor_oil_brand: string | null;
+  default_oil_filter_part_number: string | null;
+  default_oil_filter_brand: string | null;
+  default_air_filter_part_number: string | null;
+  default_air_filter_brand: string | null;
+  default_fuel_filter_part_number: string | null;
+  default_fuel_filter_brand: string | null;
+  default_hydraulic_fluid_type: string | null;
+  default_hydraulic_fluid_capacity: string | null;
+  default_hvac_filter_size: string | null;
+  default_hvac_filter_brand: string | null;
+  default_water_filter_cartridge: string | null;
+  default_water_filter_brand: string | null;
+  default_transmission_fluid_type: string | null;
+  default_transmission_filter_part_number: string | null;
+  default_transmission_fluid_capacity: string | null;
+  default_coolant_type: string | null;
+  default_differential_front_fluid_type: string | null;
+  default_differential_front_capacity: string | null;
+  default_differential_rear_fluid_type: string | null;
+  default_differential_rear_capacity: string | null;
 }
 
 export interface AssetCreateInput {
@@ -108,6 +144,9 @@ export interface AssetCreateInput {
   equipment_details?: Partial<EquipmentDetails> | null;
   property_details?: Partial<PropertyDetails> | null;
   valuable_details?: Partial<ValuableDetails> | null;
+  // Key-presence aware on the server, like sale_price/sale_date: a key that is
+  // absent leaves the stored value alone, a key set to null clears it.
+  service_defaults?: Partial<ServiceDefaults> | null;
 }
 
 export interface MaintenanceRecord {

@@ -3,7 +3,7 @@
 
 from sqlalchemy import select
 
-from app.models.asset import Asset, VehicleDetails
+from app.models.asset import Asset, ServiceDefaults, VehicleDetails
 from app.models.fuel_log import FuelLog, FuelLogAttachment
 from app.models.household import Household, HouseholdMembership
 from app.models.maintenance_record import MaintenanceRecord, RecordAttachment
@@ -36,7 +36,14 @@ async def _populate_household(client, headers: dict) -> str:
     asset_response = await client.post(
         "/api/v1/assets",
         headers=headers,
-        json={"asset_type": "vehicle", "name": "Family Minivan", "vehicle_details": {"current_mileage": 41500}},
+        json={
+            "asset_type": "vehicle",
+            "name": "Family Minivan",
+            "vehicle_details": {"current_mileage": 41500},
+            # A saved spec, so deletion has a service_defaults row to clean up:
+            # that table hangs off assets.id like the detail tables do.
+            "service_defaults": {"default_oil_viscosity": "0W-20", "default_motor_oil_brand": "Mobil 1"},
+        },
     )
     asset_id = asset_response.json()["id"]
 
@@ -130,6 +137,9 @@ async def test_delete_household_wipes_everything(client, db_session):
         )
     ).scalar_one_or_none() is None
     assert (await db_session.execute(select(Asset).where(Asset.id == asset_id))).scalar_one_or_none() is None
+    assert (
+        await db_session.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset_id))
+    ).scalar_one_or_none() is None
     assert (
         await db_session.execute(select(VehicleDetails).where(VehicleDetails.asset_id == asset_id))
     ).scalar_one_or_none() is None

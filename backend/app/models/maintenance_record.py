@@ -52,6 +52,10 @@ class MaintenanceRecord(SyncedEntityMixin, Base):
     filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     capacity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Which brand this job actually used, recorded on the record (mobile,
+    # 2026-11-21). Distinct from the asset's saved default brand: a household
+    # that defaults to Valvoline can note that this one oil change used something else.
+    brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 class RecordAttachment(Base):

@@ -107,31 +107,73 @@ class VehicleDetails(Base):
     # per-platform, no shared vocabulary to mirror here). NULL means the
     # plain "generic" style.
     plate_style: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    # Vikunja #92: this vehicle's remembered service specs -- the mobile
-    # app prefills a new maintenance record's matching structured field
-    # (see MaintenanceRecord above) from these when the user hasn't
-    # already typed a value in for that record, editable per-record if it
-    # differs that time. Front/rear differential get separate defaults
-    # since some vehicles genuinely spec a different fluid for each, even
-    # though a single differential-service *record* only ever needs one
-    # fluid_type (its own category already says which side).
+    # Remembered service specs (oil, filters, fluids, brands) used to live
+    # here -- Vikunja #92. They moved to ServiceDefaults below in alembic
+    # d7c2f4a1b8e3 so equipment and property can remember the same kind of
+    # thing; this table now holds only what identifies the vehicle itself.
+    # Clients that still send them on the vehicle payload are mapped by
+    # app/schemas/service_defaults.py.
+
+
+class ServiceDefaults(Base):
+    """1:1 service-spec table for Asset rows of any serviced type -- vehicle,
+    equipment, property/home_system. Not independently synced/versioned: it
+    rides along inside the parent asset's payload exactly like the four detail
+    tables, so it carries no sync envelope of its own.
+
+    Deliberately not keyed by asset type. A generator's oil change and a car's
+    oil change want the same remembered fields (viscosity, capacity, filter part
+    number, brand); a vehicle additionally remembers transmission/coolant/
+    differential specs and a property remembers HVAC and water filters. Which
+    subset a client shows is the client's per-type screen, so one nullable
+    column set serves all three instead of duplicating the concept per detail
+    table. `valuable` assets get no row: their categories (repair, replacement,
+    appraisal) are not spec-driven.
+
+    Row presence is not meaningful -- a vehicle with nothing saved has a row of
+    nulls today and may equally have no row at all. Callers must therefore treat
+    "no row" as "no saved specs", never as a wipe; see the key-presence rule in
+    app/schemas/service_defaults.py.
+    """
+
+    __tablename__ = "service_defaults"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("assets.id"), primary_key=True
+    )
+    # Oil (vehicle + equipment).
     default_oil_viscosity: Mapped[str | None] = mapped_column(String(50), nullable=True)
     default_oil_formulation: Mapped[str | None] = mapped_column(String(30), nullable=True)
     default_oil_meets_dexos: Mapped[bool | None] = mapped_column(nullable=True)
-    default_oil_filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    default_air_filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    default_transmission_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    default_coolant_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    default_differential_front_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    default_differential_rear_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    # Follow-up to the above: capacities, plus the transmission filter part #
-    # (reuses default_oil_filter_part_number's sibling concept, its own
-    # column since a vehicle needs to remember all three filter part #s at
-    # once, unlike a single MaintenanceRecord which only ever needs one).
     default_oil_capacity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    default_motor_oil_brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Filters. A vehicle needs all four part numbers remembered at once, unlike a
+    # MaintenanceRecord, which only ever needs one (its category says which).
+    default_oil_filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_oil_filter_brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_air_filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_air_filter_brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_fuel_filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_fuel_filter_brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Fluids an engine-driven machine specs beyond oil (equipment: hydraulics).
+    default_hydraulic_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_hydraulic_fluid_capacity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Filters the home consumes (property / home_system).
+    default_hvac_filter_size: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_hvac_filter_brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_water_filter_cartridge: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_water_filter_brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Vehicle only. Front/rear differential keep separate defaults because some
+    # vehicles genuinely spec a different fluid for each side, even though a
+    # single differential-service *record* only ever needs one fluid_type (its
+    # own category already says which side).
+    default_transmission_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     default_transmission_filter_part_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     default_transmission_fluid_capacity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    default_coolant_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_differential_front_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     default_differential_front_capacity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    default_differential_rear_fluid_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     default_differential_rear_capacity: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
 

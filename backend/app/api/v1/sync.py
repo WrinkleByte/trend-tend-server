@@ -20,6 +20,7 @@ from app.models.asset import (
     AssetType,
     EquipmentDetails,
     PropertyDetails,
+    ServiceDefaults,
     ValuableDetails,
     VehicleDetails,
 )
@@ -32,6 +33,11 @@ from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.mixins import utcnow
 from app.models.sync_device import SyncDevice
 from app.models.trip_log import TripLog
+from app.schemas.service_defaults import (
+    defaults_from_payload,
+    legacy_defaults_for_response,
+    vehicle_columns,
+)
 from app.schemas.sync import (
     AssetSyncData,
     AttachmentSyncData,
@@ -41,6 +47,7 @@ from app.schemas.sync import (
     MaintenanceRecordSyncData,
     MaintenanceScheduleSyncData,
     PropertyDetailsSyncData,
+    ServiceDefaultsSyncData,
     SyncChangeIn,
     SyncChangeOut,
     SyncDeviceRegister,
@@ -53,6 +60,8 @@ from app.schemas.sync import (
     TripLogSyncData,
     ValuableDetailsSyncData,
     VehicleDetailsSyncData,
+    server_capabilities,
+    unsupported_sync_fields,
 )
 
 # entity_type=="asset" 1:1 detail-table lookup, keyed by AssetType -- used by
@@ -118,7 +127,9 @@ _REFERENCE_FIELDS: dict[str, tuple[type, str]] = {
 }
 
 
-def _serialize_row(entity_type: str, obj, detail: object | None = None) -> dict:
+def _serialize_row(
+    entity_type: str, obj, detail: object | None = None, service_defaults: object | None = None
+) -> dict:
     """Explicit field allowlist, not a dynamic walk of every ORM column
     (Vikunja #44's design review) -- reuses each entity's own *SyncData
     schema (the same one push validates incoming changes against) as the
@@ -158,6 +169,17 @@ def _serialize_row(entity_type: str, obj, detail: object | None = None) -> dict:
                 base["valuable_details"] = ValuableDetailsSyncData.model_validate(
                     detail, from_attributes=True
                 ).model_dump(mode="json")
+        # The asset-level defaults go out for every serviced asset type, and a
+        # vehicle gets them a second time inside vehicle_details -- outbound
+        # compatibility for clients that shipped before this table existed and
+        # read the values there. Dropping that mirror is how a lossless storage
+        # move becomes, from an old client's point of view, lost data.
+        if service_defaults is not None:
+            base["service_defaults"] = ServiceDefaultsSyncData.model_validate(
+                service_defaults, from_attributes=True
+            ).model_dump(mode="json")
+            if isinstance(detail, VehicleDetails) and base["vehicle_details"] is not None:
+                base["vehicle_details"].update(legacy_defaults_for_response(service_defaults))
     return base
 
 
@@ -175,6 +197,11 @@ async def _fetch_asset_detail(db: AsyncSession, asset: Asset) -> object | None:
     if model is None:
         return None
     result = await db.execute(select(model).where(model.asset_id == asset.id))
+    return result.scalar_one_or_none()
+
+
+async def _fetch_service_defaults(db: AsyncSession, asset_id: uuid.UUID) -> object | None:
+    result = await db.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset_id))
     return result.scalar_one_or_none()
 
 
@@ -203,8 +230,33 @@ async def _upsert_asset_details(
     } - {keep}:
         await db.execute(other.__table__.delete().where(other.asset_id == asset_id))
 
+    # Service defaults first and independently of the type sweep below: they belong
+    # to the asset, not to its current type, so turning a vehicle into a piece of
+    # equipment must not discard specs the household paid attention to entering. It
+    # also runs before the early return at the bottom, which exists for payloads
+    # that carry no matching detail row.
+    defaults = defaults_from_payload(parsed.service_defaults, parsed.vehicle_details)
+    if asset_type == AssetType.VALUABLE:
+        # The same rule _write_service_defaults applies on the REST side: a valuable
+        # asset has no service_defaults row, because its categories are not
+        # spec-driven. Specs sent for one are dropped rather than stored, and a row
+        # an earlier build already wrote is removed rather than left orphaned.
+        if defaults is not None:
+            await db.execute(
+                ServiceDefaults.__table__.delete().where(ServiceDefaults.asset_id == asset_id)
+            )
+    elif defaults is not None:
+        existing_defaults = (
+            await db.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset_id))
+        ).scalar_one_or_none()
+        if existing_defaults is None:
+            db.add(ServiceDefaults(asset_id=asset_id, **defaults))
+        else:
+            for field, value in defaults.items():
+                setattr(existing_defaults, field, value)
+
     if asset_type == AssetType.VEHICLE and parsed.vehicle_details is not None:
-        model, data = VehicleDetails, parsed.vehicle_details.model_dump()
+        model, data = VehicleDetails, vehicle_columns(parsed.vehicle_details)
     elif asset_type == AssetType.EQUIPMENT and parsed.equipment_details is not None:
         model, data = EquipmentDetails, parsed.equipment_details.model_dump()
     elif (
@@ -271,6 +323,14 @@ async def register_device(
         platform=payload.platform,
         device_name=payload.device_name,
         conflict_resolution_mode=payload.conflict_resolution_mode,
+        # Recorded as declared, not validated against this server's own vocabulary: a client
+        # that names a capability this build doesn't have is a client on a newer build, and
+        # that is worth knowing rather than worth rejecting. server_capabilities() stays
+        # derived from this server alone, so a client can never talk itself into a feature
+        # (Vikunja #828).
+        client_version=payload.client_version,
+        capabilities=payload.capabilities,
+        capabilities_reported_at=utcnow() if payload.capabilities is not None else None,
     )
     db.add(device)
     await db.commit()
@@ -415,6 +475,17 @@ async def pull(
         for detail in result.scalars().all():
             asset_details_by_id[detail.asset_id] = detail
 
+    # Same batching as above, one extra round trip for the whole page rather than
+    # one per asset. Keyed by asset_id across every asset type: unlike the detail
+    # tables, service_defaults does not depend on which type the asset is now.
+    service_defaults_by_id: dict[uuid.UUID, object] = {}
+    if ids_by_type.get("asset", []):
+        result = await db.execute(
+            select(ServiceDefaults).where(ServiceDefaults.asset_id.in_(ids_by_type["asset"]))
+        )
+        for defaults_row in result.scalars().all():
+            service_defaults_by_id[defaults_row.asset_id] = defaults_row
+
     changes = [
         SyncChangeOut(
             entity_type=row.entity_type,
@@ -426,6 +497,9 @@ async def pull(
                 row.entity_type,
                 full_rows[(row.entity_type, row.id)],
                 detail=asset_details_by_id.get(row.id)
+                if row.entity_type == "asset"
+                else None,
+                service_defaults=service_defaults_by_id.get(row.id)
                 if row.entity_type == "asset"
                 else None,
             ),
@@ -442,7 +516,20 @@ async def pull(
     device.last_sync_at = utcnow()
     await db.commit()
 
-    return SyncPullResponse(changes=changes, next_cursor=next_cursor, has_more=has_more)
+    return SyncPullResponse(
+        changes=changes,
+        next_cursor=next_cursor,
+        has_more=has_more,
+        # Advertised on every pull so a client can check it before offering a field the
+        # server would drop (Vikunja #828). Derived from the schemas, so it cannot claim
+        # more than this build can store.
+        server_capabilities=server_capabilities(),
+        # What this device last told us, echoed back (Vikunja #828). A client that declared
+        # capabilities and gets None back here knows the server lost them; a client that
+        # never declared anything sees None and knows it is the legacy half of the pair.
+        device_capabilities=device.capabilities,
+        device_client_version=device.client_version,
+    )
 
 
 async def _apply_change(
@@ -499,7 +586,12 @@ async def _apply_change(
             status="conflict",
             server_version=existing.version,
             server_data=_serialize_row(
-                change.entity_type, existing, detail=conflict_detail
+                change.entity_type,
+                existing,
+                detail=conflict_detail,
+                service_defaults=await _fetch_service_defaults(db, change.id)
+                if change.entity_type == "asset"
+                else None,
             ),
             client_data=change.data,
         )
@@ -662,6 +754,7 @@ async def _apply_change(
                     "equipment_details",
                     "property_details",
                     "valuable_details",
+                    "service_defaults",
                     # Attribution is server-authored, never client-supplied.
                     # AttributedSyncData declares it so pull serializes it,
                     # but honouring it on push would let any client credit its
@@ -733,10 +826,33 @@ async def push(
 ) -> SyncPushResponse:
     device = await _get_active_device(db, principal, payload.device_id)
 
+    # A push is the cheap place for an app that just upgraded to say so: no second round trip,
+    # no new endpoint (Vikunja #828). Absent means "nothing changed" -- a client that omits the
+    # key must not wipe what it declared when it paired, the same presence rule every optional
+    # field on this branch follows.
+    if payload.client_version is not None:
+        device.client_version = payload.client_version
+    if payload.capabilities is not None:
+        device.capabilities = payload.capabilities
+    if payload.client_version is not None or payload.capabilities is not None:
+        device.capabilities_reported_at = utcnow()
+
     results = [
         await _apply_change(db, principal, payload.device_id, change)
         for change in payload.changes
     ]
+
+    # Loudness, not rejection (Vikunja #828). A change the server accepted stays
+    # accepted -- an old phone must keep syncing -- but every key in it that had nowhere
+    # to go is now named back to the client. Before this, Pydantic dropped those keys in
+    # silence and the only way anyone found out was the value being empty on another
+    # device. Soft-deletes are skipped: their payload is ignored by design.
+    for change, result in zip(payload.changes, results, strict=True):
+        if result.status != "accepted" or change.deleted:
+            continue
+        config = SYNC_REGISTRY.get(change.entity_type)
+        if config is not None:
+            result.unsupported_fields = unsupported_sync_fields(config.data_model, change.data)
 
     device.last_sync_at = utcnow()
     await db.commit()

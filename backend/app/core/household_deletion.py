@@ -7,7 +7,13 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.api_token import ApiToken
-from app.models.asset import Asset, EquipmentDetails, PropertyDetails, VehicleDetails
+from app.models.asset import (
+    Asset,
+    EquipmentDetails,
+    PropertyDetails,
+    ServiceDefaults,
+    VehicleDetails,
+)
 from app.models.attachment import Attachment
 from app.models.fuel_log import FuelLog, FuelLogAttachment
 from app.models.household import Household, HouseholdInvite, HouseholdMembership
@@ -44,6 +50,9 @@ async def _delete_non_synced_children(db: AsyncSession, household_id: uuid.UUID)
     await db.execute(delete(VehicleDetails).where(VehicleDetails.asset_id.in_(asset_ids)))
     await db.execute(delete(EquipmentDetails).where(EquipmentDetails.asset_id.in_(asset_ids)))
     await db.execute(delete(PropertyDetails).where(PropertyDetails.asset_id.in_(asset_ids)))
+    # Saved service specs hang off assets.id the same way (alembic d7c2f4a1b8e3).
+    # Missing here, deleting a household with any saved spec hit an FK violation.
+    await db.execute(delete(ServiceDefaults).where(ServiceDefaults.asset_id.in_(asset_ids)))
 
 
 async def wipe_household_data(db: AsyncSession, household_id: uuid.UUID, device_id: uuid.UUID | None = None) -> None:

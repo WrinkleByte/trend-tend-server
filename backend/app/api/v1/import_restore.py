@@ -16,12 +16,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_principal, household_scoped_query
 from app.db.session import get_db
-from app.models.asset import Asset, EquipmentDetails, PropertyDetails, VehicleDetails
+from app.models.asset import (
+    Asset,
+    EquipmentDetails,
+    PropertyDetails,
+    ServiceDefaults,
+    VehicleDetails,
+)
 from app.models.attachment import Attachment, StorageBackendType
 from app.models.fuel_log import FuelLog
 from app.models.maintenance_record import MaintenanceRecord, RecordAttachment
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.schemas.import_restore import RestoreConflict, RestoreSummary
+from app.schemas.service_defaults import (
+    SERVICE_DEFAULT_FIELDS,
+    VEHICLE_WIRE_DEFAULT_FIELDS,
+)
 from app.storage.base import StorageBackend
 from app.storage.factory import get_storage_backend
 
@@ -33,6 +43,42 @@ router = APIRouter(prefix="/import", tags=["import"])
 # comment in maintenance_record.py). A restored backup containing those kinds
 # has nowhere to put them; they're counted as skipped, not silently dropped.
 _RESTORABLE_ATTACHMENT_KINDS = {"asset", "maintenance_record"}
+
+
+def _service_defaults_from_row(row: dict) -> dict[str, Any] | None:
+    """Remembered service specs carried by an export row, from either shape.
+
+    This is the case where silence is indistinguishable from a wipe. A backup written
+    before `service_defaults` existed carries the specs inside `vehicle_details`; one
+    written after carries its own key. Reading only the new key means restoring an old
+    backup -- which is exactly what a household does when a device dies -- quietly drops
+    every saved oil spec, filter part number and brand, and the user finds out months
+    later. So: new key first, legacy vehicle fields for whatever it left open, and a row
+    written only if the backup actually carried at least one field.
+
+    Fields the backup does not contain stay unset rather than null-written: absence in a
+    backup means "that app version had no such field", not "the user cleared it".
+
+    The legacy half reads the vehicle wire set, not just the fourteen columns that predate
+    this table. The three brand fields were added on the mobile side while the server still
+    kept specs inside vehicle_details, so a backup written by that build carries
+    default_motor_oil_brand, default_oil_filter_brand and default_air_filter_brand in
+    vehicle_details too. Reading only the pre-brand twelve-plus-two list restores such a
+    backup with the oil and the filter part number intact and every brand quietly gone --
+    the exact shape of loss this function exists to prevent.
+    """
+    out: dict[str, Any] = {}
+    exported = row.get("service_defaults")
+    if isinstance(exported, dict):
+        for field in SERVICE_DEFAULT_FIELDS:
+            if field in exported:
+                out[field] = exported[field]
+    vehicle = row.get("vehicle_details")
+    if isinstance(vehicle, dict):
+        for field in VEHICLE_WIRE_DEFAULT_FIELDS:
+            if field in vehicle:
+                out.setdefault(field, vehicle[field])
+    return out or None
 
 
 def _parse_date(value: str | None):
@@ -136,6 +182,9 @@ async def restore_backup(
                 updated_at=_parse_datetime(row["updated_at"]),
             )
         )
+        defaults = _service_defaults_from_row(row)
+        if defaults:
+            db.add(ServiceDefaults(asset_id=new_id, **defaults))
         if row.get("vehicle_details"):
             vd = row["vehicle_details"]
             db.add(

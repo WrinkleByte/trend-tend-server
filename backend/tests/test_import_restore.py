@@ -41,6 +41,11 @@ def _minimal_bundle(**overrides) -> dict:
                     "current_mileage": 42000,
                     "mileage_unit": "mi",
                     "fuel_type": None,
+                    # Remembered specs, in the shape a backup written before the
+                    # service_defaults table existed actually has them.
+                    "default_oil_viscosity": "0W-20",
+                    "default_oil_filter_part_number": "OL-909",
+                    "default_coolant_type": "OAT",
                 },
                 "equipment_details": None,
                 "property_details": None,
@@ -159,6 +164,13 @@ async def test_restore_seeds_empty_household_with_remapped_ids_and_photo(client,
     assert asset["id"] != "old-asset-1"
     assert asset["name"] == "Family Minivan"
     assert asset["vehicle_details"]["make"] == "Honda"
+    # The specs a pre-service_defaults backup remembered survive the restore. Before
+    # this they were silently dropped on the floor: restore rebuilt vehicle_details
+    # from nine hand-picked columns and never looked at the rest of the row.
+    assert asset["vehicle_details"]["default_oil_viscosity"] == "0W-20"
+    assert asset["vehicle_details"]["default_oil_filter_part_number"] == "OL-909"
+    assert asset["vehicle_details"]["default_coolant_type"] == "OAT"
+    assert asset["service_defaults"]["default_oil_viscosity"] == "0W-20"
     assert asset["version"] == 1
     # Photo pointer correctly remapped to the newly created attachment.
     assert asset["photo_attachment_id"] is not None
@@ -180,6 +192,81 @@ async def test_restore_seeds_empty_household_with_remapped_ids_and_photo(client,
     )).json()
     assert len(fuel_logs) == 1
     assert fuel_logs[0]["gas_brand"] == "Shell"
+
+
+async def test_restore_reads_service_defaults_from_the_new_bundle_shape(client, auth_headers):
+    """A current-shaped bundle writes through `service_defaults`, and the legacy fields
+    still in the same row are merged under it rather than overwriting it."""
+    bundle = json.loads(json.dumps(_minimal_bundle()))
+    row = bundle["assets"][0]
+    # A newer app wrote the same spec through both halves and disagreed with the old one:
+    # the explicit new key is what gets stored.
+    row["service_defaults"] = {
+        "default_oil_viscosity": "0W-16",
+        "default_motor_oil_brand": "Valvoline",
+        "default_fuel_filter_part_number": "FF-12",
+        "default_hvac_filter_size": "20x25x1",
+    }
+
+    response = await client.post(
+        "/api/v1/import/restore",
+        headers=auth_headers,
+        files={"file": ("backup.zip", _make_backup_zip(bundle), "application/zip")},
+    )
+    assert response.status_code == 201
+
+    asset = (await client.get("/api/v1/assets", headers=auth_headers)).json()[0]
+    saved = asset["service_defaults"]
+    assert saved["default_oil_viscosity"] == "0W-16"
+    assert saved["default_motor_oil_brand"] == "Valvoline"
+    assert saved["default_fuel_filter_part_number"] == "FF-12"
+    assert saved["default_hvac_filter_size"] == "20x25x1"
+    # A field the new key left alone still comes from the backup's legacy half.
+    assert saved["default_oil_filter_part_number"] == "OL-909"
+    # ...and the client that never learned about this table still sees it.
+    assert asset["vehicle_details"]["default_oil_filter_part_number"] == "OL-909"
+
+
+async def test_restore_carries_brands_written_into_the_old_vehicle_shape(client, auth_headers):
+    """The three brand fields reached the wire while the server still stored specs inside
+    vehicle_details, so a backup written by that build carries default_motor_oil_brand and
+    friends in vehicle_details -- not in a service_defaults key, which did not exist yet.
+
+    Reading only the fourteen columns that predate the table restores such a backup with
+    the oil viscosity and the filter part number intact and every brand gone, and nothing
+    says so: the asset comes back looking saved. That is the loss this function exists to
+    prevent, arriving through the newest half of the legacy shape rather than the oldest.
+    """
+    bundle = json.loads(json.dumps(_minimal_bundle()))
+    row = bundle["assets"][0]
+    row["vehicle_details"].update(
+        {
+            "default_motor_oil_brand": "Pennzoil",
+            "default_oil_filter_brand": "K&N",
+            "default_air_filter_part_number": "TA1093",
+            "default_air_filter_brand": "Fram",
+        }
+    )
+
+    response = await client.post(
+        "/api/v1/import/restore",
+        headers=auth_headers,
+        files={"file": ("backup.zip", _make_backup_zip(bundle), "application/zip")},
+    )
+    assert response.status_code == 201, response.text
+
+    asset = (await client.get("/api/v1/assets", headers=auth_headers)).json()[0]
+    saved = asset["service_defaults"]
+    assert saved["default_motor_oil_brand"] == "Pennzoil"
+    assert saved["default_oil_filter_brand"] == "K&N"
+    assert saved["default_air_filter_brand"] == "Fram"
+    assert saved["default_air_filter_part_number"] == "TA1093"
+    # The pre-brand fields still survive alongside them.
+    assert saved["default_oil_viscosity"] == "0W-20"
+    assert saved["default_oil_filter_part_number"] == "OL-909"
+    # And an app that only ever reads vehicle_details still gets the brands back.
+    assert asset["vehicle_details"]["default_motor_oil_brand"] == "Pennzoil"
+    assert asset["vehicle_details"]["default_oil_filter_brand"] == "K&N"
 
 
 async def test_restore_blocked_when_household_already_has_data(client, auth_headers):
