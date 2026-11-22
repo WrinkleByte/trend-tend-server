@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from app.models.asset import AssetStatus, AssetType
+from app.models.asset import AssetStatus, AssetType, ServiceDefaults
 from app.models.attachment import StorageBackendType
 from app.models.maintenance_schedule import IntervalType
 from app.models.sync_device import ConflictResolutionMode, Platform
@@ -284,11 +284,30 @@ _SYNC_NESTED_MODELS: dict[str, type[BaseModel]] = {
 }
 
 
+# Field names as the DATABASE sees them, read off the ORM table instead of off the
+# payload classes. The two are not the same guarantee: a wire schema can declare a field
+# the migration never gave a column, and a capability advertised on top of that is the
+# exact bug this card exists to stop.
+_STORED_SERVICE_DEFAULT_FIELDS: frozenset[str] = frozenset(
+    column.name for column in ServiceDefaults.__table__.columns
+)
+
+
+def _stores(*names: str) -> bool:
+    return set(names) <= _STORED_SERVICE_DEFAULT_FIELDS
+
+
 def server_capabilities() -> list[str]:
-    """Every field family this server can actually carry, as tags a client can gate on."""
+    """Every field family this server can actually carry, as tags a client can gate on.
+
+    A tag is advertised only while BOTH halves hold: the wire schema declares the field, so
+    a client can send it, AND the table has a column for it, so it survives. Wire with no
+    column is the silent-loss bug; a column the wire cannot reach is merely a field this
+    build cannot be asked for. Neither one earns a tag on its own.
+    """
     asset = AssetSyncData.model_fields
     vehicle = VehicleDetailsSyncData.model_fields
-    defaults = ServiceDefaultsSyncData.model_fields
+    carries_defaults = "service_defaults" in asset
     brands = {
         "default_motor_oil_brand",
         "default_oil_filter_brand",
@@ -298,16 +317,16 @@ def server_capabilities() -> list[str]:
     capabilities: list[str] = []
     if {"vehicle_details", "equipment_details", "property_details", "valuable_details"} <= set(asset):
         capabilities.append("assetDetails")
-    if "service_defaults" in asset:
+    if carries_defaults and _stores("default_oil_viscosity"):
         capabilities.append("serviceDefaults")
-    # Both halves, not just the storage half: the shipped mobile build sends brands
-    # *inside* vehicle_details, so advertising brands is only honest while the legacy
-    # shape still accepts them too. Drop one side and this tag has to fall with it.
-    if brands <= set(defaults) and brands <= set(vehicle):
+    # Both halves of the brand contract, legacy side included: build 16 sends brands
+    # *inside* vehicle_details, so advertising brands is only honest while that shape is
+    # still accepted. Drop either side and this tag has to fall with it.
+    if brands <= set(vehicle) and _stores(*brands):
         capabilities.append("serviceDefaultsBrands")
-    if {"default_hydraulic_fluid_type", "default_hydraulic_fluid_capacity"} <= set(defaults):
+    if carries_defaults and _stores("default_hydraulic_fluid_type", "default_hydraulic_fluid_capacity"):
         capabilities.append("equipmentServiceDefaults")
-    if {"default_hvac_filter_size", "default_water_filter_cartridge"} <= set(defaults):
+    if carries_defaults and _stores("default_hvac_filter_size", "default_water_filter_cartridge"):
         capabilities.append("propertyServiceDefaults")
     return capabilities
 

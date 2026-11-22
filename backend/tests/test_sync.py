@@ -1105,6 +1105,27 @@ async def test_pull_advertises_the_field_families_it_can_store(client, auth_head
     assert {"equipmentServiceDefaults", "propertyServiceDefaults"} <= capabilities
 
 
+def test_a_capability_needs_a_column_not_only_a_wire_field(monkeypatch):
+    """The gating is the entire point of a capability tag, so it gets tested directly: strip
+    the columns out from under it and the tags fall, even though every payload schema still
+    declares every field. Telling a client "brands are supported" and then dropping them is
+    the bug this card was opened for, so a tag is not allowed to survive on the wire's word
+    alone -- only on the wire AND a column that survives a restart."""
+    import app.schemas.sync as sync_schemas
+
+    monkeypatch.setattr(
+        sync_schemas,
+        "_STORED_SERVICE_DEFAULT_FIELDS",
+        frozenset({"default_oil_viscosity"}),
+    )
+    capabilities = sync_schemas.server_capabilities()
+
+    assert "serviceDefaults" in capabilities
+    assert "serviceDefaultsBrands" not in capabilities
+    assert "equipmentServiceDefaults" not in capabilities
+    assert "propertyServiceDefaults" not in capabilities
+
+
 async def test_push_reports_the_fields_it_has_nowhere_to_put(client, auth_headers):
     """The half that stops data loss: a payload carrying a field this server does not know
     is still accepted -- the rest of the row is real, and an old phone has to keep syncing
