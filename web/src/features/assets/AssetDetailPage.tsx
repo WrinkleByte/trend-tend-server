@@ -17,6 +17,7 @@ import { AttachmentsSection } from "../attachments/AttachmentsSection";
 import { TabNav, type TabItem } from "../../components/ui/TabNav";
 import { AssetOverview } from "./AssetOverview";
 import { CostsSection } from "./CostsSection";
+import { ServiceDefaultsFields } from "./ServiceDefaultsFields";
 import { FuelEconomyPanel } from "../trips/FuelEconomyChart";
 import { AssetProfilePhoto } from "./AssetProfilePhoto";
 import { ASSET_TYPES } from "./assetTypes";
@@ -56,6 +57,10 @@ export function AssetDetailPage() {
         equipment_details: asset.equipment_details ? { ...asset.equipment_details } : undefined,
         property_details: asset.property_details ? { ...asset.property_details } : undefined,
         valuable_details: asset.valuable_details ? { ...asset.valuable_details } : undefined,
+        // Seeded from what is stored, not left blank: the server reads an absent
+        // key as "leave alone" and a null as "clear", so a blank form here would
+        // erase every remembered spec on the first Save.
+        service_defaults: asset.service_defaults ? { ...asset.service_defaults } : undefined,
       });
     }
   }, [asset]);
@@ -489,6 +494,12 @@ export function AssetDetailPage() {
               </div>
             </>
           )}
+
+          <ServiceDefaultsFields
+            assetType={asset.asset_type}
+            value={form.service_defaults}
+            onChange={(patch) => setForm({ ...form, service_defaults: { ...form.service_defaults, ...patch } })}
+          />
 
           <div className="form-actions" style={{ marginTop: 24 }}>
             <button type="submit" disabled={saveMutation.isPending}>
