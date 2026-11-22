@@ -62,7 +62,7 @@ services:
       retries: 10
 
   server:
-    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/trend-tend-server:${WRINKLEBYTE_VERSION:-1.5.0}
+    image: ${WRINKLEBYTE_IMAGE_PREFIX:-wrinklebyte}/trend-tend-server:${WRINKLEBYTE_VERSION:-1.6.0}
     build:
       context: .
       dockerfile: aio/Dockerfile
