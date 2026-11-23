@@ -8,6 +8,7 @@ import { getCurrentHousehold } from "../../api/households";
 import { costTrend, effectiveUnitSystem, perKilometre, runningCost, todayIso, type CostTrend } from "../../lib/costs";
 import { formatDate, formatMoney } from "../../lib/format";
 import { PERIODS, useAssetCosts, type PeriodKey } from "./useAssetCosts";
+import { fuelReadingCountsAsHours } from "../trips/fuelReading";
 
 export function PeriodPicker({ value, onChange, label }: { value: PeriodKey; onChange: (k: PeriodKey) => void; label: string }) {
   return (
@@ -43,7 +44,13 @@ export function CostsSection({ asset }: { asset: Asset }) {
     asset.asset_type === "vehicle" || isEquipment
       ? runningCost(
           records.map((r) => ({ performedAt: r.performed_at, amount: r.cost, reading: r.odometer_reading })),
-          fuelLogs.map((f) => ({ performedAt: f.performed_at, amount: f.total_cost, reading: f.odometer_reading })),
+          // Equipment set to record an odometer at fill-ups: its fuel still costs, but those
+          // miles are not hours, so they don't stretch the per-hour figure.
+          fuelLogs.map((f) => ({
+            performedAt: f.performed_at,
+            amount: f.total_cost,
+            reading: fuelReadingCountsAsHours(asset) ? f.odometer_reading : null,
+          })),
           // Equipment's current hours aren't in the web API; its service records' readings still count.
           isEquipment ? null : asset.vehicle_details?.current_mileage,
           isEquipment,

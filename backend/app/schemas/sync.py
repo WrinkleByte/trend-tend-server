@@ -7,11 +7,11 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from app.models.asset import AssetStatus, AssetType, ServiceDefaults
+from app.models.asset import AssetStatus, AssetType, EquipmentDetails, ServiceDefaults
 from app.models.attachment import StorageBackendType
 from app.models.maintenance_schedule import IntervalType
 from app.models.sync_device import ConflictResolutionMode, Platform
-from app.schemas.asset import ServiceDefaultsIn
+from app.schemas.asset import FuelReadingUnit, ServiceDefaultsIn
 
 
 class SyncDeviceRegister(BaseModel):
@@ -121,6 +121,9 @@ class EquipmentDetailsSyncData(BaseModel):
     warranty_expiration: date | None = None
     car_display_theme: str | None = None
     unit_system_override: str | None = None
+    # Key-presence aware on write (sync.py, _upsert_asset_details): apps before this
+    # field leave it out, and that must not reset a choice another device made.
+    fuel_reading_unit: FuelReadingUnit | None = None
 
 
 class PropertyDetailsSyncData(BaseModel):
@@ -345,6 +348,11 @@ def server_capabilities() -> list[str]:
         capabilities.append("equipmentServiceDefaults")
     if carries_defaults and _stores("default_hvac_filter_size", "default_water_filter_cartridge"):
         capabilities.append("propertyServiceDefaults")
+    # Hours or odometer for an equipment's fill-ups: wire field and column both present.
+    if "fuel_reading_unit" in EquipmentDetailsSyncData.model_fields and (
+        "fuel_reading_unit" in EquipmentDetails.__table__.columns
+    ):
+        capabilities.append("equipmentFuelReading")
     return capabilities
 
 

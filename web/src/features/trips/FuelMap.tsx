@@ -30,6 +30,7 @@ export function FuelMap({ asset, logs }: { asset: Asset; logs: FuelLog[] }) {
       gallons: l.gallons,
       costPerGallon: l.cost_per_gallon,
       totalCost: l.total_cost,
+      gasBrand: l.gas_brand,
     })),
   );
 

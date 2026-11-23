@@ -442,3 +442,27 @@ async def test_negative_sale_price_is_rejected(client, auth_headers):
     patched = await client.patch(f"/api/v1/assets/{asset_id}", headers=auth_headers, json={"sale_price": "0"})
     assert patched.status_code == 200
     assert patched.json()["sale_price"] == "0.00"
+
+
+async def test_equipment_fill_up_unit_over_rest(client, auth_headers):
+    """The web app sets it; a REST caller that doesn't send it keeps the stored choice."""
+    create = await client.post(
+        "/api/v1/assets",
+        headers=auth_headers,
+        json={"asset_type": "equipment", "name": "ATV", "equipment_details": {"fuel_reading_unit": "odometer"}},
+    )
+    assert create.status_code == 201
+    asset_id = create.json()["id"]
+    assert create.json()["equipment_details"]["fuel_reading_unit"] == "odometer"
+
+    unaware = await client.patch(
+        f"/api/v1/assets/{asset_id}", headers=auth_headers, json={"equipment_details": {"manufacturer": "Polaris"}}
+    )
+    assert unaware.status_code == 200
+    assert unaware.json()["equipment_details"]["manufacturer"] == "Polaris"
+    assert unaware.json()["equipment_details"]["fuel_reading_unit"] == "odometer"
+
+    back = await client.patch(
+        f"/api/v1/assets/{asset_id}", headers=auth_headers, json={"equipment_details": {"fuel_reading_unit": "hours"}}
+    )
+    assert back.json()["equipment_details"]["fuel_reading_unit"] == "hours"

@@ -19,6 +19,7 @@ import { formatDate } from "../../lib/format";
 import { PeriodPicker } from "../assets/CostsSection";
 import { FuelMap } from "./FuelMap";
 import { PERIODS, type PeriodKey } from "../assets/useAssetCosts";
+import { fuelTracksEconomy } from "./fuelReading";
 
 /** The first day of the month monthsBack-1 months before today's: the same
  * cutoff mobile's Fuel Economy chart uses for its range. */
@@ -34,7 +35,8 @@ export function FuelEconomyPanel({ asset }: { asset: Asset }) {
   if (!logs) return null;
   return (
     <>
-      <FuelEconomyChart asset={asset} logs={logs} />
+      {/* No MPG for an hour-meter reading; the map of where it filled up still applies. */}
+      {fuelTracksEconomy(asset) && <FuelEconomyChart asset={asset} logs={logs} />}
       <FuelMap asset={asset} logs={logs} />
     </>
   );

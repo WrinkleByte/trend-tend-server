@@ -35,6 +35,8 @@ export interface EquipmentDetails {
   serial_number: string | null;
   warranty_expiration: string | null;
   unit_system_override?: string | null;
+  /** What this equipment's fill-ups record: "hours" (default, also null) or "odometer". */
+  fuel_reading_unit?: string | null;
 }
 
 export interface PropertyDetails {

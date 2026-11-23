@@ -4,6 +4,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Annotated
 
 from pydantic import BaseModel, Field
 
@@ -88,6 +89,12 @@ class ServiceDefaultsIn(BaseModel):
     default_differential_rear_capacity: str | None = None
 
 
+# "hours" or "odometer" today. A plain short string rather than a Literal: a newer app
+# with a third choice must not have its whole asset push rejected by an older server.
+# Clients read anything but "odometer" as hours.
+FuelReadingUnit = Annotated[str, Field(max_length=10)]
+
+
 class EquipmentDetailsIn(BaseModel):
     manufacturer: str | None = None
     model_number: str | None = None
@@ -95,6 +102,8 @@ class EquipmentDetailsIn(BaseModel):
     warranty_expiration: date | None = None
     car_display_theme: str | None = None
     unit_system_override: str | None = None
+    # "hours" or "odometer"; None means hours. See EquipmentDetails.fuel_reading_unit.
+    fuel_reading_unit: FuelReadingUnit | None = None
 
 
 class PropertyDetailsIn(BaseModel):

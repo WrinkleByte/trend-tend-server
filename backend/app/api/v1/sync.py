@@ -272,6 +272,10 @@ async def _upsert_asset_details(
         model, data = VehicleDetails, vehicle_columns(parsed.vehicle_details)
     elif asset_type == AssetType.EQUIPMENT and parsed.equipment_details is not None:
         model, data = EquipmentDetails, parsed.equipment_details.model_dump()
+        # Apps before fuel_reading_unit leave it out of an otherwise full row. Absent
+        # means "this app doesn't know it", not "back to hours", so it is kept as is.
+        if "fuel_reading_unit" not in parsed.equipment_details.model_fields_set:
+            data.pop("fuel_reading_unit")
     elif (
         asset_type in (AssetType.PROPERTY, AssetType.HOME_SYSTEM)
         and parsed.property_details is not None
