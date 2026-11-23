@@ -89,6 +89,28 @@ VEHICLE_SIDE_NEW_FIELDS: tuple[str, ...] = (
 VEHICLE_WIRE_DEFAULT_FIELDS: tuple[str, ...] = LEGACY_VEHICLE_DEFAULT_FIELDS + VEHICLE_SIDE_NEW_FIELDS
 
 
+BRANDS_CAPABILITY = "serviceDefaultsBrands"
+
+
+def legacy_complete_fields(capabilities: Any) -> tuple[str, ...]:
+    """The vehicle_details specs a pre-`service_defaults` app always holds a value for.
+
+    Such an app pushes its whole vehicle row, but leaves a null field *out* rather than
+    sending null (its JSON encoder skips defaults). Read key-presence-aware, that turned
+    "the owner cleared this spec" into "this app has never heard of it": the clear never
+    reached the server, and the next full-row push from any other phone put the old value
+    back (server 1.6.1). For the fields that app is known to carry, absent therefore means
+    null -- exactly how every server before 1.6 read the same payload.
+
+    Every store build since 2026-08 carries all fourteen legacy specs. The three brands
+    arrived later, so they count only for a device that declared `serviceDefaultsBrands`;
+    for any other device an absent brand still means "unknown, keep".
+    """
+    if capabilities and BRANDS_CAPABILITY in capabilities:
+        return VEHICLE_WIRE_DEFAULT_FIELDS
+    return LEGACY_VEHICLE_DEFAULT_FIELDS
+
+
 def _sent_fields(payload: Any) -> set[str]:
     """Keys the client actually put in the payload.
 
@@ -102,6 +124,7 @@ def _sent_fields(payload: Any) -> set[str]:
 def defaults_from_payload(
     service_defaults: Any,
     legacy_vehicle_details: Any,
+    legacy_complete: tuple[str, ...] = (),
 ) -> dict[str, Any] | None:
     """Columns to write into service_defaults, from either payload shape.
 
@@ -123,6 +146,11 @@ def defaults_from_payload(
             # Only fill what the new payload left open, so a client that sends both
             # shapes cannot have the stale copy overwrite the fresh one.
             out.setdefault(field, getattr(legacy_vehicle_details, field))
+        # A legacy-shape push (no `service_defaults` key) from an app that always holds
+        # these fields: what it left out, it holds as null. See legacy_complete_fields.
+        if service_defaults is None:
+            for field in legacy_complete:
+                out.setdefault(field, None)
 
     return out or None
 

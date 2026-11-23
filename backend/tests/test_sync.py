@@ -1063,6 +1063,212 @@ async def test_sync_push_without_service_defaults_does_not_clear_them(client, au
     assert stored["vehicle_details"]["default_coolant_type"] == "OAT"
 
 
+# ===== server 1.6.1: a shipped app clearing a spec (it leaves nulls out) =====
+
+
+async def _register_device_with(client, auth_headers, name, capabilities):
+    response = await client.post(
+        "/api/v1/sync/devices",
+        headers=auth_headers,
+        json={"platform": "ios", "device_name": name, "client_version": "1.5.0 (17)", "capabilities": capabilities},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+async def test_a_shipped_app_clearing_a_spec_clears_it(client, auth_headers):
+    """The shipped apps encode with defaults off, so a cleared spec is simply missing from
+    their full vehicle row. Server 1.6.0 read that as "unknown, keep", so the clear never
+    landed -- and the next full-row push from another phone wrote the old value back. A
+    legacy-shape vehicle push now means what it meant before 1.6: missing is null."""
+    old_app = await _register_device(client, auth_headers, "Shipped 1.4 app")
+    other = await _register_device(client, auth_headers, "Other phone")
+    asset_id = str(uuid.uuid4())
+
+    first = await _push_asset(
+        client,
+        auth_headers,
+        old_app,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Truck",
+            "vehicle_details": {"make": "Ram", "default_oil_viscosity": "0W-20", "default_coolant_type": "OAT"},
+        },
+    )
+    # The owner clears the viscosity: the app sends its row without that key.
+    await _push_asset(
+        client,
+        auth_headers,
+        old_app,
+        asset_id,
+        first["new_version"],
+        {"asset_type": "vehicle", "name": "Truck", "vehicle_details": {"make": "Ram", "default_coolant_type": "OAT"}},
+    )
+
+    data = await _pulled_asset(client, auth_headers, other, asset_id)
+    assert data["vehicle_details"]["default_oil_viscosity"] is None
+    assert data["vehicle_details"]["default_coolant_type"] == "OAT"
+    assert data["service_defaults"]["default_oil_viscosity"] is None
+
+
+async def test_a_shipped_app_without_brands_never_blanks_a_brand(client, auth_headers):
+    """The 1.4 store builds have no brand fields at all, so a brand missing from their push
+    is genuinely unknown to them and must survive their edits."""
+    brand_app = await _register_device(client, auth_headers, "Brand-aware app")
+    old_app = await _register_device(client, auth_headers, "Shipped 1.4 app")
+    asset_id = str(uuid.uuid4())
+
+    first = await _push_asset(
+        client,
+        auth_headers,
+        brand_app,
+        asset_id,
+        0,
+        {"asset_type": "vehicle", "name": "Truck", "vehicle_details": {"default_motor_oil_brand": "Valvoline"}},
+    )
+    await _push_asset(
+        client,
+        auth_headers,
+        old_app,
+        asset_id,
+        first["new_version"],
+        {"asset_type": "vehicle", "name": "Truck (renamed)", "vehicle_details": {"default_oil_viscosity": "5W-30"}},
+    )
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["service_defaults"]["default_motor_oil_brand"] == "Valvoline"
+    assert stored["service_defaults"]["default_oil_viscosity"] == "5W-30"
+
+
+async def test_an_app_that_declared_brands_can_clear_one(client, auth_headers):
+    """A device that said serviceDefaultsBrands holds the brands in its row, so a brand it
+    leaves out is one it cleared."""
+    app = await _register_device_with(client, auth_headers, "Release-branch app", ["assetDetails", "serviceDefaultsBrands"])
+    asset_id = str(uuid.uuid4())
+
+    first = await _push_asset(
+        client,
+        auth_headers,
+        app,
+        asset_id,
+        0,
+        {"asset_type": "vehicle", "name": "Truck", "vehicle_details": {"default_motor_oil_brand": "Valvoline", "default_oil_filter_brand": "WIX"}},
+    )
+    await _push_asset(
+        client,
+        auth_headers,
+        app,
+        asset_id,
+        first["new_version"],
+        {"asset_type": "vehicle", "name": "Truck", "vehicle_details": {"default_oil_filter_brand": "WIX"}},
+    )
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["service_defaults"]["default_motor_oil_brand"] is None
+    assert stored["service_defaults"]["default_oil_filter_brand"] == "WIX"
+
+
+async def test_a_shipped_app_never_touches_specs_it_has_no_field_for(client, auth_headers):
+    """Fuel filter, hydraulic fluid, HVAC and water filters exist only in the new shape; a
+    legacy vehicle push cannot know them and leaves them alone."""
+    new_app = await _register_device(client, auth_headers, "New app")
+    old_app = await _register_device(client, auth_headers, "Shipped 1.4 app")
+    asset_id = str(uuid.uuid4())
+
+    first = await _push_asset(
+        client,
+        auth_headers,
+        new_app,
+        asset_id,
+        0,
+        {
+            "asset_type": "vehicle",
+            "name": "Truck",
+            "vehicle_details": {"make": "Ram"},
+            "service_defaults": {"default_oil_viscosity": "5W-30", "default_fuel_filter_part_number": "FF-1"},
+        },
+    )
+    await _push_asset(
+        client,
+        auth_headers,
+        old_app,
+        asset_id,
+        first["new_version"],
+        {"asset_type": "vehicle", "name": "Truck", "vehicle_details": {"make": "Ram", "default_oil_viscosity": "5W-30"}},
+    )
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["service_defaults"]["default_fuel_filter_part_number"] == "FF-1"
+    assert stored["service_defaults"]["default_oil_viscosity"] == "5W-30"
+
+
+async def test_the_new_shape_stays_key_presence_aware(client, auth_headers):
+    """A client that sends service_defaults is the authority on it, field by field: a key it
+    leaves out there is kept, whatever its vehicle_details copy omits."""
+    new_app = await _register_device(client, auth_headers, "New app")
+    asset_id = str(uuid.uuid4())
+
+    first = await _push_asset(
+        client,
+        auth_headers,
+        new_app,
+        asset_id,
+        0,
+        {"asset_type": "vehicle", "name": "Truck", "service_defaults": {"default_oil_viscosity": "5W-30", "default_coolant_type": "OAT"}},
+    )
+    await _push_asset(
+        client,
+        auth_headers,
+        new_app,
+        asset_id,
+        first["new_version"],
+        {"asset_type": "vehicle", "name": "Truck", "vehicle_details": {"make": "Ram"}, "service_defaults": {"default_coolant_type": "HOAT"}},
+    )
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["service_defaults"]["default_oil_viscosity"] == "5W-30"
+    assert stored["service_defaults"]["default_coolant_type"] == "HOAT"
+
+
+async def test_vehicle_details_on_another_type_clears_nothing(client, auth_headers):
+    """Only a vehicle's own row is complete. A stray vehicle_details object on an equipment
+    change stays key-presence-aware, so it cannot blank the equipment's specs."""
+    app = await _register_device(client, auth_headers, "App")
+    asset_id = str(uuid.uuid4())
+
+    first = await _push_asset(
+        client,
+        auth_headers,
+        app,
+        asset_id,
+        0,
+        {"asset_type": "equipment", "name": "Mower", "service_defaults": {"default_oil_viscosity": "SAE 30"}},
+    )
+    await _push_asset(
+        client,
+        auth_headers,
+        app,
+        asset_id,
+        first["new_version"],
+        {"asset_type": "equipment", "name": "Mower", "vehicle_details": {"make": "Toro"}},
+    )
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored["service_defaults"]["default_oil_viscosity"] == "SAE 30"
+
+
+async def test_a_vehicle_with_nothing_saved_gets_no_row(client, auth_headers):
+    """A legacy push with no specs at all is "nothing saved", not a row of nulls."""
+    app = await _register_device(client, auth_headers, "Shipped 1.4 app")
+    asset_id = str(uuid.uuid4())
+    await _push_asset(client, auth_headers, app, asset_id, 0, {"asset_type": "vehicle", "name": "Truck", "vehicle_details": {"make": "Ram"}})
+
+    stored = (await client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)).json()
+    assert stored.get("service_defaults") is None
+
+
 # ===== the server says what it can store, and says it loudly (Vikunja #828) =====
 
 
