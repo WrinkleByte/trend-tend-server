@@ -162,12 +162,9 @@ export function AssetDetailPage() {
   const tabs: (TabItem & { key: string })[] = [
     { key: "overview", to: base, label: "Overview", end: true },
     { key: "service", to: `${base}/service`, label: "Service" },
-    ...(isVehicle
-      ? [
-          { key: "fuel", to: `${base}/fuel`, label: "Fuel" },
-          { key: "trips", to: `${base}/trips`, label: "Trips" },
-        ]
-      : []),
+    // Fill-ups for equipment too, as in the apps (hours or odometer: fuelReading.ts).
+    ...(isVehicle || asset.asset_type === "equipment" ? [{ key: "fuel", to: `${base}/fuel`, label: "Fuel" }] : []),
+    ...(isVehicle ? [{ key: "trips", to: `${base}/trips`, label: "Trips" }] : []),
     { key: "costs", to: `${base}/costs`, label: "Costs" },
     { key: "reminders", to: `${base}/reminders`, label: "Reminders" },
     ...(asset.asset_type === "valuable" ? [{ key: "documents", to: `${base}/documents`, label: "Documents" }] : []),
@@ -401,6 +398,22 @@ export function AssetDetailPage() {
                     })
                   }
                 />
+                <div className="form-field">
+                  <label htmlFor="equipment-fuel-reading">Fill-ups record</label>
+                  <select
+                    id="equipment-fuel-reading"
+                    value={form.equipment_details?.fuel_reading_unit === "odometer" ? "odometer" : "hours"}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        equipment_details: { ...form.equipment_details, fuel_reading_unit: e.target.value },
+                      })
+                    }
+                  >
+                    <option value="hours">Hours</option>
+                    <option value="odometer">Odometer (miles, with MPG)</option>
+                  </select>
+                </div>
               </div>
             </>
           )}
@@ -598,7 +611,7 @@ export function AssetDetailPage() {
               <FuelEconomyPanel asset={asset} />
             </section>
             <section className="asset-detail-panel">
-              <FuelLogsSection assetId={asset.id} />
+              <FuelLogsSection asset={asset} />
             </section>
           </>
         )}

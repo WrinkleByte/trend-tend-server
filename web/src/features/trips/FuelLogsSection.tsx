@@ -5,11 +5,12 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFuelLog, deleteFuelLog, listFuelLogs, updateFuelLog } from "../../api/fuelLogs";
 import { uploadPendingAttachments } from "../../api/attachments";
-import type { FuelLog } from "../../api/types";
+import type { Asset, FuelLog } from "../../api/types";
 import { AttachmentsSection } from "../attachments/AttachmentsSection";
 import { PendingAttachmentPicker } from "../attachments/PendingAttachmentPicker";
 import { GridField } from "../../components/GridField";
 import { WHOLE_NUMBER_INPUT } from "../../components/wholeNumberInput";
+import { fuelReadingIsHours, fuelReadingLabel, fuelTracksEconomy } from "./fuelReading";
 
 // Keeps the quick-add inline form to the fields people actually fill in at
 // the pump -- octane/cetane/gas_brand/location/additive/mpg/cost_per_gallon
@@ -18,7 +19,14 @@ import { WHOLE_NUMBER_INPUT } from "../../components/wholeNumberInput";
 // add form makes). The edit form below is different: it exposes every
 // field FuelLogUpdate tracks (Vikunja #111), since editing an existing
 // entry is exactly where those mobile-only fields need a web entry point.
-export function FuelLogsSection({ assetId }: { assetId: string }) {
+//
+// Equipment shows here too: its reading is the hour meter unless the equipment is set to
+// record an odometer (fuelReading.ts), and an hour reading gets no MPG field.
+export function FuelLogsSection({ asset }: { asset: Asset }) {
+  const assetId = asset.id;
+  const readingLabel = fuelReadingLabel(asset);
+  const readingIsHours = fuelReadingIsHours(asset);
+  const tracksEconomy = fuelTracksEconomy(asset);
   const queryClient = useQueryClient();
   const { data: logs, isLoading } = useQuery({
     queryKey: ["fuel-logs", assetId],
@@ -176,7 +184,7 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
         <input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} required />
         <input
           {...WHOLE_NUMBER_INPUT}
-          placeholder="Odometer"
+          placeholder={readingLabel}
           value={odometerReading}
           onChange={(e) => setOdometerReading(e.target.value)}
         />
@@ -240,7 +248,7 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
                 <div className="field-grid field-compact">
                   <GridField label="Date" type="date" value={editPerformedAt} onChange={setEditPerformedAt} />
                   <GridField
-                    label="Odometer"
+                    label={readingLabel}
                     {...WHOLE_NUMBER_INPUT}
                     value={editOdometerReading}
                     onChange={setEditOdometerReading}
@@ -266,7 +274,10 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
                     value={editTotalCost}
                     onChange={setEditTotalCost}
                   />
-                  <GridField label="MPG" type="number" step="0.1" value={editMpg} onChange={setEditMpg} />
+                  {/* Hidden, not cleared: a value already stored is saved back unchanged. */}
+                  {tracksEconomy && (
+                    <GridField label="MPG" type="number" step="0.1" value={editMpg} onChange={setEditMpg} />
+                  )}
                   <GridField label="Octane" type="number" value={editOctane} onChange={setEditOctane} />
                   <GridField label="Cetane" type="number" value={editCetane} onChange={setEditCetane} />
                   <GridField label="Gas brand" value={editGasBrand} onChange={setEditGasBrand} />
@@ -309,7 +320,11 @@ export function FuelLogsSection({ assetId }: { assetId: string }) {
                   {/* A null volume renders as nothing at all in JSX, which
                       would leave a stray " gal" — say so explicitly instead. */}
                   {log.gallons != null ? `${log.gallons} gal` : "volume not recorded"}
-                  {log.odometer_reading != null ? ` at ${log.odometer_reading.toLocaleString()}` : ""}
+                  {log.odometer_reading != null
+                    ? readingIsHours
+                      ? ` at ${log.odometer_reading.toLocaleString()} hrs`
+                      : ` at ${log.odometer_reading.toLocaleString()}`
+                    : ""}
                   {log.gas_brand ? ` • ${log.gas_brand}` : ""}
                   {log.location ? ` • ${log.location}` : ""}
                 </span>

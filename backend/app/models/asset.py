@@ -194,6 +194,9 @@ class EquipmentDetails(Base):
     # concept, no stylized_plate_enabled here since equipment has no plate.
     car_display_theme: Mapped[str | None] = mapped_column(String(30), nullable=True)
     unit_system_override: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # What this equipment's fill-ups record in fuel_logs.odometer_reading: "hours" (the
+    # hour meter) or "odometer" (a distance, with MPG). NULL is the default, hours.
+    fuel_reading_unit: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
 
 class PropertyDetails(Base):

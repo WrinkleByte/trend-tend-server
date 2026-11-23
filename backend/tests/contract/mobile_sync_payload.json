@@ -15,7 +15,8 @@
       "vehicle_details",
       "equipment_details",
       "property_details",
-      "valuable_details"
+      "valuable_details",
+      "service_defaults"
     ],
     "AttachmentSyncPayload": [
       "original_filename",
@@ -35,7 +36,8 @@
       "warranty_expiration",
       "current_hours",
       "car_display_theme",
-      "unit_system_override"
+      "unit_system_override",
+      "fuel_reading_unit"
     ],
     "FuelLogSyncPayload": [
       "asset_id",
@@ -100,6 +102,33 @@
       "parent_asset_id",
       "install_date"
     ],
+    "ServiceDefaultsSyncPayload": [
+      "default_oil_viscosity",
+      "default_oil_formulation",
+      "default_oil_meets_dexos",
+      "default_oil_capacity",
+      "default_motor_oil_brand",
+      "default_oil_filter_part_number",
+      "default_oil_filter_brand",
+      "default_air_filter_part_number",
+      "default_air_filter_brand",
+      "default_fuel_filter_part_number",
+      "default_fuel_filter_brand",
+      "default_hydraulic_fluid_type",
+      "default_hydraulic_fluid_capacity",
+      "default_hvac_filter_size",
+      "default_hvac_filter_brand",
+      "default_water_filter_cartridge",
+      "default_water_filter_brand",
+      "default_transmission_fluid_type",
+      "default_transmission_filter_part_number",
+      "default_transmission_fluid_capacity",
+      "default_coolant_type",
+      "default_differential_front_fluid_type",
+      "default_differential_front_capacity",
+      "default_differential_rear_fluid_type",
+      "default_differential_rear_capacity"
+    ],
     "TripLogSyncPayload": [
       "asset_id",
       "performed_at",
@@ -151,7 +180,7 @@
       "default_air_filter_brand"
     ]
   },
-  "source_commit": "50d288ba6e38de76996eb0c1f1e27314939adfdc",
+  "source_commit": "e36245b4964e2898e2b4434980cb630cc68e1d85",
   "source_file": "shared/src/commonMain/kotlin/com/wrinklebyte/network/SyncDto.kt",
   "source_repo": "tendfida-mobile"
 }

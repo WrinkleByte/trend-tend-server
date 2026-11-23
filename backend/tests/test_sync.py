@@ -1596,3 +1596,59 @@ async def test_a_client_cannot_declare_itself_into_a_feature(client, auth_header
     assert "serviceDefaultsV2" not in pull.json()["server_capabilities"]
     # ... while the server still remembers the device claimed it. Kept, not trusted.
     assert pull.json()["device_capabilities"] == ["serviceDefaultsV2"]
+
+
+# ---------------------------------------------------------------------------
+# Equipment fill-up reading: hours or odometer (equipment_details.fuel_reading_unit)
+# ---------------------------------------------------------------------------
+
+
+def _mower(**equipment):
+    return {"asset_type": "equipment", "name": "Mower", "equipment_details": {"manufacturer": "Toro", **equipment}}
+
+
+async def test_an_equipment_fill_up_unit_syncs_to_other_devices(client, auth_headers):
+    phone = await _register_device(client, auth_headers, "Phone")
+    tablet = await _register_device(client, auth_headers, "Tablet")
+    asset_id = str(uuid.uuid4())
+    await _push_asset(client, auth_headers, phone, asset_id, 0, _mower(fuel_reading_unit="odometer"))
+
+    pulled = await _pulled_asset(client, auth_headers, tablet, asset_id)
+    assert pulled["equipment_details"]["fuel_reading_unit"] == "odometer"
+
+
+async def test_an_app_without_the_field_keeps_the_choice(client, auth_headers):
+    """1.5.x apps send a full equipment row with no fuel_reading_unit key. Editing the
+    mower's name on one of those must not quietly switch it back to hours."""
+    new_app = await _register_device(client, auth_headers, "New app")
+    old_app = await _register_device(client, auth_headers, "Old app")
+    asset_id = str(uuid.uuid4())
+    first = await _push_asset(client, auth_headers, new_app, asset_id, 0, _mower(fuel_reading_unit="odometer"))
+
+    await _push_asset(
+        client, auth_headers, old_app, asset_id, first["new_version"], {**_mower(), "name": "Riding Mower"}
+    )
+
+    pulled = await _pulled_asset(client, auth_headers, new_app, asset_id)
+    assert pulled["name"] == "Riding Mower"
+    assert pulled["equipment_details"]["fuel_reading_unit"] == "odometer"
+
+
+async def test_an_explicit_null_goes_back_to_hours(client, auth_headers):
+    phone = await _register_device(client, auth_headers, "Phone")
+    reader = await _register_device(client, auth_headers, "Reader")
+    asset_id = str(uuid.uuid4())
+    first = await _push_asset(client, auth_headers, phone, asset_id, 0, _mower(fuel_reading_unit="odometer"))
+    await _push_asset(client, auth_headers, phone, asset_id, first["new_version"], _mower(fuel_reading_unit=None))
+
+    pulled = await _pulled_asset(client, auth_headers, reader, asset_id)
+    assert pulled["equipment_details"]["fuel_reading_unit"] is None
+
+
+async def test_the_fill_up_unit_is_advertised_and_not_reported_unsupported(client, auth_headers):
+    device = await _register_device(client, auth_headers, "Any app")
+    pull = await client.post("/api/v1/sync/pull", headers=auth_headers, json={"cursor": None, "device_id": device})
+    assert "equipmentFuelReading" in pull.json()["server_capabilities"]
+
+    result = await _push_asset(client, auth_headers, device, str(uuid.uuid4()), 0, _mower(fuel_reading_unit="hours"))
+    assert "equipment_details.fuel_reading_unit" not in (result.get("unsupported_fields") or [])

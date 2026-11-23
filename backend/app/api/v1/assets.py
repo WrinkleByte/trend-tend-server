@@ -250,10 +250,19 @@ async def update_asset(
         )
         db.add(VehicleDetails(asset_id=asset.id, **vehicle_columns(payload.vehicle_details)))
     if payload.equipment_details:
+        equipment = payload.equipment_details.model_dump()
+        if "fuel_reading_unit" not in payload.equipment_details.model_fields_set:
+            # A caller that doesn't know this field (a script, an older web build in a
+            # browser tab) keeps the stored choice rather than resetting it to hours.
+            equipment["fuel_reading_unit"] = (
+                await db.execute(
+                    select(EquipmentDetails.fuel_reading_unit).where(EquipmentDetails.asset_id == asset.id)
+                )
+            ).scalar_one_or_none()
         await db.execute(
             EquipmentDetails.__table__.delete().where(EquipmentDetails.asset_id == asset.id)
         )
-        db.add(EquipmentDetails(asset_id=asset.id, **payload.equipment_details.model_dump()))
+        db.add(EquipmentDetails(asset_id=asset.id, **equipment))
     if payload.property_details:
         await db.execute(
             PropertyDetails.__table__.delete().where(PropertyDetails.asset_id == asset.id)

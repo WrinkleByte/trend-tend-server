@@ -56,6 +56,9 @@ SCHEMA_BY_PAYLOAD: dict[str, str] = {
     "FuelLogSyncPayload": "FuelLogSyncData",
     "TripLogSyncPayload": "TripLogSyncData",
     "AttachmentSyncPayload": "AttachmentSyncData",
+    # Added when the manifest was next regenerated (1.6.3): the asset-level specs object
+    # the apps have sent since 1.5.0, nested under an asset as `service_defaults`.
+    "ServiceDefaultsSyncPayload": "ServiceDefaultsSyncData",
 }
 
 # A payload's own fields land on this table, except keys listed in NESTED_TABLE which are
@@ -72,6 +75,7 @@ TABLE_BY_PAYLOAD: dict[str, str] = {
     "FuelLogSyncPayload": "FuelLog",
     "TripLogSyncPayload": "TripLog",
     "AttachmentSyncPayload": "Attachment",
+    "ServiceDefaultsSyncPayload": "ServiceDefaults",
 }
 
 _TABLE_MODULES = {
