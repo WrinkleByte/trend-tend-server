@@ -14,6 +14,7 @@ import { getCurrentHousehold, listMembers } from "../../api/households";
 import { StatusMessage } from "../../components/StatusMessage";
 import { PairingCodeReveal } from "./PairingCodeReveal";
 import { PairingUrlSection } from "./PairingUrlSection";
+import { invalidateTokenLists, tokenActions } from "./tokenActions";
 
 /** The "API Tokens" settings category — pairing-URL config plus token
  * generate/list/revoke/delete. Was the whole /settings page before the
@@ -57,12 +58,15 @@ export function ApiTokensPage() {
 
   const revokeMutation = useMutation({
     mutationFn: (id: string) => revokeApiToken(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["api-tokens"] }),
+    // Both listings, not just this one: a code revoked here is also listed under that member's
+    // devices on the Household page, which otherwise keeps offering Revoke for a key that is
+    // already revoked (Vikunja #196).
+    onSuccess: () => invalidateTokenLists(queryClient),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteApiToken(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["api-tokens"] }),
+    onSuccess: () => invalidateTokenLists(queryClient),
   });
 
   function handleSubmit(event: FormEvent) {
@@ -92,6 +96,10 @@ export function ApiTokensPage() {
 
         {assignedNote && <StatusMessage>{assignedNote}</StatusMessage>}
         {assignMutation.isError && <StatusMessage>{(assignMutation.error as Error).message}</StatusMessage>}
+        {/* Without these a failed revoke or delete looked like a dead button: the row stayed put
+            and nothing said why (Vikunja #196). */}
+        {revokeMutation.isError && <StatusMessage>Could not revoke that code: {(revokeMutation.error as Error).message}</StatusMessage>}
+        {deleteMutation.isError && <StatusMessage>Could not delete that code: {(deleteMutation.error as Error).message}</StatusMessage>}
         {isLoading && <p>Loading…</p>}
         <ul className="token-list">
           {tokens?.map((token) => (
@@ -133,13 +141,23 @@ export function ApiTokensPage() {
                   </button>
                 </span>
               )}
-              {!token.revoked_at && (
-                <button type="button" className="danger" onClick={() => revokeMutation.mutate(token.id)}>
+              {tokenActions(token, true).canRevoke && (
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={revokeMutation.isPending}
+                  onClick={() => revokeMutation.mutate(token.id)}
+                >
                   Revoke
                 </button>
               )}
-              {token.revoked_at && (
-                <button type="button" className="danger" onClick={() => deleteMutation.mutate(token.id)}>
+              {tokenActions(token, true).canDelete && (
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => deleteMutation.mutate(token.id)}
+                >
                   Delete
                 </button>
               )}

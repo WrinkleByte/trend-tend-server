@@ -8,6 +8,7 @@ import {
   addAppOnlyMember,
   createInvite,
   createMemberApiToken,
+  deleteMemberApiToken,
   getCurrentHousehold,
   listInvites,
   listMemberApiTokens,
@@ -20,6 +21,7 @@ import type { HouseholdMember, HouseholdRole } from "../../api/types";
 import { updateMyDisplayName } from "../../api/users";
 import { StatusMessage } from "../../components/StatusMessage";
 import { formatDateTime } from "../../lib/format";
+import { deviceRowState, deviceRows, invalidateTokenLists, tokenActions } from "../settings/tokenActions";
 import { PairingCodeReveal } from "../settings/PairingCodeReveal";
 import { useHouseholdMembers } from "./useHouseholdMembers";
 
@@ -114,7 +116,14 @@ function MemberDevices({
   });
   const revokeMutation = useMutation({
     mutationFn: (tokenId: string) => revokeMemberApiToken(member.user_id, tokenId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: () => invalidateTokenLists(queryClient),
+  });
+  // Deleting a member's code goes through the household route: the settings page's own-key endpoint
+  // answers 404 for someone else's key, which is the "the delete button doesn't remove the line"
+  // half of Vikunja #196.
+  const deleteMutation = useMutation({
+    mutationFn: (tokenId: string) => deleteMemberApiToken(member.user_id, tokenId),
+    onSuccess: () => invalidateTokenLists(queryClient),
   });
   // Move a device to someone else, including back to yourself: the key's
   // device becomes theirs on its next sync, no re-pairing.
@@ -129,7 +138,10 @@ function MemberDevices({
   const { pickerMembers, pickerLabel } = useHouseholdMembers();
   const assignable = (pickerMembers.length ? pickerMembers : members).filter((m) => m.user_id !== member.user_id);
 
-  const active = tokens?.filter((t) => !t.revoked_at) ?? [];
+  // A revoked code stays in the list (Vikunja #196). Filtering them out hid the one row that still
+  // has an action: revoking a code here removed the row, and Delete exists only for a revoked code,
+  // so the button could never appear. It also hid the case where the wrong device got revoked.
+  const rows = deviceRows(tokens);
   return (
     <div className="member-devices">
       {justCreated && (
@@ -140,6 +152,8 @@ function MemberDevices({
         />
       )}
       {assignMutation.isError && <StatusMessage>{(assignMutation.error as Error).message}</StatusMessage>}
+      {revokeMutation.isError && <StatusMessage>Could not revoke that code: {(revokeMutation.error as Error).message}</StatusMessage>}
+      {deleteMutation.isError && <StatusMessage>Could not delete that code: {(deleteMutation.error as Error).message}</StatusMessage>}
       <form
         className="inline-form"
         onSubmit={(event: FormEvent) => {
@@ -156,7 +170,7 @@ function MemberDevices({
           Pair a device
         </button>
       </form>
-      {active.length > 0 && (
+      {rows.length > 0 && (
         // A table, with shaded rows and readable times: as a run-on list,
         // several devices were hard to tell apart (owner, 2026-11-16).
         <div className="device-table-wrap">
@@ -172,11 +186,20 @@ function MemberDevices({
             </tr>
           </thead>
           <tbody>
-          {active.map((token) => (
+          {rows.map((token) => {
+            const state = deviceRowState(token);
+            const actions = tokenActions(token, true);
+            return (
             <tr key={token.id}>
               <td className="device-name">{token.name}</td>
-              <td title={token.last_used_at ?? undefined}>
-                {token.last_used_at ? formatDateTime(token.last_used_at) : <span className="device-unused">Not used yet</span>}
+              <td title={token.revoked_at ?? token.last_used_at ?? undefined}>
+                {state === "revoked" ? (
+                  <span className="device-revoked">Revoked</span>
+                ) : token.last_used_at ? (
+                  formatDateTime(token.last_used_at)
+                ) : (
+                  <span className="device-unused">Not used yet</span>
+                )}
               </td>
               {assignable.length > 0 && (
                 <td>
@@ -204,12 +227,30 @@ function MemberDevices({
                 </td>
               )}
               <td className="device-actions">
-                <button type="button" className="danger" onClick={() => revokeMutation.mutate(token.id)}>
-                  Revoke
-                </button>
+                {actions.canRevoke && (
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={revokeMutation.isPending}
+                    onClick={() => revokeMutation.mutate(token.id)}
+                  >
+                    Revoke
+                  </button>
+                )}
+                {actions.canDelete && (
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={deleteMutation.isPending}
+                    onClick={() => deleteMutation.mutate(token.id)}
+                  >
+                    Delete
+                  </button>
+                )}
               </td>
             </tr>
-          ))}
+            );
+          })}
           </tbody>
         </table>
         </div>

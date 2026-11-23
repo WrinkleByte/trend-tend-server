@@ -287,3 +287,53 @@ async def test_cannot_assign_to_a_non_member_or_a_revoked_or_foreign_key(client,
         f"/api/v1/api-tokens/{key['id']}", headers=auth_headers, json={"user_id": kate["user_id"]}
     )
     assert revoked.status_code == 409
+
+
+async def test_owner_deletes_a_revoked_member_key_and_the_row_leaves_the_list(client, auth_headers):
+    """Vikunja #196: revoking a member's code used to leave a row nobody could delete.
+
+    The settings page's `/api-tokens/{id}/permanently` is own-keys-only, so the Delete button that
+    page shows answers 404 for a member's key; the household page that could delete it filtered
+    revoked keys out of its list, so the button was never offered. Both halves are covered here:
+    the household route exists, and a revoked key stays listed until it is deleted."""
+    kate = await _add_member(client, auth_headers, display_name="Kate")
+    key = await _member_key(client, auth_headers, kate["user_id"], "Kate's iPhone")
+    url = f"/api/v1/households/members/{kate['user_id']}/api-tokens"
+
+    too_early = await client.delete(f"{url}/{key['id']}/permanently", headers=auth_headers)
+    assert too_early.status_code == 409
+
+    assert (await client.delete(f"{url}/{key['id']}", headers=auth_headers)).status_code == 204
+
+    listed = (await client.get(url, headers=auth_headers)).json()
+    assert [t["id"] for t in listed] == [key["id"]]
+    assert listed[0]["revoked_at"] is not None
+
+    assert (await client.delete(f"{url}/{key['id']}/permanently", headers=auth_headers)).status_code == 204
+    assert (await client.get(url, headers=auth_headers)).json() == []
+
+
+async def test_a_member_cannot_delete_their_own_key_through_the_household_route(client, auth_headers):
+    """The route is the owner's cleanup path, not a way for a member to erase the record that a key
+    they were issued ever existed. Kate signs in with one of her live keys and tries to delete
+    another one of hers that the owner already revoked."""
+    kate = await _add_member(client, auth_headers, display_name="Kate")
+    live_key = await _member_key(client, auth_headers, kate["user_id"], "Kate's iPhone")
+    other = await _member_key(client, auth_headers, kate["user_id"], "Kate's iPad")
+    url = f"/api/v1/households/members/{kate['user_id']}/api-tokens"
+    assert (await client.delete(f"{url}/{other['id']}", headers=auth_headers)).status_code == 204
+
+    response = await client.delete(f"{url}/{other['id']}/permanently", headers=_headers(live_key["token"]))
+    assert response.status_code == 403
+
+
+async def test_deleting_a_member_key_from_another_household_is_404(client, auth_headers):
+    bob = await _register(client, "bob@example.com", "Bob's House", "Bob")
+    bob_headers = _headers(bob["access_token"])
+    bob_kate = await _add_member(client, bob_headers, display_name="Kate")
+    bob_key = await _member_key(client, bob_headers, bob_kate["user_id"], "Kate's iPhone")
+    url = f"/api/v1/households/members/{bob_kate['user_id']}/api-tokens"
+    await client.delete(f"{url}/{bob_key['id']}", headers=bob_headers)
+
+    response = await client.delete(f"{url}/{bob_key['id']}/permanently", headers=auth_headers)
+    assert response.status_code == 404

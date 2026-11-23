@@ -281,15 +281,8 @@ async def list_member_api_tokens(
     return await token_responses(db, list(result.scalars().all()))
 
 
-@router.delete("/members/{user_id}/api-tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_member_api_token(
-    user_id: uuid.UUID,
-    token_id: uuid.UUID,
-    principal: Principal = Depends(get_current_principal),
-    db: AsyncSession = Depends(get_db),
-) -> None:
-    """Revoke a member's key. Idempotent, like revoking your own."""
-    _require_owner(principal)
+async def _get_member_token(db: AsyncSession, principal: Principal, user_id: uuid.UUID, token_id: uuid.UUID) -> ApiToken:
+    """A key belonging to `user_id` inside the caller's household, for the owner-side routes."""
     token = (
         await db.execute(
             select(ApiToken).where(
@@ -301,9 +294,49 @@ async def revoke_member_api_token(
     ).scalar_one_or_none()
     if token is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "API token not found")
+    return token
+
+
+@router.delete("/members/{user_id}/api-tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_member_api_token(
+    user_id: uuid.UUID,
+    token_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Revoke a member's key. Idempotent, like revoking your own."""
+    _require_owner(principal)
+    token = await _get_member_token(db, principal, user_id, token_id)
     if token.revoked_at is None:
         token.revoked_at = utcnow()
         await db.commit()
+
+
+@router.delete("/members/{user_id}/api-tokens/{token_id}/permanently", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_member_api_token(
+    user_id: uuid.UUID,
+    token_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove a member's revoked key for good (Vikunja #196).
+
+    The owner half of the pairing-code list could revoke a lost phone's key but had no way to
+    clear the row afterwards: `/api-tokens/{id}/permanently` filters on the caller's own user id
+    (`api_tokens.py`'s `_get_owned_token`), so pointing it at a member's key answers 404. Revoked
+    member keys accumulated invisibly -- hidden by the web list that filtered revoked keys out,
+    and undeletable from the page that did show them.
+
+    Revoke-first is enforced here for the same reason as `delete_api_token`: deleting a live key
+    in one step would destroy the trail of a credential that was in use, and would skip the moment
+    where an owner notices they revoked the wrong device.
+    """
+    _require_owner(principal)
+    token = await _get_member_token(db, principal, user_id, token_id)
+    if token.revoked_at is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Revoke this token before deleting it.")
+    await db.delete(token)
+    await db.commit()
 
 
 @router.post("/invites", response_model=InviteCreateResponse, status_code=status.HTTP_201_CREATED)

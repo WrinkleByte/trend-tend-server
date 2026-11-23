@@ -476,6 +476,12 @@ ul {
   opacity: 0.7;
 }
 
+/* A revoked pairing code stays in the list so its Delete button is reachable (Vikunja #196). */
+.device-table .device-revoked {
+  opacity: 0.6;
+  font-style: italic;
+}
+
 .device-table .device-actions {
   text-align: right;
 }
