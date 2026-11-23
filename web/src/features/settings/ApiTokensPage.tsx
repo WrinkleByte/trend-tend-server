@@ -14,7 +14,8 @@ import { getCurrentHousehold, listMembers } from "../../api/households";
 import { StatusMessage } from "../../components/StatusMessage";
 import { PairingCodeReveal } from "./PairingCodeReveal";
 import { PairingUrlSection } from "./PairingUrlSection";
-import { invalidateTokenLists, tokenActions } from "./tokenActions";
+import { formatDateTime } from "../../lib/format";
+import { deviceRowState, invalidateTokenLists, tokenActions } from "./tokenActions";
 
 /** The "API Tokens" settings category — pairing-URL config plus token
  * generate/list/revoke/delete. Was the whole /settings page before the
@@ -102,20 +103,25 @@ export function ApiTokensPage() {
         {deleteMutation.isError && <StatusMessage>Could not delete that code: {(deleteMutation.error as Error).message}</StatusMessage>}
         {isLoading && <p>Loading…</p>}
         <ul className="token-list">
-          {tokens?.map((token) => (
+          {tokens?.map((token) => {
+            const actions = tokenActions(token, true);
+            const state = deviceRowState(token);
+            return (
             <li key={token.id}>
-              <span>
-                {token.name}
+              <span className="token-label">
+                <span className="token-name">{token.name}</span>
                 {token.created_by_name && (
-                  <span className="token-created-by"> (set up by {token.created_by_name})</span>
+                  <span className="token-created-by">set up by {token.created_by_name}</span>
                 )}
               </span>
-              <span>
-                {token.revoked_at
+              {/* Same wording and formatting the Household page uses. The raw UTC stamp with
+                  microseconds was long enough by itself to push Revoke onto a line of its own. */}
+              <span className={state === "revoked" ? "token-status token-revoked" : "token-status"}>
+                {state === "revoked"
                   ? "Revoked"
-                  : token.last_used_at
-                    ? `Last used ${token.last_used_at}`
-                    : "Never used"}
+                  : state === "used"
+                    ? `Last used ${formatDateTime(token.last_used_at)}`
+                    : "Not used yet"}
               </span>
               {!token.revoked_at && isOwner && otherMembers.length > 0 && (
                 <span className="token-assign">
@@ -141,28 +147,33 @@ export function ApiTokensPage() {
                   </button>
                 </span>
               )}
-              {tokenActions(token, true).canRevoke && (
-                <button
-                  type="button"
-                  className="danger"
-                  disabled={revokeMutation.isPending}
-                  onClick={() => revokeMutation.mutate(token.id)}
-                >
-                  Revoke
-                </button>
-              )}
-              {tokenActions(token, true).canDelete && (
-                <button
-                  type="button"
-                  className="danger"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate(token.id)}
-                >
-                  Delete
-                </button>
+              {(actions.canRevoke || actions.canDelete) && (
+                <span className="token-actions">
+                  {actions.canRevoke && (
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={revokeMutation.isPending}
+                      onClick={() => revokeMutation.mutate(token.id)}
+                    >
+                      Revoke
+                    </button>
+                  )}
+                  {actions.canDelete && (
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => deleteMutation.mutate(token.id)}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </span>
               )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       </section>
     </div>

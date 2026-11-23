@@ -430,6 +430,58 @@ ul {
   padding: 12px 4px;
 }
 
+/* One pairing code per line, buttons held together on the right. A row here
+   carries a name, a "last used" stamp, an assign picker and up to two action
+   buttons; with flex-wrap the row ran out of room and left Revoke alone on a
+   line of its own (Vikunja #196 review). The name and the picker give way
+   instead of the buttons. */
+.token-list .token-label {
+  flex: 1 1 10rem;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.token-list .token-created-by {
+  display: block;
+  font-weight: 400;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.token-list .token-status {
+  flex: 0 1 auto;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.token-list .token-revoked {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.token-list .token-assign {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 2 1 14rem;
+  min-width: 0;
+}
+
+.token-list .token-assign select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.token-list .token-actions {
+  display: flex;
+  gap: 12px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 /* A member's devices panel always starts on its own full-width line, below
    the member's name, email and buttons. Without this the wrapping flex row
    put it beside them whenever there was room, and the name drifted down to
