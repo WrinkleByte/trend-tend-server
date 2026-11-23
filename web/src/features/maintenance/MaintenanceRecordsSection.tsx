@@ -23,6 +23,16 @@ import { AttachmentsSection } from "../attachments/AttachmentsSection";
 import { PendingAttachmentPicker } from "../attachments/PendingAttachmentPicker";
 import { GridField } from "../../components/GridField";
 import { WHOLE_NUMBER_INPUT } from "../../components/wholeNumberInput";
+import {
+  BRAND,
+  CAPACITY,
+  FILTER_PART_NUMBER,
+  FLUID_TYPE,
+  brandLabel,
+  filterLabel,
+  filterPlaceholder,
+  structuredFieldsFor,
+} from "./recordStructuredFields";
 
 export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: string; assetType: string }) {
   const CATEGORIES = categoriesForAssetType(assetType);
@@ -100,6 +110,7 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
   const [editFilterPartNumber, setEditFilterPartNumber] = useState("");
   const [editFluidType, setEditFluidType] = useState("");
   const [editCapacity, setEditCapacity] = useState("");
+  const [editBrand, setEditBrand] = useState("");
 
   function startEdit(record: MaintenanceRecord) {
     setEditingId(record.id);
@@ -119,6 +130,7 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
     setEditFilterPartNumber(record.filter_part_number ?? "");
     setEditFluidType(record.fluid_type ?? "");
     setEditCapacity(record.capacity ?? "");
+    setEditBrand(record.brand ?? "");
   }
 
   const updateRecordMutation = useMutation({
@@ -139,19 +151,16 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
         // the field no longer being shown at all. Mirrors the mobile
         // apps' save-time gating (MaintenanceRecordFormScreen.kt/
         // MaintenanceRecordFormView.swift), same category sets as the
-        // conditional rendering above.
+        // conditional rendering above -- both from recordStructuredFields.ts.
         oil_viscosity: editCategory === "oil_change" ? editOilViscosity || null : null,
         oil_formulation: editCategory === "oil_change" ? editOilFormulation || null : null,
         oil_meets_dexos: editCategory === "oil_change" ? editOilMeetsDexos : null,
-        filter_part_number: ["oil_change", "air_filter", "transmission_fluid"].includes(editCategory)
-          ? editFilterPartNumber || null
-          : null,
-        fluid_type: ["transmission_fluid", "coolant", "differential_front", "differential_rear"].includes(editCategory)
-          ? editFluidType || null
-          : null,
-        capacity: ["oil_change", "transmission_fluid", "differential_front", "differential_rear"].includes(editCategory)
-          ? editCapacity || null
-          : null,
+        ...structuredFieldsFor(editCategory, {
+          filter_part_number: editFilterPartNumber,
+          fluid_type: editFluidType,
+          capacity: editCapacity,
+          brand: editBrand,
+        }),
       }),
     onSuccess: () => {
       setEditingId(null);
@@ -508,13 +517,21 @@ export function MaintenanceRecordsSection({ assetId, assetType }: { assetId: str
                       <GridField label="Oil formulation" placeholder="e.g. Synthetic" value={editOilFormulation} onChange={setEditOilFormulation} />
                     </>
                   )}
-                  {["oil_change", "air_filter", "transmission_fluid"].includes(editCategory) && (
-                    <GridField label="Filter part number" value={editFilterPartNumber} onChange={setEditFilterPartNumber} />
+                  {FILTER_PART_NUMBER.has(editCategory) && (
+                    <GridField
+                      label={filterLabel(editCategory)}
+                      placeholder={filterPlaceholder(editCategory)}
+                      value={editFilterPartNumber}
+                      onChange={setEditFilterPartNumber}
+                    />
                   )}
-                  {["transmission_fluid", "coolant", "differential_front", "differential_rear"].includes(editCategory) && (
+                  {BRAND.has(editCategory) && (
+                    <GridField label={brandLabel(editCategory)} value={editBrand} onChange={setEditBrand} />
+                  )}
+                  {FLUID_TYPE.has(editCategory) && (
                     <GridField label="Fluid type" value={editFluidType} onChange={setEditFluidType} />
                   )}
-                  {["oil_change", "transmission_fluid", "differential_front", "differential_rear"].includes(editCategory) && (
+                  {CAPACITY.has(editCategory) && (
                     <GridField label="Capacity" placeholder="e.g. 5 qt" value={editCapacity} onChange={setEditCapacity} />
                   )}
                   {editCategory === "oil_change" && (

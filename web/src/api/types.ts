@@ -169,6 +169,7 @@ export interface MaintenanceRecord {
   filter_part_number: string | null;
   fluid_type: string | null;
   capacity: string | null;
+  brand: string | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -192,6 +193,7 @@ export interface MaintenanceRecordCreateInput {
   filter_part_number?: string | null;
   fluid_type?: string | null;
   capacity?: string | null;
+  brand?: string | null;
 }
 
 export type IntervalType = "time" | "usage" | "both";

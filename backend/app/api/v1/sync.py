@@ -35,6 +35,7 @@ from app.models.sync_device import SyncDevice
 from app.models.trip_log import TripLog
 from app.schemas.service_defaults import (
     defaults_from_payload,
+    legacy_complete_fields,
     legacy_defaults_for_response,
     vehicle_columns,
 )
@@ -206,7 +207,11 @@ async def _fetch_service_defaults(db: AsyncSession, asset_id: uuid.UUID) -> obje
 
 
 async def _upsert_asset_details(
-    db: AsyncSession, asset_id: uuid.UUID, asset_type: AssetType, parsed: AssetSyncData
+    db: AsyncSession,
+    asset_id: uuid.UUID,
+    asset_type: AssetType,
+    parsed: AssetSyncData,
+    device_capabilities: list[str] | None = None,
 ) -> None:
     """Applies whichever of parsed's nested detail payloads matches
     asset_type onto the 1:1 side table, insert-or-update by asset_id. A
@@ -235,7 +240,13 @@ async def _upsert_asset_details(
     # equipment must not discard specs the household paid attention to entering. It
     # also runs before the early return at the bottom, which exists for payloads
     # that carry no matching detail row.
-    defaults = defaults_from_payload(parsed.service_defaults, parsed.vehicle_details)
+    # Only a vehicle's own row counts as complete: a vehicle_details object riding along on
+    # some other type is left key-presence-aware, so it can never blank specs that type owns.
+    defaults = defaults_from_payload(
+        parsed.service_defaults,
+        parsed.vehicle_details,
+        legacy_complete_fields(device_capabilities) if asset_type == AssetType.VEHICLE else (),
+    )
     if asset_type == AssetType.VALUABLE:
         # The same rule _write_service_defaults applies on the REST side: a valuable
         # asset has no service_defaults row, because its categories are not
@@ -250,7 +261,9 @@ async def _upsert_asset_details(
             await db.execute(select(ServiceDefaults).where(ServiceDefaults.asset_id == asset_id))
         ).scalar_one_or_none()
         if existing_defaults is None:
-            db.add(ServiceDefaults(asset_id=asset_id, **defaults))
+            # An all-null legacy row is "nothing saved", not something to store.
+            if any(value is not None for value in defaults.values()):
+                db.add(ServiceDefaults(asset_id=asset_id, **defaults))
         else:
             for field, value in defaults.items():
                 setattr(existing_defaults, field, value)
@@ -533,7 +546,11 @@ async def pull(
 
 
 async def _apply_change(
-    db: AsyncSession, principal: Principal, device_id: uuid.UUID, change: SyncChangeIn
+    db: AsyncSession,
+    principal: Principal,
+    device_id: uuid.UUID,
+    change: SyncChangeIn,
+    device_capabilities: list[str] | None = None,
 ) -> SyncPushResult:
     config = SYNC_REGISTRY.get(change.entity_type)
     if config is None:
@@ -798,7 +815,7 @@ async def _apply_change(
 
             if change.entity_type == "asset" and isinstance(parsed, AssetSyncData):
                 await _upsert_asset_details(
-                    db, change.id, base_data["asset_type"], parsed
+                    db, change.id, base_data["asset_type"], parsed, device_capabilities
                 )
                 await db.flush()
     except SQLAlchemyError:
@@ -838,7 +855,7 @@ async def push(
         device.capabilities_reported_at = utcnow()
 
     results = [
-        await _apply_change(db, principal, payload.device_id, change)
+        await _apply_change(db, principal, payload.device_id, change, device.capabilities)
         for change in payload.changes
     ]
 
