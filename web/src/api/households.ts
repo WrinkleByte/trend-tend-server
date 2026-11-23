@@ -47,6 +47,13 @@ export function revokeMemberApiToken(userId: string, tokenId: string): Promise<v
   return apiFetch(`/households/members/${userId}/api-tokens/${tokenId}`, { method: "DELETE" });
 }
 
+/** Owner only, revoked keys only: remove a member's pairing code for good (Vikunja #196). This is
+ * the household route -- `/api-tokens/{id}/permanently` is own-keys-only and answers 404 for a
+ * member's key, which is why Delete could never clear a member's row. */
+export function deleteMemberApiToken(userId: string, tokenId: string): Promise<void> {
+  return apiFetch(`/households/members/${userId}/api-tokens/${tokenId}/permanently`, { method: "DELETE" });
+}
+
 export function removeMember(userId: string): Promise<void> {
   return apiFetch(`/households/members/${userId}`, { method: "DELETE" });
 }
