@@ -43,19 +43,23 @@ function YouInThisHousehold({ me, role }: { me: HouseholdMember; role: Household
     <section className="you-in-household" aria-label="You">
       <h2>You</h2>
       {!editing ? (
-        <p>
-          Signed in as <strong>{me.display_name}</strong>
-          {me.email ? ` \u00b7 ${me.email}` : ""}
-          {` \u00b7 ${role} `}
-          <button
-            type="button"
-            onClick={() => {
-              setName(me.display_name);
-              setEditing(true);
-            }}
-          >
-            Change name
-          </button>
+        <p className="you-line">
+          <span className="you-identity">
+            Signed in as <strong>{me.display_name}</strong>
+            {me.email ? ` \u00b7 ${me.email}` : ""}
+            {` \u00b7 ${role}`}
+          </span>
+          <span className="row-actions">
+            <button
+              type="button"
+              onClick={() => {
+                setName(me.display_name);
+                setEditing(true);
+              }}
+            >
+              Change name
+            </button>
+          </span>
         </p>
       ) : (
         <form
@@ -347,9 +351,10 @@ export function HouseholdPage() {
   }
 
   return (
-    <div>
+    <div className="household-page">
       <h1>Household{household ? `: ${household.name}` : ""}</h1>
 
+      <section className="panel household-panel">
       {household && members?.find((m) => m.user_id === household.my_user_id) && (
         <YouInThisHousehold
           key={household.my_user_id}
@@ -363,21 +368,47 @@ export function HouseholdPage() {
       <ul className="household-member-list">
         {members?.map((member) => (
           <li key={member.user_id}>
-            <span>{member.display_name}</span>
+            <span className="member-name">{member.display_name}</span>
             <span className="member-email">{member.email || (member.has_login ? "" : "App only")}</span>
             <span className="member-role">{member.role}</span>
             {isOwner && (
-              <button
-                type="button"
-                onClick={() => setOpenDevicesFor(openDevicesFor === member.user_id ? null : member.user_id)}
-              >
-                {openDevicesFor === member.user_id ? "Hide devices" : "Devices"}
-              </button>
-            )}
-            {isOwner && member.role !== "owner" && (
-              <button type="button" className="danger" onClick={() => removeMutation.mutate(member.user_id)}>
-                Remove
-              </button>
+              <span className="row-actions">
+                <button
+                  type="button"
+                  onClick={() => setOpenDevicesFor(openDevicesFor === member.user_id ? null : member.user_id)}
+                >
+                  {openDevicesFor === member.user_id ? "Hide devices" : "Devices"}
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={member.role === "owner"}
+                  title={
+                    member.role === "owner"
+                      ? "The owner cannot be removed from the household"
+                      : undefined
+                  }
+                  onClick={() => {
+                    // Confirm before removing a person, the same gate the app already uses
+                    // for deleting a household, an asset or a user
+                    // (AdminHouseholdsSection.tsx, AssetDetailPage.tsx,
+                    // UserManagementSection.tsx). A row's Remove button is one click from
+                    // taking a real person out of their household, and that is what happened
+                    // on the staging rehearsal while this page was being reviewed
+                    // (Vikunja #196).
+                    const householdName = household?.name ?? "this household";
+                    if (
+                      window.confirm(
+                        `Remove ${member.display_name} from ${householdName}? They lose access to this household, and you would have to add them again to bring them back. This cannot be undone.`
+                      )
+                    ) {
+                      removeMutation.mutate(member.user_id);
+                    }
+                  }}
+                >
+                  Remove
+                </button>
+              </span>
             )}
             {isOwner && openDevicesFor === member.user_id && (
               <MemberDevices
@@ -389,9 +420,11 @@ export function HouseholdPage() {
           </li>
         ))}
       </ul>
+      </section>
 
       {isOwner && (
-        <>
+        <section className="panel household-panel household-panel-actions">
+          <>
           <h2>Add a family member</h2>
           <p>
             For someone who will use the app but doesn&rsquo;t need a web account. You pair their phone for them, and
@@ -416,30 +449,36 @@ export function HouseholdPage() {
               placeholder="Email (optional)"
               value={newMemberEmail}
               onChange={(e) => setNewMemberEmail(e.target.value)}
+              autoComplete="off"
             />
-            <button type="submit" disabled={addMemberMutation.isPending}>
-              Add member
-            </button>
+            <span className="row-actions">
+              <button type="submit" disabled={addMemberMutation.isPending}>
+                Add member
+              </button>
+            </span>
           </form>
           {addMemberMutation.isError && <StatusMessage>{(addMemberMutation.error as Error).message}</StatusMessage>}
 
           <h2>Invite someone</h2>
           <p>For someone who wants their own web sign-in.</p>
-          <form className="inline-form" onSubmit={handleInvite}>
+          <form className="inline-form invite-form" onSubmit={handleInvite}>
             <input
               type="email"
               placeholder="Email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="off"
               required
             />
             <select value={role} onChange={(e) => setRole(e.target.value as HouseholdRole)}>
               <option value="member">Member</option>
               <option value="owner">Owner</option>
             </select>
-            <button type="submit" disabled={inviteMutation.isPending}>
-              {inviteMutation.isPending ? "Sending…" : "Send invite"}
-            </button>
+            <span className="row-actions">
+              <button type="submit" disabled={inviteMutation.isPending}>
+                {inviteMutation.isPending ? "Sending…" : "Send invite"}
+              </button>
+            </span>
           </form>
           {lastInvite && (
             <StatusMessage>
@@ -454,18 +493,18 @@ export function HouseholdPage() {
           <ul className="invite-list">
             {invites?.map((invite) => (
               <li key={invite.id}>
-                <span>{invite.invited_email}</span>
+                <span className="invite-email">{invite.invited_email}</span>
                 <span className="member-role">{invite.role}</span>
                 <span className={`invite-status invite-status-${invite.status}`}>{invite.status}</span>
                 {invite.status === "pending" && (
-                  <>
+                  <span className="row-actions">
                     <button type="button" onClick={() => handleCopy(invite)}>
                       {copiedId === invite.id ? "Copied!" : "Copy invite link"}
                     </button>
                     <button type="button" className="danger" onClick={() => revokeMutation.mutate(invite.id)}>
                       Revoke
                     </button>
-                  </>
+                  </span>
                 )}
                 {manualCopyInvite?.id === invite.id && (
                   <div className="invite-copy-fallback">
@@ -483,7 +522,8 @@ export function HouseholdPage() {
             ))}
           </ul>
           {invites?.length === 0 && <p>No invites yet.</p>}
-        </>
+          </>
+        </section>
       )}
     </div>
   );
