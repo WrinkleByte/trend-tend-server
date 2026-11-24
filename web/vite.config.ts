@@ -59,10 +59,23 @@ export default defineConfig(({ mode }) => {
                 expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
               },
             },
+            // Sign-in and server-admin answers are never cached: a cached
+            // copy outlives logout, and a stale one shows a setting the
+            // server no longer has (Vikunja #185).
+            {
+              urlPattern: /\/api\/v1\/(auth|instance-settings|admin)(\/|\?|$)/,
+              handler: 'NetworkOnly',
+            },
+            // Every other read goes to the server first and falls back to
+            // the last copy only when the server can't be reached. This used
+            // to be StaleWhileRevalidate, which answers from the cache and
+            // refreshes it for next time: after any change, the next page
+            // load showed the value from before it (#185, the Sign-ups
+            // switch that "wouldn't save").
             {
               urlPattern: /\/api\/v1\/(?!sync\/).*/,
-              handler: 'StaleWhileRevalidate',
-              options: { cacheName: 'api-read-only' },
+              handler: 'NetworkFirst',
+              options: { cacheName: 'api-read-only', networkTimeoutSeconds: 5 },
             },
           ],
         },
