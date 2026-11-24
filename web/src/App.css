@@ -490,6 +490,159 @@ ul {
   flex-basis: 100%;
 }
 
+/* Household page rows: fixed tracks, so every row's role and buttons start in the
+   same place. These rows are wrapping flex rows whose items were content-sized, so a
+   long email pushed "member" and the buttons to a different x in every row, and the
+   "Change name" button sat on the text baseline of a <p> rather than on the row
+   (owner review of the household page, follow-up to Vikunja #196). Name and email are
+   the parts that give way; an action group never wraps onto a line of its own.
+   Scoped to .household-page so the pairing-code list and every other page keep the
+   layout they already have. */
+/* Two areas on one page: who is in the household, and what the owner can do about it.
+   Both get the home screen's panel treatment (.panel is what features/home/HomePage.tsx
+   wraps its sections in — border, radius, padding), and the owner's action panel sits on
+   the app's alternate surface so the pair is not the same colour. */
+.household-page .household-panel-actions {
+  background: var(--bg-alt);
+}
+
+/* The Devices and Remove slots are fixed tracks: "Devices" stays in the same column when
+   it reads "Hide devices", and an owner row keeps the Remove slot instead of sliding
+   Devices to the right edge — that is what made the owner's Devices button land over
+   a member's Remove button. */
+.household-page .household-member-list .row-actions {
+  display: grid;
+  grid-template-columns: 8rem 6.5rem;
+}
+
+.household-page .household-member-list .row-actions button {
+  width: 100%;
+}
+
+/* Nobody can remove the owner, so the row says it with the same box in the same place
+   instead of a hole. */
+.household-page .row-actions button.danger:disabled {
+  background: transparent;
+  border-color: var(--border);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* A panel already has its own padding, so the lists and forms inside it drop the outer
+   padding they needed when they sat in bare page flow. */
+.household-page .household-panel > ul,
+.household-page .household-panel > .inline-form {
+  padding: 0;
+}
+
+/* One grid for the whole page: the member rows, the invite rows, the "You" line and
+   both forms share the same four tracks, so a name, an email, a role and a button sit
+   at the same x whether they are a row of a list or a field of a form. Flex rows with
+   content-sized items put "member" and the buttons wherever the previous field ended
+   (Vikunja #196 review, then the owner's second look: the member rows lined up with
+   each other and nothing lined up with the forms under them). Name and email give way
+   on a narrow screen; an action group never wraps onto a line of its own. */
+.household-page .household-member-list li,
+.household-page .invite-list li,
+.household-page .you-line,
+.household-page .inline-form {
+  display: grid;
+  grid-template-columns: 12rem 18rem 7rem minmax(0, auto);
+  gap: 12px;
+  align-items: center;
+}
+
+.household-page .household-member-list .member-name,
+.household-page .invite-list .invite-email {
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.household-page .household-member-list .member-email {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.household-page .household-member-list .member-role,
+.household-page .invite-list .member-role,
+.household-page .invite-list .invite-status {
+  white-space: nowrap;
+}
+
+/* Every button on this page lands in the same last column, right-aligned. */
+.household-page .row-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  grid-column: 4;
+  white-space: nowrap;
+}
+
+/* "Signed in as … · owner" spans the three field columns so its button lands on the
+   same right-hand edge as Devices / Remove. */
+.household-page .you-line .you-identity {
+  grid-column: 1 / 4;
+}
+
+/* The role picker answers the same question the rows' role column answers, so it sits
+   in that column instead of drifting left next to the email field. */
+.household-page .invite-form select {
+  grid-column: 3;
+}
+
+/* A member's devices panel and the manual-copy invite link are full-width answers to
+   the row above them, so they span every track instead of squeezing into the last one. */
+.household-page .household-member-list li > .member-devices,
+.household-page .invite-list .invite-copy-fallback {
+  grid-column: 1 / -1;
+}
+
+/* Controls sharing a line share a height, so the inputs, the picker and the buttons
+   read as one row instead of three different heights. */
+.household-page .row-actions button,
+.household-page .inline-form input,
+.household-page .inline-form select,
+.household-page .inline-form button {
+  min-height: 40px;
+}
+
+/* The name-edit form inside the "You" block is one input and two buttons of its own
+   size; keeping it flex avoids forcing them onto the page grid's field tracks. */
+.household-page .you-in-household .inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.household-page .you-in-household .inline-form input {
+  flex: 1 1 12rem;
+  max-width: 24rem;
+}
+
+@media (max-width: 720px) {
+  .household-page .household-member-list li,
+  .household-page .invite-list li,
+  .household-page .you-line,
+  .household-page .inline-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .household-page .you-line .you-identity {
+    grid-column: 1;
+  }
+
+  .household-page .row-actions,
+  .household-page .invite-form select {
+    grid-column: 1;
+  }
+
+  .household-page .row-actions {
+    justify-content: flex-start;
+  }
+}
+
 /* A member's devices: a table with lightly shaded alternate rows. */
 .device-table-wrap {
   overflow-x: auto;
